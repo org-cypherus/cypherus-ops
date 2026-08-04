@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Cypher Ops — Front-end
 
-## Getting Started
+Plataforma SaaS para gestão comercial e administrativa de empresas prestadoras de serviço.
 
-First, run the development server:
+## Stack
+
+Next.js 15 · React · TypeScript · MUI · React Query · React Hook Form · Zod · Zustand · TanStack Table · Framer Motion · MSW
+
+## Desenvolvimento
 
 ```bash
+cp .env.example .env.local
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abra [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Login demo (mocks):** `ana@cypherops.com` / `123456`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Com `NEXT_PUBLIC_USE_MOCKS=true`, a API é simulada via MSW no contrato REST descrito em [`specs/03-back-end.md`](./specs/03-back-end.md).
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+- `npm run dev` — servidor de desenvolvimento
+- `npm run build` — build de produção
+- `npm run lint` — ESLint
+- `npm test` — Vitest
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Estrutura
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `src/app` — rotas (App Router)
+- `src/modules` — domínios (auth, leads, contracts…)
+- `src/components` — UI compartilhada (shell, feedback, auth)
+- `src/lib` — api, query, auth, utils
+- `src/mocks` — handlers MSW
+- `src/theme` — tema MUI light/dark
+- `specs/` — documentação SDD
 
-## Deploy on Vercel
+## Documentação
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Comece por [`specs/00-product.md`](./specs/00-product.md).
