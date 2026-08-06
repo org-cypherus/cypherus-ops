@@ -20,20 +20,28 @@ import {
 } from "@mui/material";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
+import type { Permission } from "@/lib/auth/permissions";
+import { useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
 
 export const DRAWER_WIDTH = 248;
 export const TOPBAR_HEIGHT = 64;
 
-const items = [
-  { href: "/dashboard", label: "Dashboard", icon: <DashboardOutlinedIcon /> },
-  { href: "/leads", label: "Leads", icon: <AccountTreeOutlinedIcon /> },
-  { href: "/legal", label: "Jurídico", icon: <GavelOutlinedIcon /> },
-  { href: "/contracts", label: "Contratos", icon: <DescriptionOutlinedIcon /> },
-  { href: "/financial", label: "Financeiro", icon: <PaidOutlinedIcon /> },
-  { href: "/reports", label: "Relatórios", icon: <AssessmentOutlinedIcon /> },
-  { href: "/admin/users", label: "Usuários", icon: <PeopleOutlineIcon /> },
-  { href: "/admin", label: "Administração", icon: <SettingsOutlinedIcon /> },
+const items: Array<{
+  href: string;
+  label: string;
+  icon: ReactNode;
+  permission: Permission;
+}> = [
+  { href: "/dashboard", label: "Dashboard", icon: <DashboardOutlinedIcon />, permission: "dashboard:visualizar" },
+  { href: "/leads", label: "Leads", icon: <AccountTreeOutlinedIcon />, permission: "crm:visualizar" },
+  { href: "/legal", label: "Jurídico", icon: <GavelOutlinedIcon />, permission: "contratos:editar" },
+  { href: "/contracts", label: "Contratos", icon: <DescriptionOutlinedIcon />, permission: "contratos:visualizar" },
+  { href: "/financial", label: "Financeiro", icon: <PaidOutlinedIcon />, permission: "financeiro:visualizar" },
+  { href: "/reports", label: "Relatórios", icon: <AssessmentOutlinedIcon />, permission: "relatorios:exportar" },
+  { href: "/admin/users", label: "Usuários", icon: <PeopleOutlineIcon />, permission: "admin:visualizar" },
+  { href: "/admin", label: "Administração", icon: <SettingsOutlinedIcon />, permission: "admin:visualizar" },
 ];
 
 const paperSx = {
@@ -45,6 +53,9 @@ const paperSx = {
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const { data: user } = useSession();
+  const permissions = user?.permissions ?? [];
+  const visibleItems = items.filter((item) => permissions.includes(item.permission));
 
   return (
     <>
@@ -59,7 +70,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
         </Box>
       </Toolbar>
       <List sx={{ px: 1.5, pt: 1 }}>
-        {items.map((item) => {
+        {visibleItems.map((item) => {
           const selected =
             pathname === item.href ||
             (item.href !== "/admin" && pathname.startsWith(item.href)) ||

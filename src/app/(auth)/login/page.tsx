@@ -7,6 +7,7 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   Stack,
   TextField,
@@ -16,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { getAccessToken } from "@/lib/auth/session";
+import { DEMO_ACCOUNTS } from "@/mocks/data";
 import { useLogin, useSession } from "@/modules/auth/hooks";
 import { loginSchema, type LoginFormValues } from "@/modules/auth/schemas";
 
@@ -27,10 +29,11 @@ export default function LoginPage() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "ana@cypherops.com", password: "123456" },
+    defaultValues: { email: DEMO_ACCOUNTS[0].email, password: DEMO_ACCOUNTS[0].password },
   });
 
   useEffect(() => {
@@ -57,10 +60,10 @@ export default function LoginPage() {
         <CardContent sx={{ p: 4 }}>
           <Stack spacing={3} component="form" onSubmit={handleSubmit((values) => login.mutate(values))}>
             <Box textAlign="center">
-              <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.03em"  }}>
+              <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.03em" }}>
                 Cypher Ops
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5  }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                 Autenticação do sistema
               </Typography>
             </Box>
@@ -94,11 +97,27 @@ export default function LoginPage() {
             >
               Acessar sistema
             </Button>
-            <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
-              Demo: ana@cypherops.com / 123456
-              <br />
-              Novos usuários: sobrenome + ano (ex.: Souza2026) — pedem troca no 1º acesso
-            </Typography>
+
+            <Box>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1, textAlign: "center" }}>
+                Acessos demo (MVP) — senha: {DEMO_ACCOUNTS[0].password}
+              </Typography>
+              <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap" useFlexGap>
+                {DEMO_ACCOUNTS.map((account) => (
+                  <Chip
+                    key={account.email}
+                    label={account.label}
+                    clickable
+                    variant="outlined"
+                    size="small"
+                    onClick={() => {
+                      setValue("email", account.email, { shouldValidate: true });
+                      setValue("password", account.password, { shouldValidate: true });
+                    }}
+                  />
+                ))}
+              </Stack>
+            </Box>
           </Stack>
         </CardContent>
       </Card>

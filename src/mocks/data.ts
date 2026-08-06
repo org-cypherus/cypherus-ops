@@ -96,12 +96,39 @@ function daysAgo(n: number) {
   return d.toISOString();
 }
 
+/** Contas demo do MVP prévio — senha única para facilitar a call com o cliente */
+export const DEMO_PASSWORD = "123456";
+
+export const DEMO_ACCOUNTS = [
+  {
+    label: "Administrador",
+    email: "ana@cypherops.com",
+    password: DEMO_PASSWORD,
+    name: "Ana Souza",
+    role: "Administrador" as RoleName,
+  },
+  {
+    label: "Comercial",
+    email: "bruno@cypherops.com",
+    password: DEMO_PASSWORD,
+    name: "Bruno Lima",
+    role: "Comercial" as RoleName,
+  },
+  {
+    label: "Jurídico",
+    email: "elena@cypherops.com",
+    password: DEMO_PASSWORD,
+    name: "Elena Rocha",
+    role: "Jurídico" as RoleName,
+  },
+] as const;
+
 export const mockUsers: AppUser[] = [
-  { id: "u1", name: "Ana Souza", email: "ana@cypherops.com", phone: "(11) 98888-1001", role: "Administrador", team: "Operações", status: "Ativo", password: "123456", mustChangePassword: false },
-  { id: "u2", name: "Bruno Lima", email: "bruno@cypherops.com", phone: "(11) 98888-1002", role: "Comercial", team: "Vendas", status: "Ativo", password: "123456", mustChangePassword: false },
-  { id: "u3", name: "Carla Mendes", email: "carla@cypherops.com", phone: "(11) 98888-1003", role: "Gestor", team: "Vendas", status: "Ativo", password: "123456", mustChangePassword: false },
-  { id: "u4", name: "Diego Alves", email: "diego@cypherops.com", phone: "(11) 98888-1004", role: "Financeiro", team: "Financeiro", status: "Ativo", password: "123456", mustChangePassword: false },
-  { id: "u5", name: "Elena Rocha", email: "elena@cypherops.com", phone: "(11) 98888-1005", role: "Jurídico", team: "Jurídico", status: "Ativo", password: "123456", mustChangePassword: false },
+  { id: "u1", name: "Ana Souza", email: "ana@cypherops.com", phone: "(11) 98888-1001", role: "Administrador", team: "Operações", status: "Ativo", password: DEMO_PASSWORD, mustChangePassword: false },
+  { id: "u2", name: "Bruno Lima", email: "bruno@cypherops.com", phone: "(11) 98888-1002", role: "Comercial", team: "Vendas", status: "Ativo", password: DEMO_PASSWORD, mustChangePassword: false },
+  { id: "u3", name: "Carla Mendes", email: "carla@cypherops.com", phone: "(11) 98888-1003", role: "Gestor", team: "Vendas", status: "Ativo", password: DEMO_PASSWORD, mustChangePassword: false },
+  { id: "u4", name: "Diego Alves", email: "diego@cypherops.com", phone: "(11) 98888-1004", role: "Financeiro", team: "Financeiro", status: "Ativo", password: DEMO_PASSWORD, mustChangePassword: false },
+  { id: "u5", name: "Elena Rocha", email: "elena@cypherops.com", phone: "(11) 98888-1005", role: "Jurídico", team: "Jurídico", status: "Ativo", password: DEMO_PASSWORD, mustChangePassword: false },
 ];
 
 export const currentUser: SessionUser = {

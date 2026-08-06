@@ -10,32 +10,32 @@
 
 Sistema web único para centralizar **leads, pipeline comercial, contratos, financeiro básico, dashboards e administração de usuários** — substituindo o uso fragmentado de planilhas, WhatsApp e controles manuais.
 
-| Item | Valor |
-|---|---|
-| **Implantação V1 (projeto)** | **R$ 24.000** |
+| Item                                                  | Valor          |
+| ----------------------------------------------------- | -------------- |
+| **Implantação V1 (projeto)**                          | **R$ 24.000**  |
 | **Mensalidade** (hospedagem, suporte e evolução leve) | **R$ 590/mês** |
-| **Horas extras** (fora do pacote mensal) | **R$ 160/h** |
-| **Usuários inclusos na mensalidade** | até **5** |
+| **Horas extras** (fora do pacote mensal)              | **R$ 160/h**   |
+| **Usuários inclusos na mensalidade**                  | até **5**      |
 
 > **Contexto de precificação:** cliente com comercial em torno de R$ 15–20 mil/mês (+ receita da etapa jurídica). Preço calibrado para **alta chance de fechamento**, com parcelamento por marcos.
 
 ### Condições de pagamento sugeridas (recomendado)
 
-| Marco | % | Valor | Quando |
-|---|---|---|---|
-| Assinatura / kickoff | 30% | R$ 7.200 | na assinatura |
-| Núcleo CRM (auth + leads + kanban + distribuição) | 35% | R$ 8.400 | ~semana 5–6 |
-| Entrega final + go-live | 35% | R$ 8.400 | homologação |
+| Marco                                             | %   | Valor    | Quando        |
+| ------------------------------------------------- | --- | -------- | ------------- |
+| Assinatura / kickoff                              | 30% | R$ 7.200 | na assinatura |
+| Núcleo CRM (auth + leads + kanban + distribuição) | 35% | R$ 8.400 | ~semana 5–6   |
+| Entrega final + go-live                           | 35% | R$ 8.400 | homologação   |
 
 Mensalidade inicia no go-live.
 
 ### Alternativa ainda mais “fechável” (mesmo escopo)
 
-| Item | Valor |
-|---|---|
-| Implantação | **R$ 19.900** |
-| Parcelas | 4× de **R$ 4.975** (kickoff + 3 marcos mensais) |
-| Mensalidade | **R$ 490/mês** a partir do go-live |
+| Item        | Valor                                           |
+| ----------- | ----------------------------------------------- |
+| Implantação | **R$ 19.900**                                   |
+| Parcelas    | 4× de **R$ 4.975** (kickoff + 3 marcos mensais) |
+| Mensalidade | **R$ 490/mês** a partir do go-live              |
 
 Usar só se travar em R$ 24k. Não descer abaixo de ~R$ 18k sem cortar escopo.
 
@@ -195,12 +195,12 @@ Usar só se travar em R$ 24k. Não descer abaixo de ~R$ 18k sem cortar escopo.
 
 ## 7. Texto curto para enviar ao cliente
 
-> Proposta da V1: centraliza leads, pipeline (kanban), distribuição, contratos com PDF, financeiro básico (comissões), dashboards e permissões.  
->  
-> **Investimento:** R$ 24.000 de implantação (em 3 marcos: R$ 7.200 + R$ 8.400 + R$ 8.400) + R$ 590/mês a partir do go-live.  
->  
-> Não inclui WhatsApp, assinatura eletrônica automática, automações avançadas nem IA — fases seguintes com proposta própria.  
->  
+> Proposta da V1: centraliza leads, pipeline (kanban), distribuição, contratos com PDF, financeiro básico (comissões), dashboards e permissões.
+>
+> **Investimento:** R$ 24.000 de implantação (em 3 marcos: R$ 7.200 + R$ 8.400 + R$ 8.400) + R$ 590/mês a partir do go-live.
+>
+> Não inclui WhatsApp, assinatura eletrônica automática, automações avançadas nem IA — fases seguintes com proposta própria.
+>
 > Feito para o time operar em um único sistema, com menos perda de lead e mais previsibilidade do comercial → jurídico.
 
 ---

@@ -16,6 +16,7 @@ export function MSWProvider({ children }: { children: ReactNode }) {
       await worker.start({
         onUnhandledRequest: "bypass",
         quiet: true,
+        serviceWorker: { url: "/mockServiceWorker.js" },
       });
       setReady(true);
     }

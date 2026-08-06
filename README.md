@@ -16,9 +16,24 @@ npm run dev
 
 Abra [http://localhost:3000](http://localhost:3000).
 
-**Login demo (mocks):** `ana@cypherops.com` / `123456`
+**Logins demo (mocks)** — senha `123456` para todos:
+
+| Cargo | E-mail | Nome |
+| ----- | ------ | ---- |
+| Administrador | `ana@cypherops.com` | Ana Souza |
+| Comercial | `bruno@cypherops.com` | Bruno Lima |
+| Jurídico | `elena@cypherops.com` | Elena Rocha |
+
+Extras no mock: `carla@cypherops.com` (Gestor), `diego@cypherops.com` (Financeiro).
 
 Com `NEXT_PUBLIC_USE_MOCKS=true`, a API é simulada via MSW no contrato REST descrito em [`specs/03-back-end.md`](./specs/03-back-end.md).
+
+### Preview no Vercel
+
+No painel do projeto, configure:
+
+- `NEXT_PUBLIC_USE_MOCKS` = `true`
+- `NEXT_PUBLIC_API_URL` = `http://localhost:8000`
 
 ## Scripts
 
