@@ -125,9 +125,17 @@ export default function LegalPage() {
   function onDragEnd(event: DragEndEvent) {
     setActive(null);
     const leadId = String(event.active.id);
-    const status = event.over?.id as LegalStage | undefined;
-    if (!status || !LEGAL_STAGES.includes(status)) return;
-    if (!leadsById[leadId] || leadsById[leadId].legalStatus === status) return;
+    const overId = event.over?.id;
+    if (!overId || !leadsById[leadId]) return;
+
+    const overKey = String(overId);
+    let status: LegalStage | undefined;
+    if ((LEGAL_STAGES as readonly string[]).includes(overKey)) {
+      status = overKey as LegalStage;
+    } else if (leadsById[overKey]?.legalStatus) {
+      status = leadsById[overKey].legalStatus as LegalStage;
+    }
+    if (!status || leadsById[leadId].legalStatus === status) return;
     moveLead.mutate({ leadId, status });
   }
 

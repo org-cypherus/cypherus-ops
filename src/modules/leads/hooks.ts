@@ -19,13 +19,56 @@ import {
   updateLead,
   type LeadFilters,
 } from "./services";
-import type { Attachment, Lead, LegalStage, PipelineStage } from "./types";
+import type { Attachment, KanbanBoard, Lead, LegalStage, PipelineStage } from "./types";
 
 function invalidateLeadQueries(queryClient: ReturnType<typeof useQueryClient>, id?: string) {
-  void queryClient.invalidateQueries({ queryKey: queryKeys.kanban() });
+  // Prefixo ["kanban"] — cobre todas as variantes com filtros
+  void queryClient.invalidateQueries({ queryKey: ["kanban"] });
   void queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
   void queryClient.invalidateQueries({ queryKey: queryKeys.legalKanban });
   if (id) void queryClient.invalidateQueries({ queryKey: queryKeys.leads.detail(id) });
+}
+
+function moveLeadInBoard(board: KanbanBoard, leadId: string, status: PipelineStage): KanbanBoard {
+  const lead = board.columns.flatMap((c) => c.leads).find((l) => l.id === leadId);
+  if (!lead) return board;
+  const updated = { ...lead, status, daysInStage: 0 };
+  return {
+    columns: board.columns.map((col) => {
+      const leads =
+        col.status === status
+          ? [...col.leads.filter((l) => l.id !== leadId), updated]
+          : col.leads.filter((l) => l.id !== leadId);
+      return {
+        ...col,
+        leads,
+        count: leads.length,
+        potentialValue: leads.reduce((sum, l) => sum + l.process.totalValue, 0),
+      };
+    }),
+  };
+}
+
+type LegalBoard = Awaited<ReturnType<typeof fetchLegalKanban>>;
+
+function moveLeadInLegalBoard(board: LegalBoard, leadId: string, status: LegalStage): LegalBoard {
+  const lead = board.columns.flatMap((c) => c.leads).find((l) => l.id === leadId);
+  if (!lead) return board;
+  const updated = { ...lead, legalStatus: status };
+  return {
+    columns: board.columns.map((col) => {
+      const leads =
+        col.status === status
+          ? [...col.leads.filter((l) => l.id !== leadId), updated]
+          : col.leads.filter((l) => l.id !== leadId);
+      return {
+        ...col,
+        leads,
+        count: leads.length,
+        potentialValue: leads.reduce((sum, l) => sum + l.process.totalValue, 0),
+      };
+    }),
+  };
 }
 
 export function useKanban(params?: LeadFilters) {
@@ -87,7 +130,20 @@ export function useMoveLead() {
   return useMutation({
     mutationFn: ({ leadId, status }: { leadId: string; status: PipelineStage }) =>
       moveLead(leadId, status),
-    onSuccess: () => invalidateLeadQueries(queryClient),
+    onMutate: async ({ leadId, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["kanban"] });
+      const previous = queryClient.getQueriesData<KanbanBoard>({ queryKey: ["kanban"] });
+      queryClient.setQueriesData<KanbanBoard>({ queryKey: ["kanban"] }, (old) =>
+        old ? moveLeadInBoard(old, leadId, status) : old,
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      context?.previous.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data);
+      });
+    },
+    onSettled: () => invalidateLeadQueries(queryClient),
   });
 }
 
@@ -136,7 +192,20 @@ export function useMoveLegalLead() {
   return useMutation({
     mutationFn: ({ leadId, status }: { leadId: string; status: LegalStage }) =>
       moveLegalLead(leadId, status),
-    onSuccess: () => {
+    onMutate: async ({ leadId, status }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.legalKanban });
+      const previous = queryClient.getQueryData<LegalBoard>(queryKeys.legalKanban);
+      queryClient.setQueryData<LegalBoard>(queryKeys.legalKanban, (old) =>
+        old ? moveLeadInLegalBoard(old, leadId, status) : old,
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.legalKanban, context.previous);
+      }
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.legalKanban });
       void queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
     },

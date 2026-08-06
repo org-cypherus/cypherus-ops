@@ -17,6 +17,7 @@ import { useState } from "react";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { formatCurrency } from "@/lib/utils/format";
 import type { KanbanBoard as KanbanBoardType, Lead, PipelineStage } from "../types";
+import { PIPELINE_STAGES } from "../types";
 import { useMoveLead } from "../hooks";
 
 function LeadCard({ lead, dragging }: { lead: Lead; dragging?: boolean }) {
@@ -116,8 +117,18 @@ export function KanbanBoard({ board }: { board: KanbanBoardType }) {
   function onDragEnd(event: DragEndEvent) {
     setActive(null);
     const leadId = String(event.active.id);
-    const status = event.over?.id as PipelineStage | undefined;
-    if (!status || !leadsById[leadId] || leadsById[leadId].status === status) return;
+    const overId = event.over?.id;
+    if (!overId || !leadsById[leadId]) return;
+
+    // Drop na coluna ou em cima de outro card (resolve a coluna do alvo)
+    const overKey = String(overId);
+    let status: PipelineStage | undefined;
+    if ((PIPELINE_STAGES as readonly string[]).includes(overKey)) {
+      status = overKey as PipelineStage;
+    } else if (leadsById[overKey]) {
+      status = leadsById[overKey].status;
+    }
+    if (!status || leadsById[leadId].status === status) return;
     moveLead.mutate({ leadId, status });
   }
 
