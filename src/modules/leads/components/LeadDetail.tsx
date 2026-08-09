@@ -3,7 +3,9 @@
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
+import MeetingRoomOutlinedIcon from "@mui/icons-material/MeetingRoomOutlined";
 import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
+import VideocamOutlinedIcon from "@mui/icons-material/VideocamOutlined";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import {
   Avatar,
@@ -11,31 +13,50 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   Divider,
   Grid2 as Grid,
   IconButton,
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSnackbar } from "notistack";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { downloadDataUrl, fileToDataUrl } from "@/lib/utils/download";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import {
   useAddAttachment,
+  useAddTimelineEntry,
   useDeleteLead,
   useLeadContracts,
   useRemoveAttachment,
   useUpdateLead,
 } from "../hooks";
-import type { Lead } from "../types";
-import { PIPELINE_STAGES } from "../types";
+import type { Lead, TimelineContactType } from "../types";
+import { PIPELINE_STAGES, TIMELINE_CONTACT_TYPES } from "../types";
+
+const CONTACT_META: Record<
+  TimelineContactType,
+  { icon: ReactNode; color: string; label: string }
+> = {
+  WhatsApp: { icon: <WhatsAppIcon fontSize="small" />, color: "#25D366", label: "WhatsApp" },
+  Telefone: { icon: <PhoneOutlinedIcon fontSize="small" />, color: "#1565C0", label: "Telefone" },
+  VideoChamada: { icon: <VideocamOutlinedIcon fontSize="small" />, color: "#7B1FA2", label: "Vídeo" },
+  "E-mail": { icon: <EmailOutlinedIcon fontSize="small" />, color: "#E65100", label: "E-mail" },
+  Presencial: { icon: <MeetingRoomOutlinedIcon fontSize="small" />, color: "#455A64", label: "Presencial" },
+};
+
+function timelineIcon(type: string) {
+  if (type in CONTACT_META) return CONTACT_META[type as TimelineContactType];
+  return null;
+}
 
 function Field({ label, value }: { label: string; value?: string | number | null }) {
   return (
@@ -57,6 +78,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const deleteLead = useDeleteLead();
   const addAttachment = useAddAttachment(lead.id);
   const removeAttachment = useRemoveAttachment(lead.id);
+  const addTimeline = useAddTimelineEntry(lead.id);
   const contracts = useLeadContracts(lead.id);
   const { enqueueSnackbar } = useSnackbar();
   const router = useRouter();
@@ -66,6 +88,8 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const [draft, setDraft] = useState<Record<string, string | number>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [contactType, setContactType] = useState<TimelineContactType>("WhatsApp");
+  const [contactNote, setContactNote] = useState("");
 
   function startEdit(section: SectionKey, values: Record<string, string | number>) {
     setEditing(section);
@@ -79,6 +103,18 @@ export function LeadDetail({ lead }: { lead: Lead }) {
         setEditing(null);
       },
     });
+  }
+
+  function submitTimelineEntry() {
+    addTimeline.mutate(
+      { type: contactType, description: contactNote.trim() },
+      {
+        onSuccess: () => {
+          enqueueSnackbar("Registro adicionado à timeline", { variant: "success" });
+          setContactNote("");
+        },
+      },
+    );
   }
 
   async function handleFiles(files: FileList | null) {
@@ -471,21 +507,90 @@ export function LeadDetail({ lead }: { lead: Lead }) {
           <Stack spacing={2}>
             <Card variant="outlined">
               <CardContent>
-                <Typography variant="h6" sx={{ mb: 2 }}>
+                <Typography variant="h6" sx={{ mb: 1.5 }}>
                   Timeline
                 </Typography>
+
+                <Stack spacing={1.25} mb={2}>
+                  <Typography variant="caption" color="text.secondary">
+                    Registrar contato
+                  </Typography>
+                  <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                    {TIMELINE_CONTACT_TYPES.map((type) => {
+                      const meta = CONTACT_META[type];
+                      const selected = contactType === type;
+                      return (
+                        <Tooltip key={type} title={meta.label}>
+                          <Chip
+                            icon={
+                              <Box component="span" sx={{ display: "inline-flex", color: selected ? "#fff" : meta.color }}>
+                                {meta.icon}
+                              </Box>
+                            }
+                            label={meta.label}
+                            clickable
+                            size="small"
+                            onClick={() => setContactType(type)}
+                            sx={{
+                              bgcolor: selected ? meta.color : "transparent",
+                              color: selected ? "#fff" : "text.primary",
+                              borderColor: meta.color,
+                              border: "1px solid",
+                              "& .MuiChip-icon": { color: "inherit" },
+                            }}
+                          />
+                        </Tooltip>
+                      );
+                    })}
+                  </Stack>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    multiline
+                    minRows={2}
+                    placeholder="Ex.: Cliente respondeu no WhatsApp, agendar retorno..."
+                    value={contactNote}
+                    onChange={(e) => setContactNote(e.target.value)}
+                  />
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disabled={addTimeline.isPending}
+                    onClick={submitTimelineEntry}
+                  >
+                    Adicionar registro
+                  </Button>
+                </Stack>
+
+                <Divider sx={{ mb: 1.5 }} />
+
                 <Stack spacing={1.5} divider={<Divider flexItem />}>
-                  {lead.timeline.map((event) => (
-                    <Box key={event.id}>
-                      <Typography variant="subtitle2">{event.type}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {event.description}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {event.userName} · {formatDate(event.createdAt)}
-                      </Typography>
-                    </Box>
-                  ))}
+                  {lead.timeline.map((event) => {
+                    const meta = timelineIcon(event.type);
+                    return (
+                      <Stack key={event.id} direction="row" spacing={1.25} alignItems="flex-start">
+                        <Avatar
+                          sx={{
+                            width: 32,
+                            height: 32,
+                            bgcolor: meta ? `${meta.color}22` : "action.hover",
+                            color: meta?.color || "text.secondary",
+                          }}
+                        >
+                          {meta?.icon || event.type.charAt(0)}
+                        </Avatar>
+                        <Box flex={1} minWidth={0}>
+                          <Typography variant="subtitle2">{meta?.label || event.type}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {event.description}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {event.userName} · {formatDate(event.createdAt)}
+                          </Typography>
+                        </Box>
+                      </Stack>
+                    );
+                  })}
                 </Stack>
               </CardContent>
             </Card>

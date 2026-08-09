@@ -23,7 +23,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSnackbar } from "notistack";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
@@ -37,6 +37,8 @@ import { CreateLeadDialog } from "@/modules/leads/components/CreateLeadDialog";
 import { DistributeLeadsDialog } from "@/modules/leads/components/DistributeLeadsDialog";
 import { ImportLeadsDialog } from "@/modules/leads/components/ImportLeadsDialog";
 import { KanbanBoard } from "@/modules/leads/components/KanbanBoard";
+import { useSession } from "@/modules/auth/hooks";
+import { Role } from "@/lib/auth/permissions";
 import { useDistributeLeads, useKanban, useLeads } from "@/modules/leads/hooks";
 import type { Lead } from "@/modules/leads/types";
 
@@ -54,11 +56,20 @@ export function LeadsPageClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { enqueueSnackbar } = useSnackbar();
+  const { data: session, isSuccess: sessionReady } = useSession();
+  const isComercial = session?.role === Role.Comercial;
+  const canViewCrm = Boolean(session?.permissions.includes("crm:visualizar"));
   const view = searchParams.get("view") === "table" ? "table" : "kanban";
+
+  useEffect(() => {
+    if (sessionReady && session && !canViewCrm) {
+      router.replace(session.role === Role.Jurídico ? "/legal" : "/dashboard");
+    }
+  }, [sessionReady, session, canViewCrm, router]);
 
   const filters = {
     q: searchParams.get("q") || undefined,
-    ownerId: searchParams.get("ownerId") || undefined,
+    ownerId: isComercial ? session?.id : searchParams.get("ownerId") || undefined,
     origin: searchParams.get("origin") || undefined,
     priority: searchParams.get("priority") || undefined,
     tag: searchParams.get("tag") || undefined,
@@ -139,11 +150,13 @@ export function LeadsPageClient() {
             <ToggleButton value="kanban">Kanban</ToggleButton>
             <ToggleButton value="table">Tabela</ToggleButton>
           </ToggleButtonGroup>
-          <PermissionGate permission="crm:editar">
-            <Button variant="outlined" onClick={() => setDistributeOpen(true)}>
-              Distribuir
-            </Button>
-          </PermissionGate>
+          {!isComercial ? (
+            <PermissionGate permission="crm:editar">
+              <Button variant="outlined" onClick={() => setDistributeOpen(true)}>
+                Distribuir
+              </Button>
+            </PermissionGate>
+          ) : null}
           <PermissionGate permission="crm:criar">
             <Button variant="contained" onClick={() => setCreateOpen(true)}>
               Novo Lead
@@ -168,21 +181,23 @@ export function LeadsPageClient() {
           }}
           onBlur={(e) => setFilter("q", e.target.value)}
         />
-        <TextField
-          select
-          size="small"
-          label="Responsável"
-          value={filters.ownerId || ""}
-          onChange={(e) => setFilter("ownerId", e.target.value)}
-          sx={{ minWidth: 160 }}
-        >
-          <MenuItem value="">Todos</MenuItem>
-          {(users.data || []).map((u) => (
-            <MenuItem key={u.id} value={u.id}>
-              {u.name}
-            </MenuItem>
-          ))}
-        </TextField>
+        {!isComercial ? (
+          <TextField
+            select
+            size="small"
+            label="Responsável"
+            value={filters.ownerId || ""}
+            onChange={(e) => setFilter("ownerId", e.target.value)}
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="">Todos</MenuItem>
+            {(users.data || []).map((u) => (
+              <MenuItem key={u.id} value={u.id}>
+                {u.name}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
         <TextField
           select
           size="small"

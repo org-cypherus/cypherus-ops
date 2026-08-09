@@ -74,6 +74,14 @@ export async function removeLeadAttachment(leadId: string, attachmentId: string)
   return data;
 }
 
+export async function addLeadTimelineEntry(
+  leadId: string,
+  payload: { type: string; description: string },
+) {
+  const { data } = await api.post<Lead>(`/leads/${leadId}/timeline`, payload);
+  return data;
+}
+
 export async function fetchLeadContracts(leadId: string) {
   const { data } = await api.get<{ data: Array<{ id: string; templateName: string; status: string; value: number }> }>(
     "/contracts",

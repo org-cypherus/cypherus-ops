@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/keys";
 import {
   addLeadAttachment,
+  addLeadTimelineEntry,
   createLead,
   deleteLead,
   distributeLeads,
@@ -176,6 +177,15 @@ export function useRemoveAttachment(leadId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (attachmentId: string) => removeLeadAttachment(leadId, attachmentId),
+    onSuccess: () => invalidateLeadQueries(queryClient, leadId),
+  });
+}
+
+export function useAddTimelineEntry(leadId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { type: string; description: string }) =>
+      addLeadTimelineEntry(leadId, payload),
     onSuccess: () => invalidateLeadQueries(queryClient, leadId),
   });
 }

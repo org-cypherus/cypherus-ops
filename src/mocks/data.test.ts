@@ -19,7 +19,8 @@ describe("mock store mutations", () => {
       process: { totalValue: 999 },
     });
     expect(mockLeads.length).toBe(before + 1);
-    expect(lead.timeline[0]?.type).toBe("Criado");
+    expect(lead.timeline.some((t) => t.type === "Criado")).toBe(true);
+    expect(lead.timeline.some((t) => t.type === "Distribuição")).toBe(true);
 
     const patched = patchLead(lead.id, { observations: "Obs atualizada" });
     expect(patched?.observations).toBe("Obs atualizada");

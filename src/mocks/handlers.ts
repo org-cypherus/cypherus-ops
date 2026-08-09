@@ -1,11 +1,13 @@
 import { http, HttpResponse } from "msw";
 import { calculateCommission } from "@/lib/utils/commission";
-import type { Permission, RoleName } from "@/lib/auth/permissions";
+import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
 import type { Attachment, Lead, PipelineStage } from "@/modules/leads/types";
 import {
   addAttachment,
+  addTimelineEntry,
   buildKanban,
   buildLegalKanban,
+  canAccessLead,
   canDeactivateUser,
   createLead,
   currentUser,
@@ -13,6 +15,7 @@ import {
   deleteLead,
   deleteUser,
   distributeLeadsInStore,
+  distributionSettings,
   filterLeads,
   generateContractPdf,
   generatedPdfs,
@@ -27,6 +30,7 @@ import {
   mockUsers,
   patchLead,
   removeAttachment,
+  resolveOwnerScope,
   updateLeadStatus,
   updateLegalStatus,
   type ContractTemplate,
@@ -115,7 +119,7 @@ export const handlers = [
     const pageSize = Number(url.searchParams.get("pageSize") || 50);
     const items = filterLeads(mockLeads, {
       q: url.searchParams.get("q") || undefined,
-      ownerId: url.searchParams.get("ownerId") || undefined,
+      ownerId: resolveOwnerScope(url.searchParams.get("ownerId")),
       origin: url.searchParams.get("origin") || undefined,
       priority: url.searchParams.get("priority") || undefined,
       tag: url.searchParams.get("tag") || undefined,
@@ -129,35 +133,78 @@ export const handlers = [
   http.get(`${API}/leads/:id`, ({ params }) => {
     const lead = mockLeads.find((l) => l.id === params.id);
     if (!lead) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
+    if (!canAccessLead(lead)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este lead" }, { status: 403 });
+    }
     return HttpResponse.json(lead);
   }),
 
   http.post(`${API}/leads`, async ({ request }) => {
     const body = (await request.json()) as Partial<Lead> & { name: string; email: string };
+    // Comercial não escolhe responsável — cai na regra padrão do admin
+    if (currentUser.role === Role.Comercial) {
+      delete body.ownerId;
+    }
     const lead = createLead(body);
     return HttpResponse.json(lead, { status: 201 });
   }),
 
   http.post(`${API}/leads/import`, async ({ request }) => {
     const body = (await request.json()) as { rows: Array<Partial<Lead> & { name: string; email: string }> };
-    const created = (body.rows || []).map((row) => createLead(row));
+    const created = (body.rows || []).map((row) => {
+      if (currentUser.role === Role.Comercial) delete row.ownerId;
+      return createLead(row);
+    });
     return HttpResponse.json({ created: created.length, data: created }, { status: 201 });
   }),
 
   http.patch(`${API}/leads/:id`, async ({ params, request }) => {
+    const existing = mockLeads.find((l) => l.id === params.id);
+    if (!existing) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
+    if (!canAccessLead(existing)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este lead" }, { status: 403 });
+    }
     const body = (await request.json()) as Partial<Lead>;
+    if (currentUser.role === Role.Comercial) {
+      delete body.ownerId;
+    }
     const lead = patchLead(String(params.id), body);
     if (!lead) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
     return HttpResponse.json(lead);
   }),
 
   http.delete(`${API}/leads/:id`, ({ params }) => {
+    const existing = mockLeads.find((l) => l.id === params.id);
+    if (!existing) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
+    if (!canAccessLead(existing)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este lead" }, { status: 403 });
+    }
     const ok = deleteLead(String(params.id));
     if (!ok) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
     return HttpResponse.json({ ok: true });
   }),
 
+  http.post(`${API}/leads/:id/timeline`, async ({ params, request }) => {
+    const existing = mockLeads.find((l) => l.id === params.id);
+    if (!existing) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
+    if (!canAccessLead(existing)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este lead" }, { status: 403 });
+    }
+    const body = (await request.json()) as { type?: string; description?: string };
+    if (!body.type) {
+      return HttpResponse.json({ statusCode: 400, message: "Tipo de contato é obrigatório" }, { status: 400 });
+    }
+    const lead = addTimelineEntry(String(params.id), body.type, body.description || "");
+    if (!lead) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
+    return HttpResponse.json(lead, { status: 201 });
+  }),
+
   http.post(`${API}/leads/:id/attachments`, async ({ params, request }) => {
+    const existing = mockLeads.find((l) => l.id === params.id);
+    if (!existing) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
+    if (!canAccessLead(existing)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este lead" }, { status: 403 });
+    }
     const body = (await request.json()) as Attachment;
     const lead = addAttachment(String(params.id), {
       ...body,
@@ -169,6 +216,11 @@ export const handlers = [
   }),
 
   http.delete(`${API}/leads/:id/attachments/:attachmentId`, ({ params }) => {
+    const existing = mockLeads.find((l) => l.id === params.id);
+    if (!existing) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
+    if (!canAccessLead(existing)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este lead" }, { status: 403 });
+    }
     const lead = removeAttachment(String(params.id), String(params.attachmentId));
     if (!lead) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
     return HttpResponse.json(lead);
@@ -178,7 +230,7 @@ export const handlers = [
     const url = new URL(request.url);
     return HttpResponse.json(
       buildKanban({
-        ownerId: url.searchParams.get("ownerId") || undefined,
+        ownerId: resolveOwnerScope(url.searchParams.get("ownerId")),
         origin: url.searchParams.get("origin") || undefined,
         priority: url.searchParams.get("priority") || undefined,
         tag: url.searchParams.get("tag") || undefined,
@@ -190,8 +242,13 @@ export const handlers = [
 
   http.patch(`${API}/kanban/move`, async ({ request }) => {
     const body = (await request.json()) as { leadId: string; status: PipelineStage };
+    const existing = mockLeads.find((l) => l.id === body.leadId);
+    if (!existing) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
+    if (!canAccessLead(existing)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este lead" }, { status: 403 });
+    }
     updateLeadStatus(body.leadId, body.status);
-    return HttpResponse.json(buildKanban());
+    return HttpResponse.json(buildKanban({ ownerId: resolveOwnerScope(null) }));
   }),
 
   http.get(`${API}/legal/kanban`, () => HttpResponse.json(buildLegalKanban())),
@@ -211,6 +268,19 @@ export const handlers = [
     };
     const affected = distributeLeadsInStore(body);
     return HttpResponse.json({ ok: true, strategy: body.strategy, affected });
+  }),
+
+  http.get(`${API}/distribution-settings`, () => HttpResponse.json({ ...distributionSettings })),
+
+  http.patch(`${API}/distribution-settings`, async ({ request }) => {
+    if (currentUser.role !== Role.Administrador && currentUser.role !== Role.Gestor) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
+    }
+    const body = (await request.json()) as { defaultStrategy?: typeof distributionSettings.defaultStrategy };
+    if (body.defaultStrategy) {
+      distributionSettings.defaultStrategy = body.defaultStrategy;
+    }
+    return HttpResponse.json({ ...distributionSettings });
   }),
 
   http.get(`${API}/contracts`, ({ request }) => {
@@ -648,8 +718,12 @@ export const handlers = [
   http.get(`${API}/search`, ({ request }) => {
     const url = new URL(request.url);
     const q = (url.searchParams.get("q") || "").toLowerCase();
+    const scopedLeads =
+      currentUser.role === Role.Comercial
+        ? mockLeads.filter((l) => l.ownerId === currentUser.id)
+        : mockLeads;
     return HttpResponse.json({
-      leads: mockLeads
+      leads: scopedLeads
         .filter((l) => l.name.toLowerCase().includes(q) || l.cpf.includes(q) || l.email.toLowerCase().includes(q))
         .slice(0, 5),
       contracts: mockContracts
