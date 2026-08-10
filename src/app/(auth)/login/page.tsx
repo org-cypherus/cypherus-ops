@@ -18,7 +18,7 @@ import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { getAccessToken } from "@/lib/auth/session";
 import { DEMO_ACCOUNTS } from "@/mocks/data";
-import { useLogin, useSession } from "@/modules/auth/hooks";
+import { homePathForRole, useLogin, useSession } from "@/modules/auth/hooks";
 import { loginSchema, type LoginFormValues } from "@/modules/auth/schemas";
 
 export default function LoginPage() {
@@ -37,10 +37,10 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (hasToken && session.isSuccess) {
-      router.replace("/leads");
+    if (hasToken && session.isSuccess && session.data) {
+      router.replace(homePathForRole(session.data.role));
     }
-  }, [hasToken, session.isSuccess, router]);
+  }, [hasToken, session.isSuccess, session.data, router]);
 
   return (
     <Box

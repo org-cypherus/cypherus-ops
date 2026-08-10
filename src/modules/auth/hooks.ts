@@ -2,11 +2,17 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import type { Permission } from "@/lib/auth/permissions";
+import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
 import { getAccessToken } from "@/lib/auth/session";
 import { queryKeys } from "@/lib/query/keys";
 import { fetchMe, loginRequest, logoutRequest } from "./services";
 import type { LoginFormValues } from "./schemas";
+
+export function homePathForRole(role: RoleName) {
+  if (role === Role.Jurídico) return "/legal";
+  if (role === Role.Financeiro) return "/financial";
+  return "/leads";
+}
 
 export function useSession() {
   const hasToken = typeof window !== "undefined" && Boolean(getAccessToken());
@@ -30,7 +36,7 @@ export function useLogin() {
     mutationFn: (values: LoginFormValues) => loginRequest(values),
     onSuccess: (user) => {
       queryClient.setQueryData(queryKeys.me, user);
-      router.replace("/leads");
+      router.replace(homePathForRole(user.role));
     },
   });
 }

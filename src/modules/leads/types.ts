@@ -15,6 +15,17 @@ export type LeadPriority = "baixa" | "media" | "alta";
 export const LEGAL_STAGES = ["Backlog", "Em andamento", "Finalizado"] as const;
 export type LegalStage = (typeof LEGAL_STAGES)[number];
 
+/** Canais de contato registrados manualmente na timeline (estilo CRM Facilita) */
+export const TIMELINE_CONTACT_TYPES = [
+  "WhatsApp",
+  "Telefone",
+  "VideoChamada",
+  "E-mail",
+  "Presencial",
+] as const;
+
+export type TimelineContactType = (typeof TIMELINE_CONTACT_TYPES)[number];
+
 export type TimelineEvent = {
   id: string;
   type: string;

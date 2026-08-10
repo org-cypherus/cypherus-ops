@@ -23,6 +23,8 @@ import { useForm } from "react-hook-form";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
 import { formatCurrency } from "@/lib/utils/format";
+import { useSession } from "@/modules/auth/hooks";
+import { Role } from "@/lib/auth/permissions";
 import { useCreateLead } from "../hooks";
 import { leadFormSchema, type LeadFormValues } from "../schemas";
 import { PIPELINE_STAGES } from "../types";
@@ -38,12 +40,15 @@ export function CreateLeadDialog({ open, onClose }: Props) {
   const [activeStep, setActiveStep] = useState(0);
   const createLead = useCreateLead();
   const { enqueueSnackbar } = useSnackbar();
+  const { data: session } = useSession();
+  const isComercial = session?.role === Role.Comercial;
   const users = useQuery({
     queryKey: queryKeys.users,
     queryFn: async () => {
       const { data } = await api.get<{ data: Array<{ id: string; name: string }> }>("/users");
       return data.data;
     },
+    enabled: !isComercial,
   });
 
   const {
@@ -103,7 +108,7 @@ export function CreateLeadDialog({ open, onClose }: Props) {
         origin: formValues.origin,
         campaign: formValues.campaign,
         channel: formValues.channel,
-        ownerId: formValues.ownerId,
+        ownerId: isComercial ? undefined : formValues.ownerId,
         priority: formValues.priority,
         status: formValues.status,
         tags: formValues.tags ? formValues.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
@@ -121,8 +126,9 @@ export function CreateLeadDialog({ open, onClose }: Props) {
     );
   }
 
-  const ownerName =
-    users.data?.find((u) => u.id === values.ownerId)?.name || "Automático";
+  const ownerName = isComercial
+    ? "Regra de distribuição do admin"
+    : users.data?.find((u) => u.id === values.ownerId)?.name || "Regra de distribuição do admin";
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -152,14 +158,21 @@ export function CreateLeadDialog({ open, onClose }: Props) {
               <TextField label="Origem" {...register("origin")} fullWidth />
               <TextField label="Campanha" {...register("campaign")} fullWidth />
               <TextField label="Canal" {...register("channel")} fullWidth />
-              <TextField select label="Responsável" defaultValue="" {...register("ownerId")} fullWidth>
-                <MenuItem value="">Automático</MenuItem>
-                {(users.data || []).map((u) => (
-                  <MenuItem key={u.id} value={u.id}>
-                    {u.name}
-                  </MenuItem>
-                ))}
-              </TextField>
+              {!isComercial ? (
+                <TextField select label="Responsável" defaultValue="" {...register("ownerId")} fullWidth>
+                  <MenuItem value="">Usar regra de distribuição</MenuItem>
+                  {(users.data || []).map((u) => (
+                    <MenuItem key={u.id} value={u.id}>
+                      {u.name}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  O responsável será definido pela regra de distribuição configurada pelo administrador
+                  (não fica automaticamente com quem cadastrou).
+                </Typography>
+              )}
               <TextField select label="Prioridade" defaultValue="media" {...register("priority")} fullWidth>
                 <MenuItem value="baixa">baixa</MenuItem>
                 <MenuItem value="media">media</MenuItem>

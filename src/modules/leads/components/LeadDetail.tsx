@@ -3,7 +3,9 @@
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
+import MeetingRoomOutlinedIcon from "@mui/icons-material/MeetingRoomOutlined";
 import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
+import VideocamOutlinedIcon from "@mui/icons-material/VideocamOutlined";
 import WhatsAppIcon from "@mui/icons-material/WhatsApp";
 import {
   Avatar,
@@ -11,33 +13,78 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   Divider,
   Grid2 as Grid,
   IconButton,
   MenuItem,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSnackbar } from "notistack";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { downloadDataUrl, fileToDataUrl } from "@/lib/utils/download";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import {
   useAddAttachment,
+  useAddTimelineEntry,
   useDeleteLead,
   useLeadContracts,
   useRemoveAttachment,
   useUpdateLead,
 } from "../hooks";
-import type { Lead } from "../types";
-import { PIPELINE_STAGES } from "../types";
+import type { Lead, TimelineContactType } from "../types";
+import { PIPELINE_STAGES, TIMELINE_CONTACT_TYPES } from "../types";
 
-function Field({ label, value }: { label: string; value?: string | number | null }) {
+const CONTACT_META: Record<
+  TimelineContactType,
+  { icon: ReactNode; color: string; label: string }
+> = {
+  WhatsApp: {
+    icon: <WhatsAppIcon fontSize="small" />,
+    color: "#25D366",
+    label: "WhatsApp",
+  },
+  Telefone: {
+    icon: <PhoneOutlinedIcon fontSize="small" />,
+    color: "#1565C0",
+    label: "Telefone",
+  },
+  VideoChamada: {
+    icon: <VideocamOutlinedIcon fontSize="small" />,
+    color: "#7B1FA2",
+    label: "Vídeo",
+  },
+  "E-mail": {
+    icon: <EmailOutlinedIcon fontSize="small" />,
+    color: "#E65100",
+    label: "E-mail",
+  },
+  Presencial: {
+    icon: <MeetingRoomOutlinedIcon fontSize="small" />,
+    color: "#455A64",
+    label: "Presencial",
+  },
+};
+
+function timelineIcon(type: string) {
+  if (type in CONTACT_META) return CONTACT_META[type as TimelineContactType];
+  return null;
+}
+
+function Field({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | number | null;
+}) {
   return (
     <Box>
       <Typography variant="caption" color="text.secondary">
@@ -50,13 +97,20 @@ function Field({ label, value }: { label: string; value?: string | number | null
   );
 }
 
-type SectionKey = "personal" | "address" | "commercial" | "process" | "observations" | null;
+type SectionKey =
+  | "personal"
+  | "address"
+  | "commercial"
+  | "process"
+  | "observations"
+  | null;
 
 export function LeadDetail({ lead }: { lead: Lead }) {
   const updateLead = useUpdateLead(lead.id);
   const deleteLead = useDeleteLead();
   const addAttachment = useAddAttachment(lead.id);
   const removeAttachment = useRemoveAttachment(lead.id);
+  const addTimeline = useAddTimelineEntry(lead.id);
   const contracts = useLeadContracts(lead.id);
   const { enqueueSnackbar } = useSnackbar();
   const router = useRouter();
@@ -66,8 +120,14 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const [draft, setDraft] = useState<Record<string, string | number>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [contactType, setContactType] =
+    useState<TimelineContactType>("WhatsApp");
+  const [contactNote, setContactNote] = useState("");
 
-  function startEdit(section: SectionKey, values: Record<string, string | number>) {
+  function startEdit(
+    section: SectionKey,
+    values: Record<string, string | number>,
+  ) {
     setEditing(section);
     setDraft(values);
   }
@@ -79,6 +139,20 @@ export function LeadDetail({ lead }: { lead: Lead }) {
         setEditing(null);
       },
     });
+  }
+
+  function submitTimelineEntry() {
+    addTimeline.mutate(
+      { type: contactType, description: contactNote.trim() },
+      {
+        onSuccess: () => {
+          enqueueSnackbar("Registro adicionado à timeline", {
+            variant: "success",
+          });
+          setContactNote("");
+        },
+      },
+    );
   }
 
   async function handleFiles(files: FileList | null) {
@@ -114,15 +188,27 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 <Typography variant="h5">{lead.name}</Typography>
                 <Stack direction="row" spacing={1} alignItems="center" mt={0.5}>
                   <StatusBadge label={lead.status} />
-                  {lead.legalStatus ? <StatusBadge label={`Jurídico: ${lead.legalStatus}`} /> : null}
+                  {lead.legalStatus ? (
+                    <StatusBadge label={`Jurídico: ${lead.legalStatus}`} />
+                  ) : null}
                   <Typography variant="body2" color="text.secondary">
                     Responsável: {lead.ownerName}
                   </Typography>
                 </Stack>
               </Box>
             </Stack>
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-              <IconButton component="a" href={`tel:${lead.phone}`} color="primary">
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              flexWrap="wrap"
+              useFlexGap
+            >
+              <IconButton
+                component="a"
+                href={`tel:${lead.phone}`}
+                color="primary"
+              >
                 <PhoneOutlinedIcon />
               </IconButton>
               <IconButton
@@ -133,7 +219,11 @@ export function LeadDetail({ lead }: { lead: Lead }) {
               >
                 <WhatsAppIcon />
               </IconButton>
-              <IconButton component="a" href={`mailto:${lead.email}`} color="primary">
+              <IconButton
+                component="a"
+                href={`mailto:${lead.email}`}
+                color="primary"
+              >
                 <EmailOutlinedIcon />
               </IconButton>
               <TextField
@@ -142,7 +232,9 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 label="Status"
                 value={lead.status}
                 onChange={(e) =>
-                  updateLead.mutate({ status: e.target.value as Lead["status"] })
+                  updateLead.mutate({
+                    status: e.target.value as Lead["status"],
+                  })
                 }
                 sx={{ minWidth: 200 }}
               >
@@ -169,7 +261,12 @@ export function LeadDetail({ lead }: { lead: Lead }) {
           <Stack spacing={2}>
             <Card variant="outlined">
               <CardContent>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={2}
+                >
                   <Typography variant="h6">Informações pessoais</Typography>
                   {editing !== "personal" ? (
                     <IconButton
@@ -192,36 +289,107 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 </Stack>
                 {editing === "personal" ? (
                   <Stack spacing={1.5}>
-                    <TextField label="Nome" size="small" value={draft.name || ""} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
-                    <TextField label="E-mail" size="small" value={draft.email || ""} onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))} />
-                    <TextField label="Telefone" size="small" value={draft.phone || ""} onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))} />
-                    <TextField label="WhatsApp" size="small" value={draft.whatsapp || ""} onChange={(e) => setDraft((d) => ({ ...d, whatsapp: e.target.value }))} />
-                    <TextField label="CPF" size="small" value={draft.cpf || ""} onChange={(e) => setDraft((d) => ({ ...d, cpf: e.target.value }))} />
-                    <TextField label="RG" size="small" value={draft.rg || ""} onChange={(e) => setDraft((d) => ({ ...d, rg: e.target.value }))} />
-                    <TextField label="Nascimento" type="date" size="small" InputLabelProps={{ shrink: true }} value={String(draft.birthDate || "").slice(0, 10)} onChange={(e) => setDraft((d) => ({ ...d, birthDate: e.target.value }))} />
+                    <TextField
+                      label="Nome"
+                      size="small"
+                      value={draft.name || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, name: e.target.value }))
+                      }
+                    />
+                    <TextField
+                      label="E-mail"
+                      size="small"
+                      value={draft.email || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, email: e.target.value }))
+                      }
+                    />
+                    <TextField
+                      label="Telefone"
+                      size="small"
+                      value={draft.phone || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, phone: e.target.value }))
+                      }
+                    />
+                    <TextField
+                      label="WhatsApp"
+                      size="small"
+                      value={draft.whatsapp || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, whatsapp: e.target.value }))
+                      }
+                    />
+                    <TextField
+                      label="CPF"
+                      size="small"
+                      value={draft.cpf || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, cpf: e.target.value }))
+                      }
+                    />
+                    <TextField
+                      label="RG"
+                      size="small"
+                      value={draft.rg || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, rg: e.target.value }))
+                      }
+                    />
+                    <TextField
+                      label="Nascimento"
+                      type="date"
+                      size="small"
+                      InputLabelProps={{ shrink: true }}
+                      value={String(draft.birthDate || "").slice(0, 10)}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, birthDate: e.target.value }))
+                      }
+                    />
                     <Stack direction="row" spacing={1}>
                       <Button onClick={() => setEditing(null)}>Cancelar</Button>
-                      <Button variant="contained" onClick={() => saveSection({
-                        name: String(draft.name),
-                        email: String(draft.email),
-                        phone: String(draft.phone),
-                        whatsapp: String(draft.whatsapp),
-                        cpf: String(draft.cpf),
-                        rg: String(draft.rg),
-                        birthDate: String(draft.birthDate),
-                      })}>
+                      <Button
+                        variant="contained"
+                        onClick={() =>
+                          saveSection({
+                            name: String(draft.name),
+                            email: String(draft.email),
+                            phone: String(draft.phone),
+                            whatsapp: String(draft.whatsapp),
+                            cpf: String(draft.cpf),
+                            rg: String(draft.rg),
+                            birthDate: String(draft.birthDate),
+                          })
+                        }
+                      >
                         Salvar
                       </Button>
                     </Stack>
                   </Stack>
                 ) : (
                   <Grid container spacing={2}>
-                    <Grid size={{ xs: 12, sm: 6 }}><Field label="E-mail" value={lead.email} /></Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}><Field label="Telefone" value={lead.phone} /></Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}><Field label="WhatsApp" value={lead.whatsapp} /></Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}><Field label="CPF" value={lead.cpf} /></Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}><Field label="RG" value={lead.rg} /></Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}><Field label="Nascimento" value={formatDate(lead.birthDate)} /></Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Field label="E-mail" value={lead.email} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Field label="Telefone" value={lead.phone} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Field label="WhatsApp" value={lead.whatsapp} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Field label="CPF" value={lead.cpf} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Field label="RG" value={lead.rg} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Field
+                        label="Nascimento"
+                        value={formatDate(lead.birthDate)}
+                      />
+                    </Grid>
                   </Grid>
                 )}
               </CardContent>
@@ -229,7 +397,12 @@ export function LeadDetail({ lead }: { lead: Lead }) {
 
             <Card variant="outlined">
               <CardContent>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={2}
+                >
                   <Typography variant="h6">Endereço</Typography>
                   {editing !== "address" ? (
                     <IconButton
@@ -251,13 +424,24 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 </Stack>
                 {editing === "address" ? (
                   <Stack spacing={1.5}>
-                    {(["cep", "street", "number", "neighborhood", "city", "state"] as const).map((key) => (
+                    {(
+                      [
+                        "cep",
+                        "street",
+                        "number",
+                        "neighborhood",
+                        "city",
+                        "state",
+                      ] as const
+                    ).map((key) => (
                       <TextField
                         key={key}
                         label={key}
                         size="small"
                         value={draft[key] || ""}
-                        onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                        onChange={(e) =>
+                          setDraft((d) => ({ ...d, [key]: e.target.value }))
+                        }
                       />
                     ))}
                     <Stack direction="row" spacing={1}>
@@ -283,12 +467,24 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                   </Stack>
                 ) : (
                   <Grid container spacing={2}>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="CEP" value={lead.address.cep} /></Grid>
-                    <Grid size={{ xs: 12, sm: 6 }}><Field label="Rua" value={lead.address.street} /></Grid>
-                    <Grid size={{ xs: 12, sm: 2 }}><Field label="Nº" value={lead.address.number} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Bairro" value={lead.address.neighborhood} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Cidade" value={lead.address.city} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Estado" value={lead.address.state} /></Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field label="CEP" value={lead.address.cep} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <Field label="Rua" value={lead.address.street} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 2 }}>
+                      <Field label="Nº" value={lead.address.number} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field label="Bairro" value={lead.address.neighborhood} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field label="Cidade" value={lead.address.city} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field label="Estado" value={lead.address.state} />
+                    </Grid>
                   </Grid>
                 )}
               </CardContent>
@@ -296,7 +492,12 @@ export function LeadDetail({ lead }: { lead: Lead }) {
 
             <Card variant="outlined">
               <CardContent>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={2}
+                >
                   <Typography variant="h6">Informações comerciais</Typography>
                   {editing !== "commercial" ? (
                     <IconButton
@@ -317,15 +518,51 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 </Stack>
                 {editing === "commercial" ? (
                   <Stack spacing={1.5}>
-                    <TextField label="Origem" size="small" value={draft.origin || ""} onChange={(e) => setDraft((d) => ({ ...d, origin: e.target.value }))} />
-                    <TextField label="Campanha" size="small" value={draft.campaign || ""} onChange={(e) => setDraft((d) => ({ ...d, campaign: e.target.value }))} />
-                    <TextField label="Canal" size="small" value={draft.channel || ""} onChange={(e) => setDraft((d) => ({ ...d, channel: e.target.value }))} />
-                    <TextField select label="Prioridade" size="small" value={draft.priority || "media"} onChange={(e) => setDraft((d) => ({ ...d, priority: e.target.value }))}>
+                    <TextField
+                      label="Origem"
+                      size="small"
+                      value={draft.origin || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, origin: e.target.value }))
+                      }
+                    />
+                    <TextField
+                      label="Campanha"
+                      size="small"
+                      value={draft.campaign || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, campaign: e.target.value }))
+                      }
+                    />
+                    <TextField
+                      label="Canal"
+                      size="small"
+                      value={draft.channel || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, channel: e.target.value }))
+                      }
+                    />
+                    <TextField
+                      select
+                      label="Prioridade"
+                      size="small"
+                      value={draft.priority || "media"}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, priority: e.target.value }))
+                      }
+                    >
                       <MenuItem value="baixa">baixa</MenuItem>
                       <MenuItem value="media">media</MenuItem>
                       <MenuItem value="alta">alta</MenuItem>
                     </TextField>
-                    <TextField label="Tags (vírgula)" size="small" value={draft.tags || ""} onChange={(e) => setDraft((d) => ({ ...d, tags: e.target.value }))} />
+                    <TextField
+                      label="Tags (vírgula)"
+                      size="small"
+                      value={draft.tags || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, tags: e.target.value }))
+                      }
+                    />
                     <Stack direction="row" spacing={1}>
                       <Button onClick={() => setEditing(null)}>Cancelar</Button>
                       <Button
@@ -349,11 +586,21 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                   </Stack>
                 ) : (
                   <Grid container spacing={2}>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Origem" value={lead.origin} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Campanha" value={lead.campaign} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Canal" value={lead.channel} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Prioridade" value={lead.priority} /></Grid>
-                    <Grid size={{ xs: 12, sm: 8 }}><Field label="Tags" value={lead.tags.join(", ")} /></Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field label="Origem" value={lead.origin} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field label="Campanha" value={lead.campaign} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field label="Canal" value={lead.channel} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field label="Prioridade" value={lead.priority} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 8 }}>
+                      <Field label="Tags" value={lead.tags.join(", ")} />
+                    </Grid>
                   </Grid>
                 )}
               </CardContent>
@@ -361,7 +608,12 @@ export function LeadDetail({ lead }: { lead: Lead }) {
 
             <Card variant="outlined">
               <CardContent>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={2}
+                >
                   <Typography variant="h6">Dados do processo</Typography>
                   {editing !== "process" ? (
                     <IconButton
@@ -384,13 +636,83 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 </Stack>
                 {editing === "process" ? (
                   <Stack spacing={1.5}>
-                    <TextField label="Banco" size="small" value={draft.bank || ""} onChange={(e) => setDraft((d) => ({ ...d, bank: e.target.value }))} />
-                    <TextField label="Parcelas" type="number" size="small" value={draft.installments || 0} onChange={(e) => setDraft((d) => ({ ...d, installments: Number(e.target.value) }))} />
-                    <TextField label="Valor parcela" type="number" size="small" value={draft.installmentValue || 0} onChange={(e) => setDraft((d) => ({ ...d, installmentValue: Number(e.target.value) }))} />
-                    <TextField label="Valor financiado" type="number" size="small" value={draft.financedValue || 0} onChange={(e) => setDraft((d) => ({ ...d, financedValue: Number(e.target.value) }))} />
-                    <TextField label="Valor total" type="number" size="small" value={draft.totalValue || 0} onChange={(e) => setDraft((d) => ({ ...d, totalValue: Number(e.target.value) }))} />
-                    <TextField label="Tipo contrato" size="small" value={draft.contractType || ""} onChange={(e) => setDraft((d) => ({ ...d, contractType: e.target.value }))} />
-                    <TextField label="Observações" multiline minRows={2} size="small" value={draft.notes || ""} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} />
+                    <TextField
+                      label="Banco"
+                      size="small"
+                      value={draft.bank || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, bank: e.target.value }))
+                      }
+                    />
+                    <TextField
+                      label="Parcelas"
+                      type="number"
+                      size="small"
+                      value={draft.installments || 0}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          installments: Number(e.target.value),
+                        }))
+                      }
+                    />
+                    <TextField
+                      label="Valor parcela"
+                      type="number"
+                      size="small"
+                      value={draft.installmentValue || 0}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          installmentValue: Number(e.target.value),
+                        }))
+                      }
+                    />
+                    <TextField
+                      label="Valor financiado"
+                      type="number"
+                      size="small"
+                      value={draft.financedValue || 0}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          financedValue: Number(e.target.value),
+                        }))
+                      }
+                    />
+                    <TextField
+                      label="Valor total"
+                      type="number"
+                      size="small"
+                      value={draft.totalValue || 0}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          totalValue: Number(e.target.value),
+                        }))
+                      }
+                    />
+                    <TextField
+                      label="Tipo contrato"
+                      size="small"
+                      value={draft.contractType || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          contractType: e.target.value,
+                        }))
+                      }
+                    />
+                    <TextField
+                      label="Observações"
+                      multiline
+                      minRows={2}
+                      size="small"
+                      value={draft.notes || ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, notes: e.target.value }))
+                      }
+                    />
                     <Stack direction="row" spacing={1}>
                       <Button onClick={() => setEditing(null)}>Cancelar</Button>
                       <Button
@@ -400,7 +722,9 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                             process: {
                               bank: String(draft.bank || ""),
                               installments: Number(draft.installments || 0),
-                              installmentValue: Number(draft.installmentValue || 0),
+                              installmentValue: Number(
+                                draft.installmentValue || 0,
+                              ),
                               financedValue: Number(draft.financedValue || 0),
                               totalValue: Number(draft.totalValue || 0),
                               contractType: String(draft.contractType || ""),
@@ -415,13 +739,47 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                   </Stack>
                 ) : (
                   <Grid container spacing={2}>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Banco" value={lead.process.bank} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Parcelas" value={lead.process.installments} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Valor parcela" value={formatCurrency(lead.process.installmentValue || 0)} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Valor financiado" value={formatCurrency(lead.process.financedValue || 0)} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Valor total" value={formatCurrency(lead.process.totalValue)} /></Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}><Field label="Tipo contrato" value={lead.process.contractType} /></Grid>
-                    <Grid size={12}><Field label="Observações do processo" value={lead.process.notes} /></Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field label="Banco" value={lead.process.bank} />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field
+                        label="Parcelas"
+                        value={lead.process.installments}
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field
+                        label="Valor parcela"
+                        value={formatCurrency(
+                          lead.process.installmentValue || 0,
+                        )}
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field
+                        label="Valor financiado"
+                        value={formatCurrency(lead.process.financedValue || 0)}
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field
+                        label="Valor total"
+                        value={formatCurrency(lead.process.totalValue)}
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 4 }}>
+                      <Field
+                        label="Tipo contrato"
+                        value={lead.process.contractType}
+                      />
+                    </Grid>
+                    <Grid size={12}>
+                      <Field
+                        label="Observações do processo"
+                        value={lead.process.notes}
+                      />
+                    </Grid>
                   </Grid>
                 )}
               </CardContent>
@@ -429,12 +787,21 @@ export function LeadDetail({ lead }: { lead: Lead }) {
 
             <Card variant="outlined">
               <CardContent>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+                <Stack
+                  direction="row"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  mb={1}
+                >
                   <Typography variant="h6">Observações</Typography>
                   {editing !== "observations" ? (
                     <IconButton
                       size="small"
-                      onClick={() => startEdit("observations", { observations: lead.observations || "" })}
+                      onClick={() =>
+                        startEdit("observations", {
+                          observations: lead.observations || "",
+                        })
+                      }
                     >
                       <EditOutlinedIcon fontSize="small" />
                     </IconButton>
@@ -447,20 +814,31 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                       minRows={3}
                       size="small"
                       value={draft.observations || ""}
-                      onChange={(e) => setDraft((d) => ({ ...d, observations: e.target.value }))}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          observations: e.target.value,
+                        }))
+                      }
                     />
                     <Stack direction="row" spacing={1}>
                       <Button onClick={() => setEditing(null)}>Cancelar</Button>
                       <Button
                         variant="contained"
-                        onClick={() => saveSection({ observations: String(draft.observations || "") })}
+                        onClick={() =>
+                          saveSection({
+                            observations: String(draft.observations || ""),
+                          })
+                        }
                       >
                         Salvar
                       </Button>
                     </Stack>
                   </Stack>
                 ) : (
-                  <Typography variant="body2">{lead.observations || "—"}</Typography>
+                  <Typography variant="body2">
+                    {lead.observations || "—"}
+                  </Typography>
                 )}
               </CardContent>
             </Card>
@@ -471,22 +849,125 @@ export function LeadDetail({ lead }: { lead: Lead }) {
           <Stack spacing={2}>
             <Card variant="outlined">
               <CardContent>
-                <Typography variant="h6" sx={{ mb: 2 }}>
+                <Typography variant="h6" sx={{ mb: 1.5 }}>
                   Timeline
                 </Typography>
-                <Stack spacing={1.5} divider={<Divider flexItem />}>
-                  {lead.timeline.map((event) => (
-                    <Box key={event.id}>
-                      <Typography variant="subtitle2">{event.type}</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {event.description}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {event.userName} · {formatDate(event.createdAt)}
-                      </Typography>
-                    </Box>
-                  ))}
+
+                <Stack spacing={1.25} mb={2}>
+                  <Typography variant="caption" color="text.secondary">
+                    Registrar contato
+                  </Typography>
+                  <Stack
+                    direction="row"
+                    spacing={0.75}
+                    flexWrap="wrap"
+                    useFlexGap
+                  >
+                    {TIMELINE_CONTACT_TYPES.map((type) => {
+                      const meta = CONTACT_META[type];
+                      const selected = contactType === type;
+                      return (
+                        <Tooltip key={type} title={meta.label}>
+                          <Chip
+                            icon={
+                              <Box
+                                component="span"
+                                sx={{
+                                  display: "inline-flex",
+                                  color: selected ? "#fff" : meta.color,
+                                }}
+                              >
+                                {meta.icon}
+                              </Box>
+                            }
+                            label={meta.label}
+                            clickable
+                            size="small"
+                            onClick={() => setContactType(type)}
+                            sx={{
+                              bgcolor: selected ? meta.color : "transparent",
+                              color: selected ? "#fff" : "text.primary",
+                              borderColor: meta.color,
+                              border: "1px solid",
+                              "& .MuiChip-icon": { color: "inherit" },
+                            }}
+                          />
+                        </Tooltip>
+                      );
+                    })}
+                  </Stack>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    multiline
+                    minRows={2}
+                    placeholder="Ex.: Cliente respondeu no WhatsApp, agendar retorno..."
+                    value={contactNote}
+                    onChange={(e) => setContactNote(e.target.value)}
+                  />
+                  <Button
+                    variant="contained"
+                    size="small"
+                    disabled={addTimeline.isPending}
+                    onClick={submitTimelineEntry}
+                  >
+                    Adicionar registro
+                  </Button>
                 </Stack>
+
+                <Divider sx={{ mb: 1.5 }} />
+
+                <Box
+                  sx={{
+                    maxHeight: 350,
+                    overflowY: "auto",
+                    pr: 0.5,
+                    scrollbarWidth: "none",
+                    msOverflowStyle: "none",
+                    "&::-webkit-scrollbar": { display: "none" },
+                  }}
+                >
+                  <Stack spacing={1.5} divider={<Divider flexItem />}>
+                    {lead.timeline.map((event) => {
+                      const meta = timelineIcon(event.type);
+                      return (
+                        <Stack
+                          key={event.id}
+                          direction="row"
+                          spacing={1.25}
+                          alignItems="flex-start"
+                        >
+                          <Avatar
+                            sx={{
+                              width: 32,
+                              height: 32,
+                              bgcolor: meta
+                                ? `${meta.color}22`
+                                : "action.hover",
+                              color: meta?.color || "text.secondary",
+                            }}
+                          >
+                            {meta?.icon || event.type.charAt(0)}
+                          </Avatar>
+                          <Box flex={1} minWidth={0}>
+                            <Typography variant="subtitle2">
+                              {meta?.label || event.type}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {event.description}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {event.userName} · {formatDate(event.createdAt)}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      );
+                    })}
+                  </Stack>
+                </Box>
               </CardContent>
             </Card>
 
@@ -516,7 +997,12 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                   <Typography variant="body2" color="text.secondary">
                     Arraste arquivos ou clique para enviar
                   </Typography>
-                  <Button size="small" sx={{ mt: 1 }} onClick={() => fileInputRef.current?.click()} disabled={addAttachment.isPending}>
+                  <Button
+                    size="small"
+                    sx={{ mt: 1 }}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={addAttachment.isPending}
+                  >
                     Selecionar
                   </Button>
                   <input
@@ -528,15 +1014,27 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                   />
                 </Box>
                 {lead.attachments.map((file) => (
-                  <Stack key={file.id} direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
-                    <Button size="small" onClick={() => downloadDataUrl(file.name, file.url)}>
+                  <Stack
+                    key={file.id}
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    mb={0.5}
+                  >
+                    <Button
+                      size="small"
+                      onClick={() => downloadDataUrl(file.name, file.url)}
+                    >
                       {file.name}
                     </Button>
                     <IconButton
                       size="small"
                       onClick={() =>
                         removeAttachment.mutate(file.id, {
-                          onSuccess: () => enqueueSnackbar("Anexo removido", { variant: "info" }),
+                          onSuccess: () =>
+                            enqueueSnackbar("Anexo removido", {
+                              variant: "info",
+                            }),
                         })
                       }
                     >
@@ -554,7 +1052,13 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 </Typography>
                 <Stack spacing={1} mb={1.5}>
                   {(contracts.data || []).map((c) => (
-                    <Button key={c.id} component={Link} href={`/contracts/${c.id}`} size="small" sx={{ justifyContent: "flex-start" }}>
+                    <Button
+                      key={c.id}
+                      component={Link}
+                      href={`/contracts/${c.id}`}
+                      size="small"
+                      sx={{ justifyContent: "flex-start" }}
+                    >
                       {c.templateName} — {c.status}
                     </Button>
                   ))}
@@ -564,7 +1068,12 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                     </Typography>
                   ) : null}
                 </Stack>
-                <Button component={Link} href={`/contracts/new?leadId=${lead.id}`} size="small" variant="contained">
+                <Button
+                  component={Link}
+                  href={`/contracts/new?leadId=${lead.id}`}
+                  size="small"
+                  variant="contained"
+                >
                   Gerar contrato
                 </Button>
               </CardContent>

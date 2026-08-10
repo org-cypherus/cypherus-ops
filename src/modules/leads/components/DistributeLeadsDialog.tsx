@@ -18,6 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
 import { useState } from "react";
 import { api } from "@/lib/api/client";
+import { Role } from "@/lib/auth/permissions";
 import { queryKeys } from "@/lib/query/keys";
 import { useDistributeLeads } from "../hooks";
 
@@ -44,7 +45,7 @@ export function DistributeLeadsDialog({ open, onClose, leadIds }: Props) {
     queryKey: queryKeys.users,
     queryFn: async () => {
       const { data } = await api.get<{ data: Array<{ id: string; name: string; role: string }> }>("/users");
-      return data.data.filter((u) => u.role === "Comercial" || u.role === "Gestor");
+      return data.data.filter((u) => u.role === Role.Comercial || u.role === Role.Gestor);
     },
   });
 

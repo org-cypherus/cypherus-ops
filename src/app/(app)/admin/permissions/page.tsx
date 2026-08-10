@@ -21,7 +21,7 @@ import { useSnackbar } from "notistack";
 import { useMemo, useState } from "react";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { api } from "@/lib/api/client";
-import type { Permission, RoleName } from "@/lib/auth/permissions";
+import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
 import { queryKeys } from "@/lib/query/keys";
 
 const modules = [
@@ -34,7 +34,7 @@ const modules = [
 ];
 
 export default function PermissionsPage() {
-  const [role, setRole] = useState<RoleName>("Administrador");
+  const [role, setRole] = useState<RoleName>(Role.Administrador);
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
 

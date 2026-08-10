@@ -33,7 +33,7 @@ import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { api } from "@/lib/api/client";
-import type { RoleName } from "@/lib/auth/permissions";
+import { Role, ROLE_NAMES, type RoleName } from "@/lib/auth/permissions";
 import { queryKeys } from "@/lib/query/keys";
 import { useSession } from "@/modules/auth/hooks";
 import { defaultPasswordFromName } from "@/lib/utils/password";
@@ -49,13 +49,11 @@ type AppUser = {
   mustChangePassword?: boolean;
 };
 
-const roles: RoleName[] = ["Administrador", "Gestor", "Comercial", "Financeiro", "Jurídico"];
-
 const emptyForm = {
   name: "",
   email: "",
   phone: "",
-  role: "Comercial" as RoleName,
+  role: Role.Comercial as RoleName,
   team: "Vendas",
   status: "Ativo" as "Ativo" | "Inativo",
 };
@@ -304,7 +302,7 @@ export default function UsersPage() {
                 onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as RoleName }))}
                 fullWidth
               >
-                {roles.map((role) => (
+                {ROLE_NAMES.map((role) => (
                   <MenuItem key={role} value={role}>
                     {role}
                   </MenuItem>

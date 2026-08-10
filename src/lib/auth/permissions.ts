@@ -13,12 +13,18 @@ export type Permission =
   | "admin:visualizar"
   | "admin:editar";
 
-export type RoleName =
-  | "Administrador"
-  | "Gestor"
-  | "Comercial"
-  | "Financeiro"
-  | "Jurídico";
+/** Cargos do sistema — use sempre Role.* em comparações e atribuições */
+export enum Role {
+  Administrador = "Administrador",
+  Gestor = "Gestor",
+  Comercial = "Comercial",
+  Financeiro = "Financeiro",
+  Jurídico = "Jurídico",
+}
+
+export type RoleName = `${Role}`;
+
+export const ROLE_NAMES = Object.values(Role) as RoleName[];
 
 export const ALL_PERMISSIONS: Permission[] = [
   "crm:visualizar",
@@ -37,8 +43,8 @@ export const ALL_PERMISSIONS: Permission[] = [
 ];
 
 export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
-  Administrador: ALL_PERMISSIONS,
-  Gestor: [
+  [Role.Administrador]: ALL_PERMISSIONS,
+  [Role.Gestor]: [
     "crm:visualizar",
     "crm:criar",
     "crm:editar",
@@ -49,7 +55,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     "relatorios:exportar",
     "admin:visualizar",
   ],
-  Comercial: [
+  [Role.Comercial]: [
     "crm:visualizar",
     "crm:criar",
     "crm:editar",
@@ -57,17 +63,16 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     "contratos:criar",
     "dashboard:visualizar",
   ],
-  Financeiro: [
+  [Role.Financeiro]: [
     "financeiro:visualizar",
     "financeiro:editar",
     "dashboard:visualizar",
     "relatorios:exportar",
   ],
-  Jurídico: [
+  [Role.Jurídico]: [
     "contratos:visualizar",
     "contratos:criar",
     "contratos:editar",
-    "crm:visualizar",
     "dashboard:visualizar",
   ],
 };

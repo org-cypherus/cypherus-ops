@@ -1,8 +1,14 @@
-import { type Permission, type RoleName } from "@/lib/auth/permissions";
+import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
 import { ROLE_PERMISSIONS } from "@/lib/auth/permissions";
 import type { SessionUser } from "@/lib/auth/session";
 import { defaultPasswordFromName } from "@/lib/utils/password";
-import type { Attachment, Lead, LeadPriority, LegalStage, PipelineStage } from "@/modules/leads/types";
+import type {
+  Attachment,
+  Lead,
+  LeadPriority,
+  LegalStage,
+  PipelineStage,
+} from "@/modules/leads/types";
 import { LEGAL_STAGES, PIPELINE_STAGES } from "@/modules/leads/types";
 
 export { defaultPasswordFromName };
@@ -101,34 +107,84 @@ export const DEMO_PASSWORD = "123456";
 
 export const DEMO_ACCOUNTS = [
   {
-    label: "Administrador",
+    label: Role.Administrador,
     email: "ana@cypherops.com",
     password: DEMO_PASSWORD,
     name: "Ana Souza",
-    role: "Administrador" as RoleName,
+    role: Role.Administrador,
   },
   {
-    label: "Comercial",
+    label: Role.Comercial,
     email: "bruno@cypherops.com",
     password: DEMO_PASSWORD,
     name: "Bruno Lima",
-    role: "Comercial" as RoleName,
+    role: Role.Comercial,
   },
   {
-    label: "Jurídico",
+    label: Role.Jurídico,
     email: "elena@cypherops.com",
     password: DEMO_PASSWORD,
     name: "Elena Rocha",
-    role: "Jurídico" as RoleName,
+    role: Role.Jurídico,
   },
 ] as const;
 
 export const mockUsers: AppUser[] = [
-  { id: "u1", name: "Ana Souza", email: "ana@cypherops.com", phone: "(11) 98888-1001", role: "Administrador", team: "Operações", status: "Ativo", password: DEMO_PASSWORD, mustChangePassword: false },
-  { id: "u2", name: "Bruno Lima", email: "bruno@cypherops.com", phone: "(11) 98888-1002", role: "Comercial", team: "Vendas", status: "Ativo", password: DEMO_PASSWORD, mustChangePassword: false },
-  { id: "u3", name: "Carla Mendes", email: "carla@cypherops.com", phone: "(11) 98888-1003", role: "Gestor", team: "Vendas", status: "Ativo", password: DEMO_PASSWORD, mustChangePassword: false },
-  { id: "u4", name: "Diego Alves", email: "diego@cypherops.com", phone: "(11) 98888-1004", role: "Financeiro", team: "Financeiro", status: "Ativo", password: DEMO_PASSWORD, mustChangePassword: false },
-  { id: "u5", name: "Elena Rocha", email: "elena@cypherops.com", phone: "(11) 98888-1005", role: "Jurídico", team: "Jurídico", status: "Ativo", password: DEMO_PASSWORD, mustChangePassword: false },
+  {
+    id: "u1",
+    name: "Ana Souza",
+    email: "ana@cypherops.com",
+    phone: "(11) 98888-1001",
+    role: Role.Administrador,
+    team: "Operações",
+    status: "Ativo",
+    password: DEMO_PASSWORD,
+    mustChangePassword: false,
+  },
+  {
+    id: "u2",
+    name: "Bruno Lima",
+    email: "bruno@cypherops.com",
+    phone: "(11) 98888-1002",
+    role: Role.Comercial,
+    team: "Vendas",
+    status: "Ativo",
+    password: DEMO_PASSWORD,
+    mustChangePassword: false,
+  },
+  {
+    id: "u3",
+    name: "Carla Mendes",
+    email: "carla@cypherops.com",
+    phone: "(11) 98888-1003",
+    role: Role.Gestor,
+    team: "Vendas",
+    status: "Ativo",
+    password: DEMO_PASSWORD,
+    mustChangePassword: false,
+  },
+  {
+    id: "u4",
+    name: "Diego Alves",
+    email: "diego@cypherops.com",
+    phone: "(11) 98888-1004",
+    role: Role.Financeiro,
+    team: "Financeiro",
+    status: "Ativo",
+    password: DEMO_PASSWORD,
+    mustChangePassword: false,
+  },
+  {
+    id: "u5",
+    name: "Elena Rocha",
+    email: "elena@cypherops.com",
+    phone: "(11) 98888-1005",
+    role: Role.Jurídico,
+    team: "Jurídico",
+    status: "Ativo",
+    password: DEMO_PASSWORD,
+    mustChangePassword: false,
+  },
 ];
 
 export const currentUser: SessionUser = {
@@ -136,35 +192,144 @@ export const currentUser: SessionUser = {
   name: "Ana Souza",
   email: "ana@cypherops.com",
   phone: "(11) 98888-1001",
-  role: "Administrador",
+  role: Role.Administrador,
   team: "Operações",
-  permissions: [...ROLE_PERMISSIONS.Administrador],
+  permissions: [...ROLE_PERMISSIONS[Role.Administrador]],
   mustChangePassword: false,
 };
 
 export const mockRolePermissions: Record<RoleName, Permission[]> = {
-  Administrador: [...ROLE_PERMISSIONS.Administrador],
-  Gestor: [...ROLE_PERMISSIONS.Gestor],
-  Comercial: [...ROLE_PERMISSIONS.Comercial],
-  Financeiro: [...ROLE_PERMISSIONS.Financeiro],
-  Jurídico: [...ROLE_PERMISSIONS.Jurídico],
+  [Role.Administrador]: [...ROLE_PERMISSIONS[Role.Administrador]],
+  [Role.Gestor]: [...ROLE_PERMISSIONS[Role.Gestor]],
+  [Role.Comercial]: [...ROLE_PERMISSIONS[Role.Comercial]],
+  [Role.Financeiro]: [...ROLE_PERMISSIONS[Role.Financeiro]],
+  [Role.Jurídico]: [...ROLE_PERMISSIONS[Role.Jurídico]],
 };
 
 export const generatedPdfs = new Map<string, StoredFile>();
 
 let roundRobinIndex = 0;
 
-const leadSeed: Array<Partial<Lead> & { name: string; status: PipelineStage; totalValue: number }> = [
-  { name: "Carlos Eduardo Silva", status: "Em negociação", totalValue: 18500, priority: "alta", ownerName: "Bruno Lima", ownerId: "u2", daysInStage: 3 },
-  { name: "Mariana Costa", status: "Novo Lead", totalValue: 9200, priority: "media", ownerName: "Bruno Lima", ownerId: "u2", daysInStage: 1 },
-  { name: "TechWise Solutions", status: "Contato realizado", totalValue: 42000, priority: "alta", ownerName: "Carla Mendes", ownerId: "u3", daysInStage: 2 },
-  { name: "Global Logistics Ltd", status: "Contrato enviado", totalValue: 27500, priority: "media", ownerName: "Bruno Lima", ownerId: "u2", daysInStage: 4 },
-  { name: "Fernanda Oliveira", status: "Contrato assinado", totalValue: 15300, priority: "alta", ownerName: "Carla Mendes", ownerId: "u3", daysInStage: 1 },
-  { name: "Ricardo Nunes", status: "Pagamento confirmado", totalValue: 11000, priority: "baixa", ownerName: "Bruno Lima", ownerId: "u2", daysInStage: 2 },
-  { name: "Patricia Gomes", status: "Concluído", totalValue: 9800, priority: "media", ownerName: "Carla Mendes", ownerId: "u3", daysInStage: 5 },
-  { name: "João Pedro Almeida", status: "Novo Lead", totalValue: 7600, priority: "baixa", ownerName: "Bruno Lima", ownerId: "u2", daysInStage: 0 },
-  { name: "Helena Martins", status: "Em negociação", totalValue: 22100, priority: "alta", ownerName: "Carla Mendes", ownerId: "u3", daysInStage: 6 },
-  { name: "Grupo Atlas", status: "Contato realizado", totalValue: 51000, priority: "alta", ownerName: "Bruno Lima", ownerId: "u2", daysInStage: 3 },
+/** Regra padrão aplicada quando um lead novo entra sem responsável explícito */
+export const distributionSettings = {
+  /** Estratégias: round_robin | automatic | team */
+  defaultStrategy: "round_robin" as "round_robin" | "automatic" | "team",
+};
+
+export function commercialAssignees() {
+  return mockUsers.filter(
+    (u) =>
+      (u.role === Role.Comercial || u.role === Role.Gestor) &&
+      u.status === "Ativo",
+  );
+}
+
+export function pickOwnerByStrategy(strategy: string, manualOwnerId?: string) {
+  const commercial = commercialAssignees();
+  if (!commercial.length) return mockUsers[0];
+
+  if (strategy === "manual" && manualOwnerId) {
+    return mockUsers.find((u) => u.id === manualOwnerId) || commercial[0];
+  }
+
+  const owner = commercial[roundRobinIndex % commercial.length];
+  roundRobinIndex += 1;
+  return owner;
+}
+
+const leadSeed: Array<
+  Partial<Lead> & { name: string; status: PipelineStage; totalValue: number }
+> = [
+  {
+    name: "Carlos Eduardo Silva",
+    status: "Em negociação",
+    totalValue: 18500,
+    priority: "alta",
+    ownerName: "Bruno Lima",
+    ownerId: "u2",
+    daysInStage: 3,
+  },
+  {
+    name: "Mariana Costa",
+    status: "Novo Lead",
+    totalValue: 9200,
+    priority: "media",
+    ownerName: "Bruno Lima",
+    ownerId: "u2",
+    daysInStage: 1,
+  },
+  {
+    name: "TechWise Solutions",
+    status: "Contato realizado",
+    totalValue: 42000,
+    priority: "alta",
+    ownerName: "Carla Mendes",
+    ownerId: "u3",
+    daysInStage: 2,
+  },
+  {
+    name: "Global Logistics Ltd",
+    status: "Contrato enviado",
+    totalValue: 27500,
+    priority: "media",
+    ownerName: "Bruno Lima",
+    ownerId: "u2",
+    daysInStage: 4,
+  },
+  {
+    name: "Fernanda Oliveira",
+    status: "Contrato assinado",
+    totalValue: 15300,
+    priority: "alta",
+    ownerName: "Carla Mendes",
+    ownerId: "u3",
+    daysInStage: 1,
+  },
+  {
+    name: "Ricardo Nunes",
+    status: "Pagamento confirmado",
+    totalValue: 11000,
+    priority: "baixa",
+    ownerName: "Bruno Lima",
+    ownerId: "u2",
+    daysInStage: 2,
+  },
+  {
+    name: "Patricia Gomes",
+    status: "Concluído",
+    totalValue: 9800,
+    priority: "media",
+    ownerName: "Carla Mendes",
+    ownerId: "u3",
+    daysInStage: 5,
+  },
+  {
+    name: "João Pedro Almeida",
+    status: "Novo Lead",
+    totalValue: 7600,
+    priority: "baixa",
+    ownerName: "Bruno Lima",
+    ownerId: "u2",
+    daysInStage: 0,
+  },
+  {
+    name: "Helena Martins",
+    status: "Em negociação",
+    totalValue: 22100,
+    priority: "alta",
+    ownerName: "Carla Mendes",
+    ownerId: "u3",
+    daysInStage: 6,
+  },
+  {
+    name: "Grupo Atlas",
+    status: "Contato realizado",
+    totalValue: 51000,
+    priority: "alta",
+    ownerName: "Bruno Lima",
+    ownerId: "u2",
+    daysInStage: 3,
+  },
 ];
 
 export let mockLeads: Lead[] = leadSeed.map((seed, index) => ({
@@ -193,8 +358,16 @@ export let mockLeads: Lead[] = leadSeed.map((seed, index) => ({
   status: seed.status,
   priority: seed.priority || "media",
   tags: index % 2 === 0 ? ["hot", "pf"] : ["pj"],
-  legalStatus: (["Contrato assinado", "Pagamento confirmado", "Concluído"] as PipelineStage[]).includes(seed.status)
-    ? (seed.status === "Concluído" ? "Em andamento" : "Backlog")
+  legalStatus: (
+    [
+      "Contrato assinado",
+      "Pagamento confirmado",
+      "Concluído",
+    ] as PipelineStage[]
+  ).includes(seed.status)
+    ? seed.status === "Concluído"
+      ? "Em andamento"
+      : "Backlog"
     : null,
   process: {
     bank: "Banco Exemplo",
@@ -297,8 +470,18 @@ export const mockContracts: Contract[] = [
 
 // PDFs mock pré-gerados para contratos seed
 [
-  { id: "pdf-c1", name: "Contrato-Fernanda.html", mime: "text/html", body: "<h1>Contrato Assinado</h1><p>Fernanda Oliveira</p>" },
-  { id: "pdf-c2", name: "Contrato-Global.html", mime: "text/html", body: "<h1>Contrato Enviado</h1><p>Global Logistics Ltd</p>" },
+  {
+    id: "pdf-c1",
+    name: "Contrato-Fernanda.html",
+    mime: "text/html",
+    body: "<h1>Contrato Assinado</h1><p>Fernanda Oliveira</p>",
+  },
+  {
+    id: "pdf-c2",
+    name: "Contrato-Global.html",
+    mime: "text/html",
+    body: "<h1>Contrato Enviado</h1><p>Global Logistics Ltd</p>",
+  },
 ].forEach((f) => {
   generatedPdfs.set(f.id, {
     id: f.id,
@@ -309,14 +492,54 @@ export const mockContracts: Contract[] = [
 });
 
 export const mockPayments: Payment[] = [
-  { id: "p1", contractId: "c1", leadId: "lead-5", leadName: "Fernanda Oliveira", amount: 15300, dueDate: daysAgo(-2), status: "Recebido", paidAt: daysAgo(1) },
-  { id: "p2", contractId: "c2", leadId: "lead-4", leadName: "Global Logistics Ltd", amount: 27500, dueDate: daysAgo(-5), status: "Pendente" },
-  { id: "p3", contractId: "c3", leadId: "lead-1", leadName: "Carlos Eduardo Silva", amount: 18500, dueDate: daysAgo(10), status: "Inadimplente" },
+  {
+    id: "p1",
+    contractId: "c1",
+    leadId: "lead-5",
+    leadName: "Fernanda Oliveira",
+    amount: 15300,
+    dueDate: daysAgo(-2),
+    status: "Recebido",
+    paidAt: daysAgo(1),
+  },
+  {
+    id: "p2",
+    contractId: "c2",
+    leadId: "lead-4",
+    leadName: "Global Logistics Ltd",
+    amount: 27500,
+    dueDate: daysAgo(-5),
+    status: "Pendente",
+  },
+  {
+    id: "p3",
+    contractId: "c3",
+    leadId: "lead-1",
+    leadName: "Carlos Eduardo Silva",
+    amount: 18500,
+    dueDate: daysAgo(10),
+    status: "Inadimplente",
+  },
 ];
 
 export const mockCommissions: Commission[] = [
-  { id: "cm1", userId: "u2", userName: "Bruno Lima", amount: 2295, period: "2026-07", status: "A pagar", paymentId: "p1" },
-  { id: "cm2", userId: "u3", userName: "Carla Mendes", amount: 4120, period: "2026-07", status: "A pagar" },
+  {
+    id: "cm1",
+    userId: "u2",
+    userName: "Bruno Lima",
+    amount: 2295,
+    period: "2026-07",
+    status: "A pagar",
+    paymentId: "p1",
+  },
+  {
+    id: "cm2",
+    userId: "u3",
+    userName: "Carla Mendes",
+    amount: 4120,
+    period: "2026-07",
+    status: "A pagar",
+  },
 ];
 
 export const mockCommissionRules: CommissionRule[] = [
@@ -334,9 +557,30 @@ export const mockCommissionRules: CommissionRule[] = [
 ];
 
 export const mockNotifications: NotificationItem[] = [
-  { id: "n1", title: "Novo Lead", body: "Mariana Costa entrou no pipeline.", createdAt: daysAgo(0), read: false, href: "/leads/lead-2" },
-  { id: "n2", title: "Contrato assinado", body: "Fernanda Oliveira assinou o contrato.", createdAt: daysAgo(1), read: false, href: "/contracts/c1" },
-  { id: "n3", title: "Pagamento confirmado", body: "Recebimento de R$ 15.300 confirmado.", createdAt: daysAgo(1), read: true, href: "/financial?paymentId=p1" },
+  {
+    id: "n1",
+    title: "Novo Lead",
+    body: "Mariana Costa entrou no pipeline.",
+    createdAt: daysAgo(0),
+    read: false,
+    href: "/leads/lead-2",
+  },
+  {
+    id: "n2",
+    title: "Contrato assinado",
+    body: "Fernanda Oliveira assinou o contrato.",
+    createdAt: daysAgo(1),
+    read: false,
+    href: "/contracts/c1",
+  },
+  {
+    id: "n3",
+    title: "Pagamento confirmado",
+    body: "Recebimento de R$ 15.300 confirmado.",
+    createdAt: daysAgo(1),
+    read: true,
+    href: "/financial?paymentId=p1",
+  },
 ];
 
 export function buildKanban(filters?: {
@@ -386,9 +630,11 @@ export function filterLeads(
         l.phone.includes(q),
     );
   }
-  if (filters.ownerId) items = items.filter((l) => l.ownerId === filters.ownerId);
+  if (filters.ownerId)
+    items = items.filter((l) => l.ownerId === filters.ownerId);
   if (filters.origin) items = items.filter((l) => l.origin === filters.origin);
-  if (filters.priority) items = items.filter((l) => l.priority === filters.priority);
+  if (filters.priority)
+    items = items.filter((l) => l.priority === filters.priority);
   if (filters.tag) items = items.filter((l) => l.tags.includes(filters.tag!));
   if (filters.status) items = items.filter((l) => l.status === filters.status);
   if (filters.from) items = items.filter((l) => l.createdAt >= filters.from!);
@@ -396,7 +642,11 @@ export function filterLeads(
   return items;
 }
 
-export function pushTimeline(lead: Lead, type: string, description: string): Lead {
+export function pushTimeline(
+  lead: Lead,
+  type: string,
+  description: string,
+): Lead {
   return {
     ...lead,
     timeline: [
@@ -410,6 +660,30 @@ export function pushTimeline(lead: Lead, type: string, description: string): Lea
       ...lead.timeline,
     ],
   };
+}
+
+export function addTimelineEntry(
+  leadId: string,
+  type: string,
+  description: string,
+) {
+  const index = mockLeads.findIndex((l) => l.id === leadId);
+  if (index < 0) return null;
+  const note = description.trim() || `Contato registrado via ${type}`;
+  mockLeads[index] = pushTimeline(mockLeads[index], type, note);
+  return mockLeads[index];
+}
+
+/** Comercial só vê os próprios leads; demais perfis respeitam o filtro opcional */
+export function resolveOwnerScope(requestedOwnerId?: string | null) {
+  if (currentUser.role === Role.Comercial) return currentUser.id;
+  return requestedOwnerId || undefined;
+}
+
+export function canAccessLead(lead: Lead) {
+  if (currentUser.role === Role.Comercial)
+    return lead.ownerId === currentUser.id;
+  return true;
 }
 
 export function shouldHandoffToLegal(status: PipelineStage) {
@@ -451,19 +725,27 @@ export function updateLeadStatus(leadId: string, status: PipelineStage) {
     let next: Lead = { ...lead, status, daysInStage: 0 };
     if (shouldHandoffToLegal(status) && !next.legalStatus) {
       next = { ...next, legalStatus: "Backlog" };
-      next = pushTimeline(next, "Jurídico", "Lead enviado ao pipeline jurídico (Backlog)");
+      next = pushTimeline(
+        next,
+        "Jurídico",
+        "Lead enviado ao pipeline jurídico (Backlog)",
+      );
     }
     return pushTimeline(next, "Status", `Status alterado para ${status}`);
   });
 }
 
-export function createLead(input: Partial<Lead> & { name: string; email: string }): Lead {
-  const owner =
-    mockUsers.find((u) => u.id === input.ownerId) ||
-    mockUsers.find((u) => u.role === "Comercial") ||
-    mockUsers[1];
+export function createLead(
+  input: Partial<Lead> & { name: string; email: string },
+): Lead {
+  // Responsável explícito (admin/gestor) OU regra padrão de distribuição do admin
+  const owner = input.ownerId
+    ? mockUsers.find((u) => u.id === input.ownerId) ||
+      pickOwnerByStrategy(distributionSettings.defaultStrategy)
+    : pickOwnerByStrategy(distributionSettings.defaultStrategy);
+  const assignedByRule = !input.ownerId;
   const totalValue = input.process?.totalValue ?? 0;
-  const lead: Lead = {
+  let lead: Lead = {
     id: `lead-${Date.now()}`,
     name: input.name,
     cpf: input.cpf || "",
@@ -512,11 +794,18 @@ export function createLead(input: Partial<Lead> & { name: string; email: string 
     observations: input.observations,
     legalStatus: input.legalStatus ?? null,
   };
+  if (assignedByRule) {
+    lead = pushTimeline(
+      lead,
+      "Distribuição",
+      `Atribuído a ${owner.name} pela regra padrão (${distributionSettings.defaultStrategy})`,
+    );
+  }
   mockLeads.unshift(lead);
   mockNotifications.unshift({
     id: `n-${Date.now()}`,
     title: "Novo Lead",
-    body: `${lead.name} entrou no pipeline.`,
+    body: `${lead.name} entrou no pipeline · responsável: ${owner.name}`,
     createdAt: new Date().toISOString(),
     read: false,
     href: `/leads/${lead.id}`,
@@ -538,7 +827,11 @@ export function patchLead(id: string, body: Partial<Lead>) {
     const owner = mockUsers.find((u) => u.id === body.ownerId);
     if (owner) {
       next.ownerName = owner.name;
-      next = pushTimeline(next, "Responsável", `Responsável alterado para ${owner.name}`);
+      next = pushTimeline(
+        next,
+        "Responsável",
+        `Responsável alterado para ${owner.name}`,
+      );
     }
   } else {
     next = pushTimeline(next, "Atualização", "Lead atualizado");
@@ -548,11 +841,19 @@ export function patchLead(id: string, body: Partial<Lead>) {
     next = pushTimeline(next, "Status", `Status alterado para ${body.status}`);
     if (shouldHandoffToLegal(body.status) && !next.legalStatus) {
       next = { ...next, legalStatus: "Backlog" };
-      next = pushTimeline(next, "Jurídico", "Lead enviado ao pipeline jurídico (Backlog)");
+      next = pushTimeline(
+        next,
+        "Jurídico",
+        "Lead enviado ao pipeline jurídico (Backlog)",
+      );
     }
   }
   if (body.legalStatus && body.legalStatus !== prev.legalStatus) {
-    next = pushTimeline(next, "Jurídico", `Status jurídico alterado para ${body.legalStatus}`);
+    next = pushTimeline(
+      next,
+      "Jurídico",
+      `Status jurídico alterado para ${body.legalStatus}`,
+    );
   }
   mockLeads[index] = next;
   return next;
@@ -583,7 +884,9 @@ export function removeAttachment(leadId: string, attachmentId: string) {
   if (index < 0) return null;
   mockLeads[index] = {
     ...mockLeads[index],
-    attachments: mockLeads[index].attachments.filter((a) => a.id !== attachmentId),
+    attachments: mockLeads[index].attachments.filter(
+      (a) => a.id !== attachmentId,
+    ),
   };
   return mockLeads[index];
 }
@@ -594,16 +897,18 @@ export function distributeLeadsInStore(payload: {
   ownerId?: string;
   tags?: string[];
 }) {
-  const commercial = mockUsers.filter((u) => u.role === "Comercial" || u.role === "Gestor");
+  const commercial = commercialAssignees();
   let targets = payload.leadIds?.length
     ? mockLeads.filter((l) => payload.leadIds!.includes(l.id))
     : [...mockLeads];
 
   if (payload.strategy === "redistribute") {
-    targets = targets.filter((l) => l.daysInStage >= 3 && l.status !== "Concluído");
+    targets = targets.filter(
+      (l) => l.daysInStage >= 3 && l.status !== "Concluído",
+    );
   }
 
-  targets.forEach((lead, i) => {
+  targets.forEach((lead) => {
     const idx = mockLeads.findIndex((l) => l.id === lead.id);
     if (idx < 0) return;
 
@@ -612,27 +917,39 @@ export function distributeLeadsInStore(payload: {
         ...mockLeads[idx],
         tags: Array.from(new Set([...mockLeads[idx].tags, ...payload.tags])),
       };
-      next = pushTimeline(next, "Tags", `Tags atualizadas: ${payload.tags.join(", ")}`);
+      next = pushTimeline(
+        next,
+        "Tags",
+        `Tags atualizadas: ${payload.tags.join(", ")}`,
+      );
       mockLeads[idx] = next;
       return;
     }
 
     let owner = commercial[0];
     if (payload.strategy === "manual" && payload.ownerId) {
-      owner = mockUsers.find((u) => u.id === payload.ownerId) || owner;
-    } else if (payload.strategy === "round_robin" || payload.strategy === "automatic" || payload.strategy === "redistribute") {
-      owner = commercial[roundRobinIndex % commercial.length];
-      roundRobinIndex += 1;
-    } else if (payload.strategy === "team") {
-      owner = commercial[(i + roundRobinIndex) % commercial.length];
+      owner = pickOwnerByStrategy("manual", payload.ownerId);
+    } else if (
+      payload.strategy === "round_robin" ||
+      payload.strategy === "automatic" ||
+      payload.strategy === "redistribute" ||
+      payload.strategy === "team"
+    ) {
+      owner = pickOwnerByStrategy(payload.strategy);
     }
     let next = {
       ...mockLeads[idx],
       ownerId: owner.id,
       ownerName: owner.name,
-      tags: payload.tags ? Array.from(new Set([...mockLeads[idx].tags, ...payload.tags])) : mockLeads[idx].tags,
+      tags: payload.tags
+        ? Array.from(new Set([...mockLeads[idx].tags, ...payload.tags]))
+        : mockLeads[idx].tags,
     };
-    next = pushTimeline(next, "Distribuição", `Distribuído para ${owner.name} (${payload.strategy})`);
+    next = pushTimeline(
+      next,
+      "Distribuição",
+      `Distribuído para ${owner.name} (${payload.strategy})`,
+    );
     mockLeads[idx] = next;
   });
 
@@ -640,13 +957,23 @@ export function distributeLeadsInStore(payload: {
 }
 
 export function deleteUser(id: string, actorId: string) {
-  if (id === actorId) return { ok: false as const, message: "Você não pode excluir o próprio usuário" };
+  if (id === actorId)
+    return {
+      ok: false as const,
+      message: "Você não pode excluir o próprio usuário",
+    };
   const user = mockUsers.find((u) => u.id === id);
   if (!user) return { ok: false as const, message: "Usuário não encontrado" };
-  if (user.role === "Administrador") {
-    const activeAdmins = mockUsers.filter((u) => u.role === "Administrador" && u.status === "Ativo" && u.id !== id);
+  if (user.role === Role.Administrador) {
+    const activeAdmins = mockUsers.filter(
+      (u) =>
+        u.role === Role.Administrador && u.status === "Ativo" && u.id !== id,
+    );
     if (activeAdmins.length === 0) {
-      return { ok: false as const, message: "Não é possível excluir o último administrador ativo" };
+      return {
+        ok: false as const,
+        message: "Não é possível excluir o último administrador ativo",
+      };
     }
   }
   const index = mockUsers.findIndex((u) => u.id === id);
@@ -655,21 +982,35 @@ export function deleteUser(id: string, actorId: string) {
 }
 
 export function canDeactivateUser(targetId: string, actorId: string) {
-  if (targetId === actorId) return { ok: false as const, message: "Você não pode inativar o próprio cadastro" };
+  if (targetId === actorId)
+    return {
+      ok: false as const,
+      message: "Você não pode inativar o próprio cadastro",
+    };
   const user = mockUsers.find((u) => u.id === targetId);
   if (!user) return { ok: false as const, message: "Usuário não encontrado" };
-  if (user.role === "Administrador" && user.status === "Ativo") {
+  if (user.role === Role.Administrador && user.status === "Ativo") {
     const otherActiveAdmins = mockUsers.filter(
-      (u) => u.role === "Administrador" && u.status === "Ativo" && u.id !== targetId,
+      (u) =>
+        u.role === Role.Administrador &&
+        u.status === "Ativo" &&
+        u.id !== targetId,
     );
     if (otherActiveAdmins.length === 0) {
-      return { ok: false as const, message: "Não é possível inativar o último administrador ativo" };
+      return {
+        ok: false as const,
+        message: "Não é possível inativar o último administrador ativo",
+      };
     }
   }
   return { ok: true as const };
 }
 
-export function generateContractPdf(contract: Contract, lead: Lead, template: ContractTemplate) {
+export function generateContractPdf(
+  contract: Contract,
+  lead: Lead,
+  template: ContractTemplate,
+) {
   const filled = template.body
     .replaceAll("{{nome}}", lead.name)
     .replaceAll("{{cpf}}", lead.cpf)
