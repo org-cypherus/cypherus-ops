@@ -1,7 +1,8 @@
 "use client";
 
-import { Box, Card, CardContent, Typography } from "@mui/material";
+import { Card, CardContent, Typography } from "@mui/material";
 import { Suspense } from "react";
+import { AuthShell } from "@/components/auth/AuthShell";
 import { SignupForm } from "@/modules/auth/components/SignupForm";
 
 function SignupFallback() {
@@ -16,24 +17,10 @@ function SignupFallback() {
 
 export default function SignupPage() {
   return (
-    <Box
-      component="main"
-      minHeight="100vh"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      px={2}
-      py={4}
-      sx={{
-        background: (theme) =>
-          theme.palette.mode === "light"
-            ? "linear-gradient(160deg, #F5F7FA 0%, #E3F2FD 100%)"
-            : "linear-gradient(160deg, #0F1419 0%, #1A2332 100%)",
-      }}
-    >
+    <AuthShell py={4}>
       <Suspense fallback={<SignupFallback />}>
         <SignupForm />
       </Suspense>
-    </Box>
+    </AuthShell>
   );
 }

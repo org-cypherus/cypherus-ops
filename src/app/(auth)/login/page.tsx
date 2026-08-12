@@ -18,6 +18,7 @@ import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { AuthShell } from "@/components/auth/AuthShell";
 import { getAccessToken } from "@/lib/auth/session";
 import { DEMO_ACCOUNTS } from "@/mocks/data";
 import { homePathForSession, useLogin, useSession } from "@/modules/auth/hooks";
@@ -45,19 +46,7 @@ export default function LoginPage() {
   }, [hasToken, session.isSuccess, session.data, router]);
 
   return (
-    <Box
-      minHeight="100vh"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      px={2}
-      sx={{
-        background: (theme) =>
-          theme.palette.mode === "light"
-            ? "linear-gradient(160deg, #F5F7FA 0%, #E3F2FD 100%)"
-            : "linear-gradient(160deg, #0F1419 0%, #1A2332 100%)",
-      }}
-    >
+    <AuthShell>
       <Card sx={{ width: "100%", maxWidth: 420 }} elevation={0} variant="outlined">
         <CardContent sx={{ p: 4 }}>
           <Stack spacing={3} component="form" onSubmit={handleSubmit((values) => login.mutate(values))}>
@@ -70,7 +59,7 @@ export default function LoginPage() {
                   fontWeight: 800,
                   letterSpacing: "-0.03em",
                   textDecoration: "none",
-                  color: "inherit",
+                  color: "primary.main",
                   display: "inline-block",
                 }}
               >
@@ -141,6 +130,6 @@ export default function LoginPage() {
           </Stack>
         </CardContent>
       </Card>
-    </Box>
+    </AuthShell>
   );
 }
