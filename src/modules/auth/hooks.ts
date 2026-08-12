@@ -2,17 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
+import { homePathForRole } from "@/lib/auth/access";
+import type { Permission } from "@/lib/auth/permissions";
 import { getAccessToken } from "@/lib/auth/session";
 import { queryKeys } from "@/lib/query/keys";
 import { fetchMe, loginRequest, logoutRequest } from "./services";
 import type { LoginFormValues } from "./schemas";
 
-export function homePathForRole(role: RoleName) {
-  if (role === Role.Jurídico) return "/legal";
-  if (role === Role.Financeiro) return "/financial";
-  return "/leads";
-}
+export { homePathForRole } from "@/lib/auth/access";
 
 export function useSession() {
   const hasToken = typeof window !== "undefined" && Boolean(getAccessToken());

@@ -9,10 +9,12 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Link as MuiLink,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
+import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
@@ -60,7 +62,18 @@ export default function LoginPage() {
         <CardContent sx={{ p: 4 }}>
           <Stack spacing={3} component="form" onSubmit={handleSubmit((values) => login.mutate(values))}>
             <Box textAlign="center">
-              <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.03em" }}>
+              <Typography
+                component={NextLink}
+                href="/"
+                variant="h4"
+                sx={{
+                  fontWeight: 800,
+                  letterSpacing: "-0.03em",
+                  textDecoration: "none",
+                  color: "inherit",
+                  display: "inline-block",
+                }}
+              >
                 Cypher Ops
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -118,6 +131,13 @@ export default function LoginPage() {
                 ))}
               </Stack>
             </Box>
+
+            <Typography variant="body2" color="text.secondary" textAlign="center">
+              Não tem conta?{" "}
+              <MuiLink component={NextLink} href="/signup" underline="hover">
+                Criar conta
+              </MuiLink>
+            </Typography>
           </Stack>
         </CardContent>
       </Card>
