@@ -3,6 +3,10 @@ export type Permission =
   | "crm:criar"
   | "crm:editar"
   | "crm:excluir"
+  | "agenda:visualizar"
+  | "agenda:criar"
+  | "agenda:editar"
+  | "agenda:excluir"
   | "contratos:visualizar"
   | "contratos:criar"
   | "contratos:editar"
@@ -31,6 +35,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "crm:criar",
   "crm:editar",
   "crm:excluir",
+  "agenda:visualizar",
+  "agenda:criar",
+  "agenda:editar",
+  "agenda:excluir",
   "contratos:visualizar",
   "contratos:criar",
   "contratos:editar",
@@ -48,6 +56,9 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     "crm:visualizar",
     "crm:criar",
     "crm:editar",
+    "agenda:visualizar",
+    "agenda:criar",
+    "agenda:editar",
     "contratos:visualizar",
     "contratos:criar",
     "financeiro:visualizar",
@@ -59,6 +70,9 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     "crm:visualizar",
     "crm:criar",
     "crm:editar",
+    "agenda:visualizar",
+    "agenda:criar",
+    "agenda:editar",
     "contratos:visualizar",
     "contratos:criar",
     "dashboard:visualizar",
@@ -70,6 +84,9 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     "relatorios:exportar",
   ],
   [Role.Jurídico]: [
+    "agenda:visualizar",
+    "agenda:criar",
+    "agenda:editar",
     "contratos:visualizar",
     "contratos:criar",
     "contratos:editar",

@@ -2,6 +2,7 @@
 
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
+import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import GavelOutlinedIcon from "@mui/icons-material/GavelOutlined";
@@ -36,6 +37,7 @@ const items: Array<{
 }> = [
   { href: "/dashboard", label: "Dashboard", icon: <DashboardOutlinedIcon />, permission: "dashboard:visualizar" },
   { href: "/leads", label: "Leads", icon: <AccountTreeOutlinedIcon />, permission: "crm:visualizar" },
+  { href: "/calendar", label: "Agenda", icon: <CalendarMonthOutlinedIcon />, permission: "agenda:visualizar" },
   { href: "/legal", label: "Jurídico", icon: <GavelOutlinedIcon />, permission: "contratos:editar" },
   { href: "/contracts", label: "Contratos", icon: <DescriptionOutlinedIcon />, permission: "contratos:visualizar" },
   { href: "/financial", label: "Financeiro", icon: <PaidOutlinedIcon />, permission: "financeiro:visualizar" },

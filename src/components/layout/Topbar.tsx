@@ -16,7 +16,10 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material";
-import { useSession, useLogout } from "@/modules/auth/hooks";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api/client";
+import { queryKeys } from "@/lib/query/keys";
+import { useLogout, useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
 import { DRAWER_WIDTH, TOPBAR_HEIGHT } from "./Sidebar";
 
@@ -28,6 +31,19 @@ export function Topbar() {
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
   const setNotificationsOpen = useUIStore((s) => s.setNotificationsOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
+
+  const { data: notifications } = useQuery({
+    queryKey: queryKeys.notifications,
+    queryFn: async () => {
+      const { data } = await api.get<{
+        data: Array<{ id: string; read: boolean }>;
+      }>("/notifications");
+      return data.data;
+    },
+    enabled: Boolean(user),
+  });
+
+  const hasUnread = Boolean(notifications?.some((item) => !item.read));
 
   return (
     <AppBar
@@ -92,7 +108,7 @@ export function Topbar() {
           {mode === "light" ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
         </IconButton>
         <IconButton onClick={() => setNotificationsOpen(true)} aria-label="Notificações">
-          <Badge color="error" variant="dot">
+          <Badge color="error" variant="dot" invisible={!hasUnread}>
             <NotificationsNoneOutlinedIcon />
           </Badge>
         </IconButton>

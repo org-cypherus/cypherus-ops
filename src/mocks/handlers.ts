@@ -7,18 +7,26 @@ import {
   addTimelineEntry,
   buildKanban,
   buildLegalKanban,
+  canAccessCalendarEvent,
   canAccessLead,
   canDeactivateUser,
+  cancelCalendarEventInStore,
+  completeCalendarEventInStore,
+  createCalendarEventInStore,
   createLead,
   currentUser,
   defaultPasswordFromName,
+  deleteCalendarEventInStore,
   deleteLead,
   deleteUser,
   distributeLeadsInStore,
   distributionSettings,
+  filterCalendarEvents,
   filterLeads,
   generateContractPdf,
   generatedPdfs,
+  listNotificationsForCurrentUser,
+  mockCalendarEvents,
   mockCommissionRules,
   mockCommissions,
   mockContracts,
@@ -28,9 +36,11 @@ import {
   mockRolePermissions,
   mockTemplates,
   mockUsers,
+  patchCalendarEventInStore,
   patchLead,
   removeAttachment,
   resolveOwnerScope,
+  syncCalendarReminderNotifications,
   updateLeadStatus,
   updateLegalStatus,
   type ContractTemplate,
@@ -77,6 +87,7 @@ export const handlers = [
       permissions: [...mockRolePermissions[user.role]],
       mustChangePassword: user.mustChangePassword,
     });
+    syncCalendarReminderNotifications();
     return HttpResponse.json({
       access_token: "mock-access-token",
       refresh_token: "mock-refresh-token",
@@ -197,6 +208,201 @@ export const handlers = [
     const lead = addTimelineEntry(String(params.id), body.type, body.description || "");
     if (!lead) return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
     return HttpResponse.json(lead, { status: 201 });
+  }),
+
+  http.get(`${API}/calendar/events`, ({ request }) => {
+    if (!currentUser.permissions.includes("agenda:visualizar")) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
+    }
+    const url = new URL(request.url);
+    const from = url.searchParams.get("from") || undefined;
+    const to = url.searchParams.get("to") || undefined;
+    if (!from || !to) {
+      return HttpResponse.json(
+        { statusCode: 400, message: "Parâmetros from e to são obrigatórios" },
+        { status: 400 },
+      );
+    }
+    const items = filterCalendarEvents(mockCalendarEvents, {
+      from,
+      to,
+      assigneeId: url.searchParams.get("assigneeId") || undefined,
+      leadId: url.searchParams.get("leadId") || undefined,
+      type: url.searchParams.get("type") || undefined,
+      status: url.searchParams.get("status") || undefined,
+    });
+    const page = Number(url.searchParams.get("page") || 1);
+    const pageSize = Number(url.searchParams.get("pageSize") || 200);
+    return HttpResponse.json(paginate(items, page, pageSize));
+  }),
+
+  http.get(`${API}/calendar/events/:id`, ({ params }) => {
+    if (!currentUser.permissions.includes("agenda:visualizar")) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
+    }
+    const event = mockCalendarEvents.find((e) => e.id === params.id);
+    if (!event) {
+      return HttpResponse.json({ statusCode: 404, message: "Evento não encontrado" }, { status: 404 });
+    }
+    if (!canAccessCalendarEvent(event)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este evento" }, { status: 403 });
+    }
+    return HttpResponse.json(event);
+  }),
+
+  http.post(`${API}/calendar/events`, async ({ request }) => {
+    if (!currentUser.permissions.includes("agenda:criar")) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
+    }
+    const body = (await request.json()) as {
+      title?: string;
+      description?: string;
+      type?: "retorno" | "reuniao" | "outro";
+      startsAt?: string;
+      endsAt?: string;
+      allDay?: boolean;
+      leadId?: string | null;
+      assigneeId?: string;
+      remindAt?: string | null;
+    };
+    if (!body.title || !body.type || !body.startsAt || !body.endsAt) {
+      return HttpResponse.json(
+        { statusCode: 400, message: "title, type, startsAt e endsAt são obrigatórios" },
+        { status: 400 },
+      );
+    }
+    let assigneeId = body.assigneeId || currentUser.id;
+    if (currentUser.role === Role.Comercial) {
+      assigneeId = currentUser.id;
+    }
+    if (body.leadId) {
+      const lead = mockLeads.find((l) => l.id === body.leadId);
+      if (!lead) {
+        return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
+      }
+      if (!canAccessLead(lead)) {
+        return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este lead" }, { status: 403 });
+      }
+    }
+    try {
+      const event = createCalendarEventInStore({
+        title: body.title,
+        description: body.description,
+        type: body.type,
+        startsAt: body.startsAt,
+        endsAt: body.endsAt,
+        allDay: body.allDay,
+        leadId: body.leadId,
+        assigneeId,
+        remindAt: body.remindAt,
+      });
+      return HttpResponse.json(event, { status: 201 });
+    } catch (error) {
+      return HttpResponse.json(
+        { statusCode: 400, message: error instanceof Error ? error.message : "Dados inválidos" },
+        { status: 400 },
+      );
+    }
+  }),
+
+  http.patch(`${API}/calendar/events/:id`, async ({ params, request }) => {
+    if (!currentUser.permissions.includes("agenda:editar")) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
+    }
+    const existing = mockCalendarEvents.find((e) => e.id === params.id);
+    if (!existing) {
+      return HttpResponse.json({ statusCode: 404, message: "Evento não encontrado" }, { status: 404 });
+    }
+    if (!canAccessCalendarEvent(existing)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este evento" }, { status: 403 });
+    }
+    const body = (await request.json()) as Partial<{
+      title: string;
+      description: string;
+      type: "retorno" | "reuniao" | "outro";
+      startsAt: string;
+      endsAt: string;
+      allDay: boolean;
+      leadId: string | null;
+      assigneeId: string;
+      remindAt: string | null;
+      status: "agendado" | "concluido" | "cancelado";
+    }>;
+    if (currentUser.role === Role.Comercial && body.assigneeId && body.assigneeId !== currentUser.id) {
+      return HttpResponse.json(
+        { statusCode: 403, message: "Comercial não pode reatribuir eventos" },
+        { status: 403 },
+      );
+    }
+    try {
+      const event = patchCalendarEventInStore(String(params.id), body);
+      return HttpResponse.json(event);
+    } catch (error) {
+      return HttpResponse.json(
+        { statusCode: 400, message: error instanceof Error ? error.message : "Dados inválidos" },
+        { status: 400 },
+      );
+    }
+  }),
+
+  http.delete(`${API}/calendar/events/:id`, ({ params }) => {
+    if (!currentUser.permissions.includes("agenda:excluir") && !currentUser.permissions.includes("agenda:editar")) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
+    }
+    const existing = mockCalendarEvents.find((e) => e.id === params.id);
+    if (!existing) {
+      return HttpResponse.json({ statusCode: 404, message: "Evento não encontrado" }, { status: 404 });
+    }
+    if (!canAccessCalendarEvent(existing)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este evento" }, { status: 403 });
+    }
+    deleteCalendarEventInStore(String(params.id));
+    return HttpResponse.json({ ok: true });
+  }),
+
+  http.post(`${API}/calendar/events/:id/complete`, ({ params }) => {
+    if (!currentUser.permissions.includes("agenda:editar")) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
+    }
+    const existing = mockCalendarEvents.find((e) => e.id === params.id);
+    if (!existing) {
+      return HttpResponse.json({ statusCode: 404, message: "Evento não encontrado" }, { status: 404 });
+    }
+    if (!canAccessCalendarEvent(existing)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este evento" }, { status: 403 });
+    }
+    const event = completeCalendarEventInStore(String(params.id));
+    return HttpResponse.json(event);
+  }),
+
+  http.post(`${API}/calendar/events/:id/cancel`, ({ params }) => {
+    if (!currentUser.permissions.includes("agenda:editar")) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
+    }
+    const existing = mockCalendarEvents.find((e) => e.id === params.id);
+    if (!existing) {
+      return HttpResponse.json({ statusCode: 404, message: "Evento não encontrado" }, { status: 404 });
+    }
+    if (!canAccessCalendarEvent(existing)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este evento" }, { status: 403 });
+    }
+    const event = cancelCalendarEventInStore(String(params.id));
+    return HttpResponse.json(event);
+  }),
+
+  http.get(`${API}/leads/:id/calendar-events`, ({ params }) => {
+    if (!currentUser.permissions.includes("agenda:visualizar")) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
+    }
+    const lead = mockLeads.find((l) => l.id === params.id);
+    if (!lead) {
+      return HttpResponse.json({ statusCode: 404, message: "Lead não encontrado" }, { status: 404 });
+    }
+    if (!canAccessLead(lead)) {
+      return HttpResponse.json({ statusCode: 403, message: "Sem permissão para este lead" }, { status: 403 });
+    }
+    const items = filterCalendarEvents(mockCalendarEvents, { leadId: String(params.id) });
+    return HttpResponse.json({ data: items });
   }),
 
   http.post(`${API}/leads/:id/attachments`, async ({ params, request }) => {
@@ -699,7 +905,9 @@ export const handlers = [
     return HttpResponse.json({ name, permissions: mockRolePermissions[name] });
   }),
 
-  http.get(`${API}/notifications`, () => HttpResponse.json({ data: mockNotifications })),
+  http.get(`${API}/notifications`, () =>
+    HttpResponse.json({ data: listNotificationsForCurrentUser() }),
+  ),
 
   http.patch(`${API}/notifications/:id/read`, ({ params }) => {
     const item = mockNotifications.find((n) => n.id === params.id);
