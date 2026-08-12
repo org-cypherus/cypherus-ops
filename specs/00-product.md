@@ -146,6 +146,7 @@ Arquitetura:
 9. Uploads / Anexos
 10. Pesquisa Global
 11. Auditoria
+12. Agenda (Calendário / Retornos) — ver [`modules/calendar.md`](./modules/calendar.md)
 
 Detalhamento de cada módulo em [`modules/`](./modules/).
 
@@ -190,7 +191,7 @@ Detalhamento de cada módulo em [`modules/`](./modules/).
 - Automações
 - Webhooks
 - API pública
-- Agenda
+- **Agenda (prioridade)**: lembretes de retorno a partir do Lead, visão calendário (Dia/Semana/Mês) e notificação no login — spec em [`modules/calendar.md`](./modules/calendar.md)
 - Tarefas
 - Comentários
 - Notificações em tempo real
@@ -256,6 +257,7 @@ specs/
 ├── modules/
 │   ├── auth.md
 │   ├── crm.md
+│   ├── calendar.md       # Agenda / retornos (V2)
 │   ├── contracts.md
 │   ├── financial.md
 │   ├── dashboard.md
@@ -266,5 +268,6 @@ specs/
     ├── ADR-001-stack.md
     ├── ADR-002-auth.md
     ├── ADR-003-permissions.md
-    └── ADR-004-backend-stack.md
+    ├── ADR-004-backend-stack.md
+    └── ADR-005-calendar-ui.md
 ```

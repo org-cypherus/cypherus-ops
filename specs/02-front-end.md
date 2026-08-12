@@ -42,6 +42,8 @@ src/
 │   │   │   ├── page.tsx        # Listagem / Kanban
 │   │   │   └── [id]/
 │   │   │       └── page.tsx    # Tela do Lead
+│   │   ├── calendar/           # Agenda (V2)
+│   │   │   └── page.tsx
 │   │   ├── contracts/
 │   │   ├── financial/
 │   │   ├── dashboard/
@@ -61,6 +63,7 @@ src/
 │   │   ├── schemas/            # Zod schemas
 │   │   ├── store/              # Zustand slices
 │   │   └── types/
+│   ├── calendar/               # Agenda / retornos (V2)
 │   ├── contracts/
 │   ├── financial/
 │   ├── dashboard/
@@ -121,13 +124,15 @@ Principal tela de detalhe do sistema. Estrutura sugerida (seções colapsáveis 
 
 ```text
 --------------------------------------
-Nome | Status | Responsável
+Nome | Status | Responsável | [Agendar retorno]
 --------------------------------------
 Informações pessoais
 --------------------------------------
 Informações comerciais
 --------------------------------------
 Dados financeiros
+--------------------------------------
+Agenda (próximos retornos do Lead)
 --------------------------------------
 Timeline
 --------------------------------------
@@ -146,7 +151,8 @@ Comportamentos:
 - Timeline em ordem cronológica reversa (mais recente primeiro), sem opção de exclusão
 - Upload de anexos com drag and drop
 - Ações rápidas: ligar, enviar WhatsApp, enviar email (V2 com integração real; MVP com deep link `tel:`/`https://wa.me`/`mailto:`)
-
+- **Agendar retorno** (V2 Agenda): abre dialog/drawer para criar `CalendarEvent` vinculado ao Lead; registra na Timeline; evento aparece em `/calendar`. Ver [`modules/calendar.md`](./modules/calendar.md).
+- Seção **Agenda** no detalhe: lista curta dos próximos eventos do Lead com status e atalho para a grade.
 ### 4. Listagem de Leads (tabela)
 
 Alternativa à visão Kanban, para análise tabular:
@@ -211,6 +217,17 @@ Gráficos: linha, barra, pizza, funil.
 - Componente de busca acessível a partir do header em qualquer tela
 - Busca por nome, CPF, telefone, email, contrato
 - Resultados agrupados por tipo de entidade
+
+### 12. Agenda (Calendário)
+
+Rota: `/calendar` — spec completa em [`modules/calendar.md`](./modules/calendar.md).
+
+- Vistas **Dia / Semana / Mês** (default: Semana), grade horária estilo Teams
+- Filtros por responsável (Gestor/Admin), tipo e status
+- CTA **Novo evento** e criação por clique em slot vazio
+- Clique no bloco → drawer de detalhe (editar, concluir, cancelar, ir ao Lead)
+- Item **Agenda** na Sidebar para quem tem `agenda:visualizar`
+- Notificações de “retornos do dia” no drawer existente, com deep link para a data ou o Lead
 
 ---
 

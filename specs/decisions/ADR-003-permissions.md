@@ -11,13 +11,14 @@ O sistema precisa de controle de acesso granular por módulo e ação (visualiza
 ## Decisão
 
 - Modelo **RBAC** (Role-Based Access Control): usuário → um ou mais Perfis (Roles) → conjunto de Permissões por módulo/ação.
-- Convenção de chave de permissão: `modulo:acao` (ex.: `crm:criar`, `financeiro:editar`, `relatorios:exportar`).
+- Convenção de chave de permissão: `modulo:acao` (ex.: `crm:criar`, `financeiro:editar`, `relatorios:exportar`, `agenda:visualizar`).
 - Permissões resolvidas no back-end e entregues ao front após login (ex.: `GET /me` retornando perfis + permissões efetivas).
 - No front-end, permissões são consumidas via:
   - `PermissionGate`: componente declarativo para ocultar/desabilitar ações na UI.
   - `usePermission(key)`: hook para checagens imperativas (ex.: dentro de handlers).
   - Guards de rota no middleware do Next.js para bloquear acesso a seções inteiras (ex.: `/admin/*` apenas para Administrador).
 - A checagem client-side é **apenas de UX**; a autorização definitiva sempre é validada pela API.
+- Novas chaves do módulo Agenda (`agenda:*`) seguem o mesmo modelo; escopo de dados (próprios vs equipe) espelha o CRM — ver [`../modules/calendar.md`](../modules/calendar.md).
 
 ## Consequências
 

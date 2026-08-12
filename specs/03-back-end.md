@@ -42,6 +42,7 @@ Decisão formal: [`decisions/ADR-004-backend-stack.md`](./decisions/ADR-004-back
 | `Payment` | Pagamento vinculado a um contrato |
 | `Campaign` | Campanha de origem do Lead |
 | `Notification` | Notificação de evento do sistema |
+| `CalendarEvent` | Compromisso/retorno na Agenda (V2) |
 | `Attachment` | Arquivo anexado a uma entidade |
 | `Timeline` | Evento de histórico de uma entidade (ex.: Lead) |
 | `AuditLog` | Log de auditoria imutável |
@@ -117,6 +118,21 @@ GET /dashboard/me
 GET /reports/export
 ```
 
+### Agenda (V2)
+
+```http
+GET    /calendar/events?from=&to=&assigneeId=&leadId=&type=&status=
+GET    /calendar/events/:id
+POST   /calendar/events
+PATCH  /calendar/events/:id
+DELETE /calendar/events/:id
+POST   /calendar/events/:id/complete
+POST   /calendar/events/:id/cancel
+GET    /leads/:id/calendar-events
+```
+
+Detalhamento de campos, regras e notificações de retorno: [`modules/calendar.md`](./modules/calendar.md).
+
 > Endpoints adicionais (Usuários, Perfis, Permissões, Anexos, Notificações, Auditoria, Distribuição de Leads) deverão seguir o mesmo padrão REST e serão detalhados incrementalmente em [`modules/`](./modules/) conforme forem implementados no back-end.
 
 ---
@@ -130,6 +146,8 @@ O front-end deve reagir (via refetch/invalidations do React Query, ou futurament
 - Pagamento confirmado
 - Comissão calculada
 - Notificação criada
+- Evento de agenda criado / atualizado / concluído / cancelado
+- Lembretes de retorno do dia gerados (notificação agregada ou unitária)
 
 No MVP, esses eventos são refletidos via polling/refetch do React Query. Jobs assíncronos (exportação, redistribuição, geração de PDF) rodam via Arq/Celery no back-end. Em V2, avaliar notificações em tempo real (WebSocket/SSE).
 
