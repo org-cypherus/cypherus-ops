@@ -1,7 +1,11 @@
 import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
 import { ROLE_PERMISSIONS } from "@/lib/auth/permissions";
 import { resolveFeatures } from "@/lib/billing/access";
-import type { CompanySummary, PlanCode, SubscriptionStatus } from "@/lib/billing/types";
+import type {
+  CompanySummary,
+  PlanCode,
+  SubscriptionStatus,
+} from "@/lib/billing/types";
 import type { SessionUser } from "@/lib/auth/session";
 import { defaultPasswordFromName } from "@/lib/utils/password";
 import type { CalendarEvent } from "@/modules/calendar/types";
@@ -274,7 +278,9 @@ export function getCompanyById(companyId: string) {
 }
 
 export function getSubscriptionByCompanyId(companyId: string) {
-  return mockSubscriptions.find((subscription) => subscription.companyId === companyId);
+  return mockSubscriptions.find(
+    (subscription) => subscription.companyId === companyId,
+  );
 }
 
 /** Resolve User → Company → Subscription → features do catálogo (tier da empresa). */
@@ -292,7 +298,9 @@ export function buildSessionUser(user: AppUser): SessionUser {
     phone: user.phone,
     role: user.role,
     team: user.team,
-    permissions: [...(mockRolePermissions[user.role] ?? ROLE_PERMISSIONS[user.role])],
+    permissions: [
+      ...(mockRolePermissions[user.role] ?? ROLE_PERMISSIONS[user.role]),
+    ],
     mustChangePassword: user.mustChangePassword,
     companyId: company.id,
     company: {
@@ -308,9 +316,10 @@ export function buildSessionUser(user: AppUser): SessionUser {
   };
 }
 
-export let currentUser: SessionUser = buildSessionUser(mockUsers[0]);
+export const currentUser: SessionUser = buildSessionUser(mockUsers[0]);
 
-export const generatedPdfs = new Map<string, StoredFile>();let roundRobinIndex = 0;
+export const generatedPdfs = new Map<string, StoredFile>();
+let roundRobinIndex = 0;
 
 /** Regra padrão aplicada quando um lead novo entra sem responsável explícito */
 export const distributionSettings = {
@@ -792,7 +801,9 @@ export function canAccessCalendarEvent(event: CalendarEvent) {
   return true;
 }
 
-export function resolveCalendarAssigneeScope(requestedAssigneeId?: string | null) {
+export function resolveCalendarAssigneeScope(
+  requestedAssigneeId?: string | null,
+) {
   if (currentUser.role === Role.Comercial) return currentUser.id;
   return requestedAssigneeId || undefined;
 }
@@ -836,19 +847,17 @@ function appendCalendarTimeline(
   addTimelineEntry(leadId, type, description);
 }
 
-export function createCalendarEventInStore(
-  payload: {
-    title: string;
-    description?: string;
-    type: CalendarEvent["type"];
-    startsAt: string;
-    endsAt: string;
-    allDay?: boolean;
-    leadId?: string | null;
-    assigneeId: string;
-    remindAt?: string | null;
-  },
-) {
+export function createCalendarEventInStore(payload: {
+  title: string;
+  description?: string;
+  type: CalendarEvent["type"];
+  startsAt: string;
+  endsAt: string;
+  allDay?: boolean;
+  leadId?: string | null;
+  assigneeId: string;
+  remindAt?: string | null;
+}) {
   const now = new Date().toISOString();
   const start = new Date(payload.startsAt);
   const end = new Date(payload.endsAt);
@@ -874,7 +883,9 @@ export function createCalendarEventInStore(
     assigneeId: payload.assigneeId,
     assigneeName: findUserName(payload.assigneeId),
     createdById: currentUser.id,
-    remindAt: payload.remindAt ?? new Date(new Date(payload.startsAt).setHours(0, 0, 0, 0)).toISOString(),
+    remindAt:
+      payload.remindAt ??
+      new Date(new Date(payload.startsAt).setHours(0, 0, 0, 0)).toISOString(),
     completedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -918,7 +929,9 @@ export function patchCalendarEventInStore(
         : prev.description,
     leadId: payload.leadId !== undefined ? payload.leadId : prev.leadId,
     leadName:
-      payload.leadId !== undefined ? findLeadName(payload.leadId) : prev.leadName,
+      payload.leadId !== undefined
+        ? findLeadName(payload.leadId)
+        : prev.leadName,
     assigneeId: payload.assigneeId ?? prev.assigneeId,
     assigneeName: payload.assigneeId
       ? findUserName(payload.assigneeId)
@@ -1035,11 +1048,16 @@ export function syncCalendarReminderNotifications() {
     due.length === 1
       ? {
           title: "Retorno do dia",
-          body: `Retorno: ${due[0].leadName || due[0].title} às ${new Intl.DateTimeFormat("pt-BR", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }).format(new Date(due[0].startsAt))}`,
-          href: due[0].leadId ? `/leads/${due[0].leadId}` : `/calendar?date=${todayKey}`,
+          body: `Retorno: ${due[0].leadName || due[0].title} às ${new Intl.DateTimeFormat(
+            "pt-BR",
+            {
+              hour: "2-digit",
+              minute: "2-digit",
+            },
+          ).format(new Date(due[0].startsAt))}`,
+          href: due[0].leadId
+            ? `/leads/${due[0].leadId}`
+            : `/calendar?date=${todayKey}`,
         }
       : {
           title: "Retornos do dia",
