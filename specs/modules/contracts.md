@@ -45,3 +45,7 @@ POST  /contracts/:id/sign
 
 - Perfil Jurídico tem acesso total ao módulo de Contratos.
 - Comercial pode gerar/consultar contratos dos próprios leads.
+
+## Entitlements (plano)
+
+Feature `contracts` — **Profissional e Enterprise**. Inclui Jurídico (`/legal`) e blocos de contrato no Lead. Ver [`ADR-006`](../decisions/ADR-006-entitlements.md).

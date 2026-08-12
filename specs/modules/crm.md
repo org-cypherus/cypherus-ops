@@ -77,3 +77,9 @@ PATCH  /kanban/move
 - `crm:excluir`
 
 Comercial só visualiza/edita os próprios leads; Gestor visualiza a equipe; Administrador tem acesso total.
+
+## Entitlements (plano)
+
+- Features `crm` / `kanban` / `lead_history` — todos os planos.
+- Distribuição pontual (`Distribuir`): estratégias conforme o tier (`lead_distribution` / `lead_distribution_advanced`) — ver Admin e [`ADR-006`](../decisions/ADR-006-entitlements.md).
+- No detalhe do Lead, CTAs de Agenda e Contratos só aparecem se as features `agenda` / `contracts` estiverem no plano **e** o role tiver a permission.

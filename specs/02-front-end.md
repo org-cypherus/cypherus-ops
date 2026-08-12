@@ -240,6 +240,7 @@ Rota: `/calendar` — spec completa em [`modules/calendar.md`](./modules/calenda
 - `FileUploader`: upload com drag and drop, preview e progresso
 - `StatusBadge`: badge padronizado para status de Lead/Contrato/Pagamento
 - `PermissionGate`: componente que oculta/desabilita ações conforme RBAC do usuário
+- `FeatureGate`: oculta conteúdo conforme feature do plano (e permission opcional)
 - `EmptyState` / `ErrorState` / `Skeleton`: estados de carregamento e vazio padronizados
 - `ConfirmDialog`: confirmação de ações destrutivas (excluir, redistribuir, etc.)
 - `Toast/Snackbar`: feedback de ações (sucesso/erro)
@@ -257,8 +258,9 @@ Rota: `/calendar` — spec completa em [`modules/calendar.md`](./modules/calenda
 ## Autenticação e Autorização (front-end)
 
 - Login gera tokens (access + refresh) — ver contrato em [`modules/auth.md`](./modules/auth.md)
-- Guards de rota por perfil/permissão (middleware do Next.js + checagem client-side)
-- `PermissionGate` para ocultar ações na UI conforme RBAC
+- Sessão (`/me`) inclui `company`, `subscription` e `features` do plano — [`ADR-006`](./decisions/ADR-006-entitlements.md)
+- Guards de rota: `FeatureRouteGuard` (plano ∩ permission) + `AuthGuard`
+- `PermissionGate` / `FeatureGate` / `useCanAccess` para ações na UI
 - Refresh automático de token via interceptor no client HTTP
 
 ---

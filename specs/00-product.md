@@ -25,6 +25,10 @@ O sistema deverá centralizar:
 
 A plataforma deverá ser modular, escalável e preparada para crescimento futuro.
 
+### Monetização (planos)
+
+Assinatura por **empresa** (Essencial / Profissional / Enterprise). O tier libera módulos e limites; o cargo (RBAC) libera ações dentro do que o plano permite. Detalhe: [`decisions/ADR-006-entitlements.md`](./decisions/ADR-006-entitlements.md) e [`01-business-rules.md`](./01-business-rules.md#assinatura-planos-e-entitlements).
+
 ---
 
 ## Problema
@@ -269,5 +273,6 @@ specs/
     ├── ADR-002-auth.md
     ├── ADR-003-permissions.md
     ├── ADR-004-backend-stack.md
-    └── ADR-005-calendar-ui.md
+    ├── ADR-005-calendar-ui.md
+    └── ADR-006-entitlements.md
 ```

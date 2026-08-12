@@ -19,11 +19,13 @@ O sistema precisa de controle de acesso granular por módulo e ação (visualiza
   - Guards de rota no middleware do Next.js para bloquear acesso a seções inteiras (ex.: `/admin/*` apenas para Administrador).
 - A checagem client-side é **apenas de UX**; a autorização definitiva sempre é validada pela API.
 - Novas chaves do módulo Agenda (`agenda:*`) seguem o mesmo modelo; escopo de dados (próprios vs equipe) espelha o CRM — ver [`../modules/calendar.md`](../modules/calendar.md).
+- **Entitlements por plano** (SaaS) são ortogonais ao RBAC: o cargo libera a ação, o plano da company libera o módulo. Ver [`ADR-006`](./ADR-006-entitlements.md). `PermissionGate` sozinho não basta para módulos Pro/Enterprise — usar `FeatureGate` / `canAccess`.
 
 ## Consequências
 
 - Qualquer nova permissão introduzida no back-end deve ser refletida na constante/tipo de permissões do front-end (`lib/auth`), evitando strings mágicas espalhadas pelo código.
 - Perfis customizados (além dos 5 padrão) ficam previstos para V2, sem exigir mudança estrutural no front-end (a UI já trabalha com a lista dinâmica de permissões recebida da API).
+- Novos módulos devem declarar permissões **e** feature key do plano quando aplicável.
 
 ## Alternativas consideradas
 

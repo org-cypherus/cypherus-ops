@@ -293,15 +293,20 @@ Atribuição sugerida:
 
 Detalhe de escopo de dados (próprios vs equipe) espelha as regras de CRM.
 
+## Entitlements (plano)
+
+Feature `agenda` — **Profissional e Enterprise**. No Essencial, o módulo some da nav e CTAs do Lead; URL `/calendar` mostra upsell. Acesso efetivo = `agenda` ∩ `agenda:*`. Ver [`ADR-006`](../decisions/ADR-006-entitlements.md).
+
 ---
 
 ## Critérios de aceite
 
-1. Na tela do Lead, usuário com `agenda:criar` vê o botão **Agendar retorno** e consegue criar um evento vinculado.
+1. Na tela do Lead, usuário com `agenda:criar` **e** company com feature `agenda` vê o botão **Agendar retorno** e consegue criar um evento vinculado.
 2. O evento aparece na grade de `/calendar` no dia/horário corretos.
 3. Ao logar no dia do evento (com evento `agendado`), o usuário recebe notificação de retorno(s) pendente(s).
 4. Clicar na notificação leva ao calendário do dia ou ao Lead correspondente.
 5. Concluir o retorno atualiza status, timeline do Lead e remove o item da contagem de pendências do dia.
+6. Company no Essencial não vê Agenda na nav nem CTAs no Lead; `/calendar` exibe upsell.
 6. Comercial não vê/edita agenda de outro comercial; Gestor vê a equipe.
 7. Jurídico consegue o mesmo fluxo a partir de leads do pipeline jurídico.
 8. Vista Semana exibe eixo de horários + dias com blocos posicionados (experiência próxima ao Teams).

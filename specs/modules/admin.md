@@ -43,15 +43,28 @@ Exemplo:
 
 ## Telas
 
-- Listagem/CRUD de usuários
-- Gestão de perfis (criação de perfis customizados, V2)
-- Matriz de permissões (tabela: módulos x ações, com toggle por perfil)
+- Listagem/CRUD de usuários (com indicador de uso do limite de assentos)
+- Gestão de perfis (criação de perfis customizados, V2; gated por `advanced_permissions`)
+- Matriz de permissões (tabela: módulos x ações, com toggle por perfil; gated por `advanced_permissions`)
+- Recursos Enterprise (`/admin/enterprise`)
+- Configuração da regra padrão de distribuição de leads (opções conforme o plano)
 
 ## Regras
 
 - Um usuário pode ter mais de um perfil (composição de permissões).
 - Alterações em usuários/perfis/permissões geram entrada de Auditoria.
-- Ações não autorizadas são bloqueadas na UI via `PermissionGate` e reforçadas pela API.
+- Ações não autorizadas são bloqueadas na UI via `PermissionGate` / `FeatureGate` e reforçadas pela API.
+- Criação e reativação de usuário **Ativo** respeitam o limite `max_users` do plano da company ([`ADR-006`](../decisions/ADR-006-entitlements.md)).
+- Matriz de permissões e perfis customizados exigem feature `advanced_permissions` (Profissional+).
+- Estratégia padrão de distribuição de leads é limitada pelo tier (Essencial: manual/RR; Pro: + automática/equipe; Enterprise: + redistribuição).
+
+## Enterprise (API / Webhooks / Personalizações)
+
+Rota `/admin/enterprise` e cards na home de Administração.
+
+- Features `api`, `webhooks`, `customizations` — somente Enterprise.
+- Fora do plano: upsell; no plano: UI placeholder “em breve” (flags já resolvidas na sessão).
+- Detalhe: [`ADR-006`](../decisions/ADR-006-entitlements.md).
 
 ## Endpoints esperados (a confirmar com o back-end)
 

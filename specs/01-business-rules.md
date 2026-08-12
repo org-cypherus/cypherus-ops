@@ -240,6 +240,31 @@ Plano B → 20%
 
 ---
 
+## Assinatura, planos e entitlements
+
+O acesso a módulos e limites **não** depende só do cargo: depende do **plano da empresa** (Company → Subscription) **e** das permissions do usuário.
+
+Modelo canônico e ADR: [`decisions/ADR-006-entitlements.md`](./decisions/ADR-006-entitlements.md).
+
+### Planos
+
+| Plano | `planCode` | Destaques |
+|---|---|---|
+| Essencial | `ESSENTIAL` | CRM + Kanban + histórico; distribuição manual; dashboard básico; até 5 usuários |
+| Profissional | `PROFESSIONAL` | + Agenda, Contratos, Financeiro/Comissões, distribuição automática, dashboard avançado, permissões granulares; até 15 usuários |
+| Enterprise | `ENTERPRISE` | + distribuição avançada, dashboard personalizado, API/webhooks/personalizações; usuários ilimitados |
+
+### Regras
+
+- O tier é da **Company**; todos os usuários vinculados compartilham as mesmas features/limites.
+- Visão efetiva do usuário = **feature do plano ∩ permission do cargo**.
+- Exemplo: company no Essencial → ninguém vê Agenda, mesmo com `agenda:visualizar`. Company no Pro + perfil Financeiro → Agenda existe no plano, mas só quem tiver a permission acessa.
+- Convite/criação de usuário ativo deve respeitar `max_users` do plano.
+- Estratégias de distribuição e variantes de dashboard seguem o tier (ver módulos CRM / Admin / Dashboard).
+- URL direta a módulo fora do plano mostra **upsell**; falta só de cargo mostra **sem permissão** (mensagens distintas).
+
+---
+
 ## Notificações
 
 Eventos que devem gerar notificação:

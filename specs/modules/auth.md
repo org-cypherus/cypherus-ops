@@ -32,7 +32,8 @@ POST /logout
 - Interceptor HTTP deve tentar `POST /refresh` automaticamente em caso de `401`, e só então redirecionar para o login se o refresh também falhar.
 - Logout deve invalidar a sessão no client (limpar store/cache) e chamar `POST /logout`.
 - Rotas protegidas exigem sessão válida (middleware do Next.js + guard client-side).
-- Após login, o front deve carregar o usuário atual e suas permissões para alimentar `PermissionGate` e os guards de rota.
+- Após login, o front deve carregar o usuário atual, **permissions**, **company**, **subscription** e **features** do plano para alimentar `PermissionGate`, `FeatureGate` e os guards de rota ([`ADR-006`](../decisions/ADR-006-entitlements.md)).
+- Home pós-login respeita role ∩ features (`homePathForSession`): ex. Financeiro no Essencial não é enviado a `/financial`.
 
 ## Fora de escopo do MVP (V2)
 
