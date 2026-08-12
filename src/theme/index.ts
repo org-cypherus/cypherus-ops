@@ -16,6 +16,20 @@ const shared: ThemeOptions = {
   },
   shape: { borderRadius: 8 },
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        html: {
+          height: "100%",
+        },
+        body: {
+          minHeight: "100%",
+          margin: 0,
+        },
+        "#__next": {
+          minHeight: "100%",
+        },
+      },
+    },
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: {
@@ -32,12 +46,33 @@ const shared: ThemeOptions = {
         paper: { borderRight: "none" },
       },
     },
+    MuiAppBar: {
+      styleOverrides: {
+        root: { backgroundImage: "none" },
+      },
+    },
   },
 };
 
 export function createAppTheme(mode: "light" | "dark") {
+  const palette = mode === "light" ? lightPalette : darkPalette;
   return createTheme({
     ...shared,
-    palette: mode === "light" ? lightPalette : darkPalette,
+    palette,
+    components: {
+      ...shared.components,
+      MuiCssBaseline: {
+        styleOverrides: {
+          html: { height: "100%" },
+          body: {
+            minHeight: "100%",
+            margin: 0,
+            backgroundColor: palette.background.default,
+          },
+        },
+      },
+    },
   });
 }
+
+export { brand, landingColors } from "./palette";

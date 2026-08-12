@@ -1,15 +1,4 @@
-export const landingColors = {
-  bg: "#081424",
-  surface: "#111c2d",
-  surfaceHigh: "#1f2a3c",
-  surfaceBright: "#2a3547",
-  primary: "#4cd7f6",
-  primarySolid: "#06b6d4",
-  onPrimary: "#003640",
-  text: "#d8e3fa",
-  muted: "#bcc9cd",
-  border: "rgba(255,255,255,0.10)",
-} as const;
+export { landingColors } from "@/theme/palette";
 
 export const navLinks = [
   { label: "Funcionalidades", href: "#features" },

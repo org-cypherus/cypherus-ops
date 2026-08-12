@@ -172,7 +172,7 @@ export function LandingPage() {
     >
       <LandingHeader />
 
-      <Box component="main" id="conteudo-principal" tabIndex={-1} sx={{ flex: "1 0 auto" }}>
+      <Box component="main" id="conteudo-principal" tabIndex={-1} sx={{ flex: "1 1 auto" }}>
         <Box component="section" aria-labelledby="hero-heading">
           <Container maxWidth="lg" sx={{ pt: { xs: 14, md: 18 }, pb: { xs: 8, md: 12 } }}>
             <Stack alignItems="center" textAlign="center" spacing={3} maxWidth={880} mx="auto">
@@ -588,9 +588,10 @@ export function LandingPage() {
       <Box
         component="footer"
         sx={{
+          mt: "auto",
           flexShrink: 0,
           borderTop: `1px solid ${landingColors.border}`,
-          bgcolor: landingColors.surface,
+          bgcolor: landingColors.bg,
           py: { xs: 5, md: 6 },
         }}
       >

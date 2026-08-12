@@ -20,7 +20,7 @@ type UIState = {
 export const useUIStore = create<UIState>()(
   persist(
     (set, get) => ({
-      mode: "light",
+      mode: "dark",
       sidebarOpen: false,
       searchOpen: false,
       notificationsOpen: false,

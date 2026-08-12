@@ -214,7 +214,7 @@ export function SignupForm() {
                 fontWeight: 800,
                 letterSpacing: "-0.03em",
                 textDecoration: "none",
-                color: "inherit",
+                color: "primary.main",
                 display: "inline-block",
               }}
             >

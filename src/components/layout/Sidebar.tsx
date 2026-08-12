@@ -47,8 +47,10 @@ const icons: Record<string, ReactNode> = {
 const paperSx = {
   width: DRAWER_WIDTH,
   boxSizing: "border-box" as const,
-  backgroundColor: "primary.main",
-  color: "primary.contrastText",
+  backgroundColor: "background.paper",
+  color: "text.primary",
+  borderRight: "1px solid",
+  borderColor: "divider",
 };
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
@@ -73,10 +75,13 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
     <>
       <Toolbar sx={{ px: 2.5 }}>
         <Box>
-          <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: "-0.03em" }}>
+          <Typography
+            variant="h6"
+            sx={{ fontWeight: 800, letterSpacing: "-0.03em", color: "primary.main" }}
+          >
             Cypher Ops
           </Typography>
-          <Typography variant="caption" sx={{ opacity: 0.7 }}>
+          <Typography variant="caption" color="text.secondary">
             Operação comercial
           </Typography>
         </Box>
@@ -103,12 +108,14 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
               sx={{
                 mb: 0.5,
                 borderRadius: 2,
-                color: "inherit",
+                color: "text.secondary",
                 "&.Mui-selected": {
-                  backgroundColor: "rgba(255,255,255,0.14)",
-                  "&:hover": { backgroundColor: "rgba(255,255,255,0.18)" },
+                  color: "primary.main",
+                  backgroundColor: "rgba(76, 215, 246, 0.12)",
+                  "&:hover": { backgroundColor: "rgba(76, 215, 246, 0.18)" },
+                  "& .MuiListItemIcon-root": { color: "primary.main" },
                 },
-                "&:hover": { backgroundColor: "rgba(255,255,255,0.08)" },
+                "&:hover": { backgroundColor: "action.hover", color: "text.primary" },
               }}
             >
               <ListItemIcon sx={{ color: "inherit", minWidth: 40 }}>

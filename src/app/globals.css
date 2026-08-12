@@ -14,6 +14,8 @@ body {
   width: 100%;
   max-width: 100%;
   min-height: 100%;
+  /* Fallback pré-hidratação — mesma base da home / tema dark */
+  background-color: #081424;
 }
 
 body {
