@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
+import { useFeature } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
 
 export function GlobalSearchDialog() {
@@ -22,6 +23,7 @@ export function GlobalSearchDialog() {
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
   const [q, setQ] = useState("");
   const router = useRouter();
+  const contractsEnabled = useFeature("contracts").enabled;
 
   const { data } = useQuery({
     queryKey: queryKeys.search(q),
@@ -35,6 +37,10 @@ export function GlobalSearchDialog() {
     enabled: open && q.length >= 2,
   });
 
+  const contracts = contractsEnabled ? data?.contracts : [];
+  const hasLeads = Boolean(data?.leads?.length);
+  const hasContracts = Boolean(contracts?.length);
+
   return (
     <Dialog open={open} onClose={() => setSearchOpen(false)} fullWidth maxWidth="sm">
       <DialogTitle>Pesquisa global</DialogTitle>
@@ -42,18 +48,22 @@ export function GlobalSearchDialog() {
         <TextField
           autoFocus
           fullWidth
-          placeholder="Nome, CPF, telefone, e-mail ou contrato"
+          placeholder={
+            contractsEnabled
+              ? "Nome, CPF, telefone, e-mail ou contrato"
+              : "Nome, CPF, telefone ou e-mail"
+          }
           value={q}
           onChange={(e) => setQ(e.target.value)}
           sx={{ mb: 2 }}
         />
-        {data?.leads?.length ? (
+        {hasLeads ? (
           <>
             <Typography variant="overline" color="text.secondary">
               Leads
             </Typography>
             <List dense>
-              {data.leads.map((lead) => (
+              {data!.leads.map((lead) => (
                 <ListItemButton
                   key={lead.id}
                   onClick={() => {
@@ -67,18 +77,18 @@ export function GlobalSearchDialog() {
             </List>
           </>
         ) : null}
-        {data?.contracts?.length ? (
+        {hasContracts ? (
           <>
             <Typography variant="overline" color="text.secondary">
               Contratos
             </Typography>
             <List dense>
-              {data.contracts.map((contract) => (
+              {contracts!.map((contract) => (
                 <ListItemButton
                   key={contract.id}
                   onClick={() => {
                     setSearchOpen(false);
-                    router.push("/contracts");
+                    router.push(`/contracts/${contract.id}`);
                   }}
                 >
                   <ListItemText primary={contract.leadName} secondary={contract.id} />
@@ -87,7 +97,7 @@ export function GlobalSearchDialog() {
             </List>
           </>
         ) : null}
-        {q.length >= 2 && !data?.leads?.length && !data?.contracts?.length ? (
+        {q.length >= 2 && !hasLeads && !hasContracts ? (
           <Typography color="text.secondary">Nenhum resultado.</Typography>
         ) : null}
       </DialogContent>

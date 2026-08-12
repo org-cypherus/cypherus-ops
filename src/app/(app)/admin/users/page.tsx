@@ -26,17 +26,28 @@ import {
 } from "@mui/material";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useSnackbar } from "notistack";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Controller, useForm } from "react-hook-form";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { api } from "@/lib/api/client";
-import { Role, ROLE_NAMES, type RoleName } from "@/lib/auth/permissions";
+import { ROLE_NAMES, type RoleName } from "@/lib/auth/permissions";
+import { canAddActiveUser, nextPlanForMoreUsers, usersLimitLabel } from "@/lib/billing/limits";
+import { planLabel } from "@/lib/billing/plan-catalog";
 import { queryKeys } from "@/lib/query/keys";
-import { useSession } from "@/modules/auth/hooks";
+import { formatPhone } from "@/lib/utils/phone";
 import { defaultPasswordFromName } from "@/lib/utils/password";
+import {
+  adminUserFormSchema,
+  emptyAdminUserForm,
+  type AdminUserFormValues,
+} from "@/modules/admin/schemas";
+import { useSession } from "@/modules/auth/hooks";
 
 type AppUser = {
   id: string;
@@ -49,25 +60,35 @@ type AppUser = {
   mustChangePassword?: boolean;
 };
 
-const emptyForm = {
-  name: "",
-  email: "",
-  phone: "",
-  role: Role.Comercial as RoleName,
-  team: "Vendas",
-  status: "Ativo" as "Ativo" | "Inativo",
-};
-
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const session = useSession();
   const meId = session.data?.id;
+  const features = session.data?.features;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AppUser | null>(null);
-  const [form, setForm] = useState(emptyForm);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
+  const [createdEmail, setCreatedEmail] = useState<string | null>(null);
+
+  const {
+    control,
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors, isValid },
+  } = useForm<AdminUserFormValues>({
+    resolver: zodResolver(adminUserFormSchema),
+    mode: "onChange",
+    defaultValues: emptyAdminUserForm,
+  });
+
+  const watchedName = watch("name");
+  const previewPassword = watchedName?.trim()
+    ? defaultPasswordFromName(watchedName)
+    : "Sobrenome" + new Date().getFullYear();
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.users,
@@ -77,28 +98,46 @@ export default function UsersPage() {
     },
   });
 
-  const previewPassword = form.name.trim()
-    ? defaultPasswordFromName(form.name)
-    : "Sobrenome" + new Date().getFullYear();
+  const activeCount = data?.filter((u) => u.status === "Ativo").length ?? 0;
+  const atUserLimit = !canAddActiveUser(features, activeCount);
+  const upgradePlan = nextPlanForMoreUsers(session.data?.subscription.planCode);
+  const limitHint = usersLimitLabel(features, activeCount);
+
+  useEffect(() => {
+    if (!open) return;
+    if (editing) {
+      reset({
+        name: editing.name,
+        email: editing.email,
+        phone: formatPhone(editing.phone),
+        role: editing.role,
+        team: editing.team,
+        status: editing.status,
+      });
+    } else {
+      reset(emptyAdminUserForm);
+    }
+  }, [open, editing, reset]);
 
   const save = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (values: AdminUserFormValues) => {
       if (editing) {
-        const { data } = await api.patch<AppUser>(`/users/${editing.id}`, form);
+        const { data } = await api.patch<AppUser>(`/users/${editing.id}`, values);
         return { user: data, temporaryPassword: undefined as string | undefined };
       }
-      const { data } = await api.post<AppUser & { temporaryPassword?: string }>("/users", form);
+      const { data } = await api.post<AppUser & { temporaryPassword?: string }>("/users", values);
       return { user: data, temporaryPassword: data.temporaryPassword };
     },
-    onSuccess: ({ temporaryPassword }) => {
+    onSuccess: ({ temporaryPassword }, values) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
       if (editing) {
         enqueueSnackbar("Usuário atualizado", { variant: "success" });
         setOpen(false);
         setEditing(null);
-        setForm(emptyForm);
+        reset(emptyAdminUserForm);
       } else {
-        setCreatedPassword(temporaryPassword || previewPassword);
+        setCreatedEmail(values.email);
+        setCreatedPassword(temporaryPassword || defaultPasswordFromName(values.name));
         enqueueSnackbar("Usuário criado", { variant: "success" });
       }
     },
@@ -142,6 +181,14 @@ export default function UsersPage() {
     },
   });
 
+  function closeDialog() {
+    setCreatedPassword(null);
+    setCreatedEmail(null);
+    setOpen(false);
+    setEditing(null);
+    reset(emptyAdminUserForm);
+  }
+
   return (
     <Stack spacing={2.5}>
       <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={2}>
@@ -150,19 +197,45 @@ export default function UsersPage() {
           <Typography variant="body2" color="text.secondary">
             Colaboradores, cargos e status — senha inicial = sobrenome + ano
           </Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+            {limitHint}
+            {session.data?.subscription.planCode
+              ? ` · plano ${planLabel(session.data.subscription.planCode)}`
+              : ""}
+          </Typography>
         </Box>
-        <Button
-          variant="contained"
-          onClick={() => {
-            setEditing(null);
-            setForm(emptyForm);
-            setCreatedPassword(null);
-            setOpen(true);
-          }}
-        >
-          + Novo Usuário
-        </Button>
+        <Tooltip title={atUserLimit ? "Limite de usuários do plano atingido" : ""}>
+          <span>
+            <Button
+              variant="contained"
+              disabled={atUserLimit}
+              onClick={() => {
+                setEditing(null);
+                setCreatedPassword(null);
+                setCreatedEmail(null);
+                setOpen(true);
+              }}
+            >
+              + Novo Usuário
+            </Button>
+          </span>
+        </Tooltip>
       </Stack>
+
+      {atUserLimit ? (
+        <Alert
+          severity="info"
+          action={
+            <Button component={Link} href="/#pricing" color="inherit" size="small">
+              Ver planos
+            </Button>
+          }
+        >
+          {upgradePlan
+            ? `Limite de usuários atingido — o plano ${planLabel(upgradePlan)} libera mais assentos para a equipe.`
+            : "Limite de usuários atingido. Fale com o suporte para expandir a capacidade."}
+        </Alert>
+      ) : null}
 
       {isLoading ? (
         <Box py={8} display="flex" justifyContent="center">
@@ -223,14 +296,7 @@ export default function UsersPage() {
                         onClick={() => {
                           setEditing(user);
                           setCreatedPassword(null);
-                          setForm({
-                            name: user.name,
-                            email: user.email,
-                            phone: user.phone,
-                            role: user.role,
-                            team: user.team,
-                            status: user.status,
-                          });
+                          setCreatedEmail(null);
                           setOpen(true);
                         }}
                       >
@@ -256,20 +322,7 @@ export default function UsersPage() {
         </TableContainer>
       )}
 
-      <Dialog
-        open={open}
-        onClose={() => {
-          if (createdPassword) {
-            setCreatedPassword(null);
-            setOpen(false);
-            setForm(emptyForm);
-            return;
-          }
-          setOpen(false);
-        }}
-        fullWidth
-        maxWidth="sm"
-      >
+      <Dialog open={open} onClose={closeDialog} fullWidth maxWidth="sm">
         <DialogTitle>
           {createdPassword ? "Usuário criado" : editing ? "Editar usuário" : "Novo usuário"}
         </DialogTitle>
@@ -280,7 +333,7 @@ export default function UsersPage() {
                 Conta criada. Envie estas credenciais ao colaborador:
               </Alert>
               <Typography variant="body2">
-                E-mail: <strong>{form.email}</strong>
+                E-mail: <strong>{createdEmail}</strong>
               </Typography>
               <Typography variant="body2">
                 Senha temporária: <strong>{createdPassword}</strong>
@@ -291,35 +344,96 @@ export default function UsersPage() {
               </Typography>
             </Stack>
           ) : (
-            <Stack spacing={2} mt={1}>
-              <TextField label="Nome" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} fullWidth />
-              <TextField label="E-mail" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} fullWidth />
-              <TextField label="Telefone" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} fullWidth />
+            <Stack
+              component="form"
+              id="admin-user-form"
+              spacing={2}
+              mt={1}
+              onSubmit={handleSubmit((values) => save.mutate(values))}
+              noValidate
+            >
               <TextField
-                select
-                label="Cargo"
-                value={form.role}
-                onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as RoleName }))}
+                label="Nome"
                 fullWidth
-              >
-                {ROLE_NAMES.map((role) => (
-                  <MenuItem key={role} value={role}>
-                    {role}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField label="Time" value={form.team} onChange={(e) => setForm((f) => ({ ...f, team: e.target.value }))} fullWidth />
+                {...register("name")}
+                error={Boolean(errors.name)}
+                helperText={errors.name?.message}
+              />
+              <TextField
+                label="E-mail"
+                type="email"
+                fullWidth
+                autoComplete="email"
+                {...register("email")}
+                error={Boolean(errors.email)}
+                helperText={errors.email?.message}
+              />
+              <Controller
+                name="phone"
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    label="Telefone"
+                    fullWidth
+                    inputMode="tel"
+                    placeholder="(11) 98888-0000"
+                    value={field.value}
+                    onChange={(e) => field.onChange(formatPhone(e.target.value))}
+                    onBlur={field.onBlur}
+                    error={Boolean(errors.phone)}
+                    helperText={errors.phone?.message}
+                  />
+                )}
+              />
+              <Controller
+                name="role"
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    select
+                    label="Cargo"
+                    fullWidth
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    error={Boolean(errors.role)}
+                    helperText={errors.role?.message}
+                  >
+                    {ROLE_NAMES.map((role) => (
+                      <MenuItem key={role} value={role}>
+                        {role}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                )}
+              />
+              <TextField
+                label="Time"
+                fullWidth
+                {...register("team")}
+                error={Boolean(errors.team)}
+                helperText={errors.team?.message}
+              />
               {editing && editing.id !== meId ? (
-                <TextField
-                  select
-                  label="Status"
-                  value={form.status}
-                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as "Ativo" | "Inativo" }))}
-                  fullWidth
-                >
-                  <MenuItem value="Ativo">Ativo</MenuItem>
-                  <MenuItem value="Inativo">Inativo</MenuItem>
-                </TextField>
+                <Controller
+                  name="status"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      select
+                      label="Status"
+                      fullWidth
+                      value={field.value}
+                      onChange={field.onChange}
+                      onBlur={field.onBlur}
+                      error={Boolean(errors.status)}
+                      helperText={errors.status?.message}
+                    >
+                      <MenuItem value="Ativo">Ativo</MenuItem>
+                      <MenuItem value="Inativo">Inativo</MenuItem>
+                    </TextField>
+                  )}
+                />
               ) : null}
               {!editing ? (
                 <Alert severity="info">
@@ -331,23 +445,17 @@ export default function UsersPage() {
         </DialogContent>
         <DialogActions>
           {createdPassword ? (
-            <Button
-              variant="contained"
-              onClick={() => {
-                setCreatedPassword(null);
-                setOpen(false);
-                setForm(emptyForm);
-              }}
-            >
+            <Button variant="contained" onClick={closeDialog}>
               Fechar
             </Button>
           ) : (
             <>
-              <Button onClick={() => setOpen(false)}>Cancelar</Button>
+              <Button onClick={closeDialog}>Cancelar</Button>
               <Button
+                type="submit"
+                form="admin-user-form"
                 variant="contained"
-                disabled={!form.name || !form.email || save.isPending}
-                onClick={() => save.mutate()}
+                disabled={!isValid || save.isPending}
               >
                 Salvar
               </Button>

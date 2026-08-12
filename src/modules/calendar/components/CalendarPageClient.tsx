@@ -20,11 +20,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ErrorState } from "@/components/feedback/ErrorState";
-import { PermissionGate } from "@/components/auth/PermissionGate";
+import { FeatureGate } from "@/components/auth/FeatureGate";
 import { api } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
 import { queryKeys } from "@/lib/query/keys";
-import { usePermission, useSession } from "@/modules/auth/hooks";
+import { useCanAccess, useSession } from "@/modules/auth/hooks";
 import { useCalendarEvents } from "../hooks";
 import type { CalendarEvent, CalendarView } from "../types";
 import { dayjs, monthRange, weekRange } from "../utils";
@@ -37,7 +37,7 @@ export function CalendarPageClient() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const { data: session } = useSession();
-  const canView = usePermission("agenda:visualizar");
+  const canView = useCanAccess("agenda", "agenda:visualizar");
   const isComercial = session?.role === Role.Comercial;
 
   const initialDate = searchParams.get("date");
@@ -147,7 +147,7 @@ export function CalendarPageClient() {
             Retornos e compromissos do comercial e jurídico
           </Typography>
         </Box>
-        <PermissionGate permission="agenda:criar">
+        <FeatureGate feature="agenda" permission="agenda:criar">
           <Button
             variant="contained"
             startIcon={<EventAvailableOutlinedIcon />}
@@ -155,7 +155,7 @@ export function CalendarPageClient() {
           >
             Novo evento
           </Button>
-        </PermissionGate>
+        </FeatureGate>
       </Stack>
 
       <Stack

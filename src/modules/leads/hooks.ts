@@ -94,11 +94,11 @@ export function useLead(id: string) {
   });
 }
 
-export function useLeadContracts(leadId: string) {
+export function useLeadContracts(leadId: string, enabled = true) {
   return useQuery({
     queryKey: [...queryKeys.contracts.list({ leadId })],
     queryFn: () => fetchLeadContracts(leadId),
-    enabled: Boolean(leadId),
+    enabled: Boolean(leadId) && enabled,
   });
 }
 

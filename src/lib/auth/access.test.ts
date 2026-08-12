@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { homePathForRole, roleHasPermission, userHasPermission } from "./access";
-import { Role } from "./permissions";
+import { resolveFeatures } from "@/lib/billing/access";
+import { homePathForRole, homePathForSession, roleHasPermission, userHasPermission } from "./access";
+import { Role, ROLE_PERMISSIONS } from "./permissions";
 
 describe("homePathForRole", () => {
   it("routes juridico and financeiro to specialized homes", () => {
@@ -12,6 +13,28 @@ describe("homePathForRole", () => {
     expect(homePathForRole(Role.Administrador)).toBe("/leads");
     expect(homePathForRole(Role.Comercial)).toBe("/leads");
     expect(homePathForRole(Role.Gestor)).toBe("/leads");
+  });
+});
+
+describe("homePathForSession", () => {
+  it("falls back when preferred home is not in the company plan", () => {
+    const path = homePathForSession({
+      role: Role.Financeiro,
+      permissions: ROLE_PERMISSIONS[Role.Financeiro],
+      features: resolveFeatures("ESSENTIAL"),
+    });
+    expect(path).not.toBe("/financial");
+    expect(path).toBe("/dashboard");
+  });
+
+  it("keeps preferred home when plan allows", () => {
+    expect(
+      homePathForSession({
+        role: Role.Financeiro,
+        permissions: ROLE_PERMISSIONS[Role.Financeiro],
+        features: resolveFeatures("PROFESSIONAL"),
+      }),
+    ).toBe("/financial");
   });
 });
 

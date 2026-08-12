@@ -1,12 +1,20 @@
 import { http, HttpResponse } from "msw";
 import { calculateCommission } from "@/lib/utils/commission";
 import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
+import { hasFeature } from "@/lib/billing/access";
+import {
+  clampDistributionStrategy,
+  isDistributionStrategyAllowed,
+} from "@/lib/billing/distribution";
+import { canAddActiveUser } from "@/lib/billing/limits";
+import type { FeatureKey } from "@/lib/billing/types";
 import type { Attachment, Lead, PipelineStage } from "@/modules/leads/types";
 import {
   addAttachment,
   addTimelineEntry,
   buildKanban,
   buildLegalKanban,
+  buildSessionUser,
   canAccessCalendarEvent,
   canAccessLead,
   canDeactivateUser,
@@ -50,6 +58,16 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+function denyUnlessFeature(feature: FeatureKey) {
+  if (!hasFeature(currentUser.features, feature)) {
+    return HttpResponse.json(
+      { statusCode: 403, message: "Recurso não disponível no plano da empresa" },
+      { status: 403 },
+    );
+  }
+  return null;
+}
+
 function paginate<T>(items: T[], page = 1, pageSize = 50) {
   const start = (page - 1) * pageSize;
   return {
@@ -77,16 +95,7 @@ export const handlers = [
     if (user.status !== "Ativo") {
       return HttpResponse.json({ statusCode: 403, message: "Usuário inativo" }, { status: 403 });
     }
-    Object.assign(currentUser, {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      team: user.team,
-      permissions: [...mockRolePermissions[user.role]],
-      mustChangePassword: user.mustChangePassword,
-    });
+    Object.assign(currentUser, buildSessionUser(user));
     syncCalendarReminderNotifications();
     return HttpResponse.json({
       access_token: "mock-access-token",
@@ -99,13 +108,12 @@ export const handlers = [
   http.post(`${API}/logout`, () => HttpResponse.json({ ok: true })),
   http.get(`${API}/me`, () => {
     const user = mockUsers.find((u) => u.id === currentUser.id);
-    currentUser.permissions = [...mockRolePermissions[currentUser.role]];
-    return HttpResponse.json({
-      ...currentUser,
-      mustChangePassword: user?.mustChangePassword ?? false,
-    });
+    if (!user) {
+      return HttpResponse.json({ statusCode: 401, message: "Sessão inválida" }, { status: 401 });
+    }
+    Object.assign(currentUser, buildSessionUser(user));
+    return HttpResponse.json({ ...currentUser });
   }),
-
   http.post(`${API}/me/change-password`, async ({ request }) => {
     const body = (await request.json()) as { currentPassword?: string; newPassword?: string };
     const user = mockUsers.find((u) => u.id === currentUser.id);
@@ -211,6 +219,8 @@ export const handlers = [
   }),
 
   http.get(`${API}/calendar/events`, ({ request }) => {
+    const planDenied = denyUnlessFeature("agenda");
+    if (planDenied) return planDenied;
     if (!currentUser.permissions.includes("agenda:visualizar")) {
       return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
     }
@@ -237,6 +247,8 @@ export const handlers = [
   }),
 
   http.get(`${API}/calendar/events/:id`, ({ params }) => {
+    const planDenied = denyUnlessFeature("agenda");
+    if (planDenied) return planDenied;
     if (!currentUser.permissions.includes("agenda:visualizar")) {
       return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
     }
@@ -251,6 +263,8 @@ export const handlers = [
   }),
 
   http.post(`${API}/calendar/events`, async ({ request }) => {
+    const planDenied = denyUnlessFeature("agenda");
+    if (planDenied) return planDenied;
     if (!currentUser.permissions.includes("agenda:criar")) {
       return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
     }
@@ -306,6 +320,8 @@ export const handlers = [
   }),
 
   http.patch(`${API}/calendar/events/:id`, async ({ params, request }) => {
+    const planDenied = denyUnlessFeature("agenda");
+    if (planDenied) return planDenied;
     if (!currentUser.permissions.includes("agenda:editar")) {
       return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
     }
@@ -346,6 +362,8 @@ export const handlers = [
   }),
 
   http.delete(`${API}/calendar/events/:id`, ({ params }) => {
+    const planDenied = denyUnlessFeature("agenda");
+    if (planDenied) return planDenied;
     if (!currentUser.permissions.includes("agenda:excluir") && !currentUser.permissions.includes("agenda:editar")) {
       return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
     }
@@ -361,6 +379,8 @@ export const handlers = [
   }),
 
   http.post(`${API}/calendar/events/:id/complete`, ({ params }) => {
+    const planDenied = denyUnlessFeature("agenda");
+    if (planDenied) return planDenied;
     if (!currentUser.permissions.includes("agenda:editar")) {
       return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
     }
@@ -376,6 +396,8 @@ export const handlers = [
   }),
 
   http.post(`${API}/calendar/events/:id/cancel`, ({ params }) => {
+    const planDenied = denyUnlessFeature("agenda");
+    if (planDenied) return planDenied;
     if (!currentUser.permissions.includes("agenda:editar")) {
       return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
     }
@@ -391,6 +413,8 @@ export const handlers = [
   }),
 
   http.get(`${API}/leads/:id/calendar-events`, ({ params }) => {
+    const planDenied = denyUnlessFeature("agenda");
+    if (planDenied) return planDenied;
     if (!currentUser.permissions.includes("agenda:visualizar")) {
       return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
     }
@@ -472,24 +496,47 @@ export const handlers = [
       ownerId?: string;
       tags?: string[];
     };
+    if (!isDistributionStrategyAllowed(currentUser.subscription.planCode, body.strategy)) {
+      return HttpResponse.json(
+        { statusCode: 403, message: "Estratégia de distribuição não disponível no plano da empresa" },
+        { status: 403 },
+      );
+    }
     const affected = distributeLeadsInStore(body);
     return HttpResponse.json({ ok: true, strategy: body.strategy, affected });
   }),
 
-  http.get(`${API}/distribution-settings`, () => HttpResponse.json({ ...distributionSettings })),
+  http.get(`${API}/distribution-settings`, () => {
+    const planCode = currentUser.subscription.planCode;
+    const defaultStrategy = clampDistributionStrategy(planCode, distributionSettings.defaultStrategy);
+    return HttpResponse.json({ defaultStrategy });
+  }),
 
   http.patch(`${API}/distribution-settings`, async ({ request }) => {
     if (currentUser.role !== Role.Administrador && currentUser.role !== Role.Gestor) {
       return HttpResponse.json({ statusCode: 403, message: "Sem permissão" }, { status: 403 });
     }
-    const body = (await request.json()) as { defaultStrategy?: typeof distributionSettings.defaultStrategy };
+    const body = (await request.json()) as { defaultStrategy?: string };
     if (body.defaultStrategy) {
-      distributionSettings.defaultStrategy = body.defaultStrategy;
+      if (!isDistributionStrategyAllowed(currentUser.subscription.planCode, body.defaultStrategy)) {
+        return HttpResponse.json(
+          { statusCode: 403, message: "Estratégia de distribuição não disponível no plano da empresa" },
+          { status: 403 },
+        );
+      }
+      distributionSettings.defaultStrategy = body.defaultStrategy as typeof distributionSettings.defaultStrategy;
     }
-    return HttpResponse.json({ ...distributionSettings });
+    return HttpResponse.json({
+      defaultStrategy: clampDistributionStrategy(
+        currentUser.subscription.planCode,
+        distributionSettings.defaultStrategy,
+      ),
+    });
   }),
 
   http.get(`${API}/contracts`, ({ request }) => {
+    const planDenied = denyUnlessFeature("contracts");
+    if (planDenied) return planDenied;
     const url = new URL(request.url);
     const leadId = url.searchParams.get("leadId");
     const data = leadId ? mockContracts.filter((c) => c.leadId === leadId) : [...mockContracts];
@@ -497,6 +544,8 @@ export const handlers = [
   }),
 
   http.get(`${API}/contracts/:id`, ({ params }) => {
+    const planDenied = denyUnlessFeature("contracts");
+    if (planDenied) return planDenied;
     const id = String(params.id);
     if (id === "templates" || id === "new") {
       return HttpResponse.json({ statusCode: 404, message: "Contrato não encontrado" }, { status: 404 });
@@ -509,6 +558,8 @@ export const handlers = [
   }),
 
   http.post(`${API}/contracts`, async ({ request }) => {
+    const planDenied = denyUnlessFeature("contracts");
+    if (planDenied) return planDenied;
     const body = (await request.json()) as { leadId: string; templateId: string; value: number };
     const lead = mockLeads.find((l) => l.id === body.leadId);
     const template = mockTemplates.find((t) => t.id === body.templateId);
@@ -532,6 +583,8 @@ export const handlers = [
   }),
 
   http.patch(`${API}/contracts/:id`, async ({ params, request }) => {
+    const planDenied = denyUnlessFeature("contracts");
+    if (planDenied) return planDenied;
     const body = (await request.json()) as Partial<(typeof mockContracts)[number]>;
     const index = mockContracts.findIndex((c) => c.id === params.id);
     if (index < 0) return HttpResponse.json({ statusCode: 404, message: "Contrato não encontrado" }, { status: 404 });
@@ -540,6 +593,8 @@ export const handlers = [
   }),
 
   http.post(`${API}/contracts/:id/generate-pdf`, ({ params }) => {
+    const planDenied = denyUnlessFeature("contracts");
+    if (planDenied) return planDenied;
     const index = mockContracts.findIndex((c) => c.id === params.id);
     if (index < 0) return HttpResponse.json({ statusCode: 404, message: "Contrato não encontrado" }, { status: 404 });
     const contract = mockContracts[index];
@@ -554,6 +609,8 @@ export const handlers = [
   }),
 
   http.post(`${API}/contracts/:id/sign`, async ({ params, request }) => {
+    const planDenied = denyUnlessFeature("contracts");
+    if (planDenied) return planDenied;
     const index = mockContracts.findIndex((c) => c.id === params.id);
     if (index < 0) return HttpResponse.json({ statusCode: 404, message: "Contrato não encontrado" }, { status: 404 });
     const body = (await request.json().catch(() => ({}))) as { signedDataUrl?: string; fileName?: string };
@@ -614,17 +671,23 @@ export const handlers = [
     return HttpResponse.json({ ok: true });
   }),
 
-  http.get(`${API}/payments`, () =>
-    HttpResponse.json({ data: mockPayments, total: mockPayments.length, page: 1, pageSize: 50 }),
-  ),
+  http.get(`${API}/payments`, () => {
+    const planDenied = denyUnlessFeature("financial");
+    if (planDenied) return planDenied;
+    return HttpResponse.json({ data: mockPayments, total: mockPayments.length, page: 1, pageSize: 50 });
+  }),
 
   http.get(`${API}/payments/:id`, ({ params }) => {
+    const planDenied = denyUnlessFeature("financial");
+    if (planDenied) return planDenied;
     const payment = mockPayments.find((p) => p.id === params.id);
     if (!payment) return HttpResponse.json({ statusCode: 404, message: "Pagamento não encontrado" }, { status: 404 });
     return HttpResponse.json(payment);
   }),
 
   http.patch(`${API}/payments/:id`, async ({ params, request }) => {
+    const planDenied = denyUnlessFeature("financial");
+    if (planDenied) return planDenied;
     const body = (await request.json()) as Partial<(typeof mockPayments)[number]>;
     const index = mockPayments.findIndex((p) => p.id === params.id);
     if (index < 0) return HttpResponse.json({ statusCode: 404, message: "Pagamento não encontrado" }, { status: 404 });
@@ -707,11 +770,21 @@ export const handlers = [
     return HttpResponse.json(mockPayments[index]);
   }),
 
-  http.get(`${API}/commissions`, () => HttpResponse.json({ data: mockCommissions })),
+  http.get(`${API}/commissions`, () => {
+    const planDenied = denyUnlessFeature("commissions");
+    if (planDenied) return planDenied;
+    return HttpResponse.json({ data: mockCommissions });
+  }),
 
-  http.get(`${API}/commission-rules`, () => HttpResponse.json({ data: mockCommissionRules })),
+  http.get(`${API}/commission-rules`, () => {
+    const planDenied = denyUnlessFeature("commissions");
+    if (planDenied) return planDenied;
+    return HttpResponse.json({ data: mockCommissionRules });
+  }),
 
   http.post(`${API}/commission-rules`, async ({ request }) => {
+    const planDenied = denyUnlessFeature("commissions");
+    if (planDenied) return planDenied;
     const body = (await request.json()) as Omit<CommissionRule, "id">;
     const rule = { ...body, id: `r-${Date.now()}` };
     if (rule.active) {
@@ -724,6 +797,8 @@ export const handlers = [
   }),
 
   http.patch(`${API}/commission-rules/:id`, async ({ params, request }) => {
+    const planDenied = denyUnlessFeature("commissions");
+    if (planDenied) return planDenied;
     const body = (await request.json()) as Partial<CommissionRule>;
     const index = mockCommissionRules.findIndex((r) => r.id === params.id);
     if (index < 0) return HttpResponse.json({ statusCode: 404, message: "Regra não encontrada" }, { status: 404 });
@@ -737,6 +812,8 @@ export const handlers = [
   }),
 
   http.delete(`${API}/commission-rules/:id`, ({ params }) => {
+    const planDenied = denyUnlessFeature("commissions");
+    if (planDenied) return planDenied;
     const index = mockCommissionRules.findIndex((r) => r.id === params.id);
     if (index < 0) return HttpResponse.json({ statusCode: 404, message: "Regra não encontrada" }, { status: 404 });
     mockCommissionRules.splice(index, 1);
@@ -830,24 +907,44 @@ export const handlers = [
     });
   }),
 
-  http.get(`${API}/users`, () =>
-    HttpResponse.json({
-      data: mockUsers.map((u) => {
+  http.get(`${API}/users`, () => {
+    const companyUsers = mockUsers.filter((u) => u.companyId === currentUser.companyId);
+    return HttpResponse.json({
+      data: companyUsers.map((u) => {
         const { password, ...rest } = u;
         void password;
         return rest;
       }),
-    }),
-  ),
+    });
+  }),
 
   http.post(`${API}/users`, async ({ request }) => {
     const body = (await request.json()) as Omit<AppUser, "id" | "password" | "mustChangePassword"> & {
       password?: string;
+      companyId?: string;
     };
+    const companyId = body.companyId || currentUser.companyId;
+    const status = body.status || "Ativo";
+    if (status === "Ativo") {
+      const activeCount = mockUsers.filter(
+        (u) => u.companyId === companyId && u.status === "Ativo",
+      ).length;
+      if (!canAddActiveUser(currentUser.features, activeCount)) {
+        return HttpResponse.json(
+          {
+            statusCode: 403,
+            message: "Limite de usuários do plano atingido. Faça upgrade para adicionar mais colaboradores.",
+          },
+          { status: 403 },
+        );
+      }
+    }
     const password = body.password || defaultPasswordFromName(body.name);
     const user: AppUser = {
       ...body,
       id: `u-${Date.now()}`,
+      companyId,
+      status,
       password,
       mustChangePassword: true,
     };
@@ -867,6 +964,22 @@ export const handlers = [
       const check = canDeactivateUser(id, currentUser.id);
       if (!check.ok) {
         return HttpResponse.json({ statusCode: 400, message: check.message }, { status: 400 });
+      }
+    }
+
+    const current = mockUsers[index];
+    if (body.status === "Ativo" && current.status !== "Ativo") {
+      const activeCount = mockUsers.filter(
+        (u) => u.companyId === current.companyId && u.status === "Ativo",
+      ).length;
+      if (!canAddActiveUser(currentUser.features, activeCount)) {
+        return HttpResponse.json(
+          {
+            statusCode: 403,
+            message: "Limite de usuários do plano atingido. Faça upgrade para reativar este colaborador.",
+          },
+          { status: 403 },
+        );
       }
     }
 
@@ -934,9 +1047,11 @@ export const handlers = [
       leads: scopedLeads
         .filter((l) => l.name.toLowerCase().includes(q) || l.cpf.includes(q) || l.email.toLowerCase().includes(q))
         .slice(0, 5),
-      contracts: mockContracts
-        .filter((c) => c.leadName.toLowerCase().includes(q) || c.id.includes(q))
-        .slice(0, 5),
+      contracts: hasFeature(currentUser.features, "contracts")
+        ? mockContracts
+            .filter((c) => c.leadName.toLowerCase().includes(q) || c.id.includes(q))
+            .slice(0, 5)
+        : [],
     });
   }),
 ];

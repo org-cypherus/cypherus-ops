@@ -6,6 +6,7 @@ import { GlobalSearchDialog } from "@/components/search/GlobalSearchDialog";
 import { NotificationsDrawer } from "@/components/notifications/NotificationsDrawer";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { ChangePasswordDialog } from "@/components/auth/ChangePasswordDialog";
+import { FeatureRouteGuard } from "@/components/auth/FeatureRouteGuard";
 import { Sidebar, TOPBAR_HEIGHT } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -36,7 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             flexDirection="column"
             p={{ xs: 2, md: 3 }}
           >
-            {children}
+            <FeatureRouteGuard>{children}</FeatureRouteGuard>
           </Box>
         </Box>
         <GlobalSearchDialog />

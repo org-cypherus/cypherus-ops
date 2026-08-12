@@ -22,29 +22,27 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import type { Permission } from "@/lib/auth/permissions";
+import { canAccess } from "@/lib/billing/access";
+import { APP_NAV_ROUTES } from "@/lib/billing/routes";
+import { Role } from "@/lib/auth/permissions";
 import { useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
 
 export const DRAWER_WIDTH = 248;
 export const TOPBAR_HEIGHT = 64;
 
-const items: Array<{
-  href: string;
-  label: string;
-  icon: ReactNode;
-  permission: Permission;
-}> = [
-  { href: "/dashboard", label: "Dashboard", icon: <DashboardOutlinedIcon />, permission: "dashboard:visualizar" },
-  { href: "/leads", label: "Leads", icon: <AccountTreeOutlinedIcon />, permission: "crm:visualizar" },
-  { href: "/calendar", label: "Agenda", icon: <CalendarMonthOutlinedIcon />, permission: "agenda:visualizar" },
-  { href: "/legal", label: "Jurídico", icon: <GavelOutlinedIcon />, permission: "contratos:editar" },
-  { href: "/contracts", label: "Contratos", icon: <DescriptionOutlinedIcon />, permission: "contratos:visualizar" },
-  { href: "/financial", label: "Financeiro", icon: <PaidOutlinedIcon />, permission: "financeiro:visualizar" },
-  { href: "/reports", label: "Relatórios", icon: <AssessmentOutlinedIcon />, permission: "relatorios:exportar" },
-  { href: "/admin/users", label: "Usuários", icon: <PeopleOutlineIcon />, permission: "admin:visualizar" },
-  { href: "/admin", label: "Administração", icon: <SettingsOutlinedIcon />, permission: "admin:visualizar" },
-];
+const icons: Record<string, ReactNode> = {
+  "/dashboard": <DashboardOutlinedIcon />,
+  "/dashboard/admin": <DashboardOutlinedIcon />,
+  "/leads": <AccountTreeOutlinedIcon />,
+  "/calendar": <CalendarMonthOutlinedIcon />,
+  "/legal": <GavelOutlinedIcon />,
+  "/contracts": <DescriptionOutlinedIcon />,
+  "/financial": <PaidOutlinedIcon />,
+  "/reports": <AssessmentOutlinedIcon />,
+  "/admin/users": <PeopleOutlineIcon />,
+  "/admin": <SettingsOutlinedIcon />,
+};
 
 const paperSx = {
   width: DRAWER_WIDTH,
@@ -56,8 +54,20 @@ const paperSx = {
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { data: user } = useSession();
-  const permissions = user?.permissions ?? [];
-  const visibleItems = items.filter((item) => permissions.includes(item.permission));
+  const adminUsesAdminDash =
+    user?.role === Role.Administrador &&
+    canAccess(user?.features, user?.permissions, "dashboard_advanced", "dashboard:visualizar");
+
+  const visibleItems = APP_NAV_ROUTES.filter((item) => {
+    if (item.feature) {
+      return canAccess(user?.features, user?.permissions, item.feature, item.permission);
+    }
+    return Boolean(user?.permissions.includes(item.permission));
+  }).map((item) =>
+    item.href === "/dashboard" && adminUsesAdminDash
+      ? { ...item, href: "/dashboard/admin", label: "Dashboard" }
+      : item,
+  );
 
   return (
     <>
@@ -75,10 +85,14 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
         {visibleItems.map((item) => {
           const selected =
             pathname === item.href ||
-            (item.href !== "/admin" && pathname.startsWith(item.href)) ||
+            (item.href === "/dashboard/admin" && pathname.startsWith("/dashboard")) ||
+            (item.href !== "/admin" &&
+              item.href !== "/dashboard/admin" &&
+              pathname.startsWith(item.href)) ||
             (item.href === "/admin" &&
               pathname.startsWith("/admin") &&
-              !pathname.startsWith("/admin/users"));
+              !pathname.startsWith("/admin/users") &&
+              !pathname.startsWith("/admin/enterprise"));
           return (
             <ListItemButton
               key={item.href}
@@ -97,7 +111,9 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
                 "&:hover": { backgroundColor: "rgba(255,255,255,0.08)" },
               }}
             >
-              <ListItemIcon sx={{ color: "inherit", minWidth: 40 }}>{item.icon}</ListItemIcon>
+              <ListItemIcon sx={{ color: "inherit", minWidth: 40 }}>
+                {icons[item.href] ?? icons["/dashboard"]}
+              </ListItemIcon>
               <ListItemText primary={item.label} />
             </ListItemButton>
           );
@@ -113,7 +129,6 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile / tablet: temporary drawer */}
       <Drawer
         variant="temporary"
         open={sidebarOpen}
@@ -127,7 +142,6 @@ export function Sidebar() {
         <NavList onNavigate={() => setSidebarOpen(false)} />
       </Drawer>
 
-      {/* Desktop: permanent sidebar */}
       <Drawer
         variant="permanent"
         open

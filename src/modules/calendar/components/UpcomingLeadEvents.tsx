@@ -24,7 +24,7 @@ type Props = {
 };
 
 export function UpcomingLeadEvents({ leadId, onSchedule, canCreate }: Props) {
-  const { data, isLoading } = useLeadCalendarEvents(leadId);
+  const { data, isLoading } = useLeadCalendarEvents(leadId, true);
   const upcoming = (data || [])
     .filter((event) => event.status === "agendado")
     .slice(0, 5);

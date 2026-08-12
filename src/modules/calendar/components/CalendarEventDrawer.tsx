@@ -26,7 +26,7 @@ import { Controller, useForm } from "react-hook-form";
 import { api } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
 import { queryKeys } from "@/lib/query/keys";
-import { usePermission, useSession } from "@/modules/auth/hooks";
+import { useCanAccess, useSession } from "@/modules/auth/hooks";
 import {
   useCancelCalendarEvent,
   useCompleteCalendarEvent,
@@ -69,9 +69,9 @@ export function CalendarEventDrawer({
 }: Props) {
   const { enqueueSnackbar } = useSnackbar();
   const { data: session } = useSession();
-  const canEdit = usePermission("agenda:editar");
-  const canCreate = usePermission("agenda:criar");
-  const canDelete = usePermission("agenda:excluir") || canEdit;
+  const canEdit = useCanAccess("agenda", "agenda:editar");
+  const canCreate = useCanAccess("agenda", "agenda:criar");
+  const canDelete = useCanAccess("agenda", "agenda:excluir") || canEdit;
   const isComercial = session?.role === Role.Comercial;
 
   const createEvent = useCreateCalendarEvent();

@@ -47,11 +47,11 @@ export function useCalendarEvent(id: string) {
   });
 }
 
-export function useLeadCalendarEvents(leadId: string) {
+export function useLeadCalendarEvents(leadId: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.calendar.byLead(leadId),
     queryFn: () => fetchLeadCalendarEvents(leadId),
-    enabled: Boolean(leadId),
+    enabled: Boolean(leadId) && enabled,
   });
 }
 

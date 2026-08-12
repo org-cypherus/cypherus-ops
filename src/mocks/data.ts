@@ -1,5 +1,7 @@
 import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
 import { ROLE_PERMISSIONS } from "@/lib/auth/permissions";
+import { resolveFeatures } from "@/lib/billing/access";
+import type { CompanySummary, PlanCode, SubscriptionStatus } from "@/lib/billing/types";
 import type { SessionUser } from "@/lib/auth/session";
 import { defaultPasswordFromName } from "@/lib/utils/password";
 import type { CalendarEvent } from "@/modules/calendar/types";
@@ -76,9 +78,22 @@ export type AppUser = {
   role: RoleName;
   team: string;
   status: "Ativo" | "Inativo";
+  companyId: string;
   /** Senha mock (padrão: último sobrenome + ano atual) */
   password: string;
   mustChangePassword: boolean;
+};
+
+export type MockCompany = CompanySummary & {
+  legalName: string;
+  document: string;
+};
+
+export type MockSubscription = {
+  id: string;
+  companyId: string;
+  planCode: PlanCode;
+  status: SubscriptionStatus;
 };
 
 export type NotificationItem = {
@@ -107,6 +122,57 @@ function daysAgo(n: number) {
 
 /** Contas demo do MVP prévio — senha única para facilitar a call com o cliente */
 export const DEMO_PASSWORD = "123456";
+
+export const COMPANY_IDS = {
+  enterprise: "co-enterprise",
+  professional: "co-professional",
+  essential: "co-essential",
+} as const;
+
+export const mockCompanies: MockCompany[] = [
+  {
+    id: COMPANY_IDS.enterprise,
+    name: "Cypher Ops Demo Enterprise",
+    legalName: "Cypher Ops Demo Enterprise LTDA",
+    document: "04.252.011/0001-10",
+    status: "ACTIVE",
+  },
+  {
+    id: COMPANY_IDS.professional,
+    name: "Cypher Ops Demo Pro",
+    legalName: "Cypher Ops Demo Pro LTDA",
+    document: "11.222.333/0001-81",
+    status: "ACTIVE",
+  },
+  {
+    id: COMPANY_IDS.essential,
+    name: "Cypher Ops Demo Essencial",
+    legalName: "Cypher Ops Demo Essencial LTDA",
+    document: "22.333.444/0001-55",
+    status: "ACTIVE",
+  },
+];
+
+export const mockSubscriptions: MockSubscription[] = [
+  {
+    id: "sub-enterprise",
+    companyId: COMPANY_IDS.enterprise,
+    planCode: "ENTERPRISE",
+    status: "ACTIVE",
+  },
+  {
+    id: "sub-professional",
+    companyId: COMPANY_IDS.professional,
+    planCode: "PROFESSIONAL",
+    status: "ACTIVE",
+  },
+  {
+    id: "sub-essential",
+    companyId: COMPANY_IDS.essential,
+    planCode: "ESSENTIAL",
+    status: "TRIAL",
+  },
+];
 
 export const DEMO_ACCOUNTS = [
   {
@@ -141,6 +207,7 @@ export const mockUsers: AppUser[] = [
     role: Role.Administrador,
     team: "Operações",
     status: "Ativo",
+    companyId: COMPANY_IDS.enterprise,
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
@@ -152,6 +219,7 @@ export const mockUsers: AppUser[] = [
     role: Role.Comercial,
     team: "Vendas",
     status: "Ativo",
+    companyId: COMPANY_IDS.professional,
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
@@ -163,6 +231,7 @@ export const mockUsers: AppUser[] = [
     role: Role.Gestor,
     team: "Vendas",
     status: "Ativo",
+    companyId: COMPANY_IDS.essential,
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
@@ -174,6 +243,7 @@ export const mockUsers: AppUser[] = [
     role: Role.Financeiro,
     team: "Financeiro",
     status: "Ativo",
+    companyId: COMPANY_IDS.essential,
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
@@ -185,21 +255,11 @@ export const mockUsers: AppUser[] = [
     role: Role.Jurídico,
     team: "Jurídico",
     status: "Ativo",
+    companyId: COMPANY_IDS.professional,
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
 ];
-
-export const currentUser: SessionUser = {
-  id: "u1",
-  name: "Ana Souza",
-  email: "ana@cypherops.com",
-  phone: "(11) 98888-1001",
-  role: Role.Administrador,
-  team: "Operações",
-  permissions: [...ROLE_PERMISSIONS[Role.Administrador]],
-  mustChangePassword: false,
-};
 
 export const mockRolePermissions: Record<RoleName, Permission[]> = {
   [Role.Administrador]: [...ROLE_PERMISSIONS[Role.Administrador]],
@@ -209,14 +269,58 @@ export const mockRolePermissions: Record<RoleName, Permission[]> = {
   [Role.Jurídico]: [...ROLE_PERMISSIONS[Role.Jurídico]],
 };
 
-export const generatedPdfs = new Map<string, StoredFile>();
+export function getCompanyById(companyId: string) {
+  return mockCompanies.find((company) => company.id === companyId);
+}
 
-let roundRobinIndex = 0;
+export function getSubscriptionByCompanyId(companyId: string) {
+  return mockSubscriptions.find((subscription) => subscription.companyId === companyId);
+}
+
+/** Resolve User → Company → Subscription → features do catálogo (tier da empresa). */
+export function buildSessionUser(user: AppUser): SessionUser {
+  const company = getCompanyById(user.companyId);
+  const subscription = getSubscriptionByCompanyId(user.companyId);
+  if (!company || !subscription) {
+    throw new Error(`Company/subscription missing for user ${user.id}`);
+  }
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    team: user.team,
+    permissions: [...(mockRolePermissions[user.role] ?? ROLE_PERMISSIONS[user.role])],
+    mustChangePassword: user.mustChangePassword,
+    companyId: company.id,
+    company: {
+      id: company.id,
+      name: company.name,
+      status: company.status,
+    },
+    subscription: {
+      planCode: subscription.planCode,
+      status: subscription.status,
+    },
+    features: resolveFeatures(subscription.planCode),
+  };
+}
+
+export let currentUser: SessionUser = buildSessionUser(mockUsers[0]);
+
+export const generatedPdfs = new Map<string, StoredFile>();let roundRobinIndex = 0;
 
 /** Regra padrão aplicada quando um lead novo entra sem responsável explícito */
 export const distributionSettings = {
-  /** Estratégias: round_robin | automatic | team */
-  defaultStrategy: "round_robin" as "round_robin" | "automatic" | "team",
+  /** Estratégias: manual | round_robin | automatic | team | redistribute */
+  defaultStrategy: "round_robin" as
+    | "manual"
+    | "round_robin"
+    | "automatic"
+    | "team"
+    | "redistribute",
 };
 
 export function commercialAssignees() {

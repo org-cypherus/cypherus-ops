@@ -25,7 +25,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
-import { formatCurrency, formatPercent } from "@/lib/utils/format";
+import { formatPercent } from "@/lib/utils/format";
+import { MoneyVisibilityToggle, useMoneyVisibility } from "@/modules/dashboard/MoneyVisibility";
 
 function periodFrom(value: string) {
   const days = Number(value);
@@ -40,6 +41,7 @@ export default function AdminDashboardPage() {
   const router = useRouter();
   const period = searchParams.get("period") || "30";
   const from = periodFrom(period);
+  const { moneyVisible, formatMoney, moneyAxisFormatter } = useMoneyVisibility();
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.dashboard.admin({ period }),
@@ -75,8 +77,8 @@ export default function AdminDashboardPage() {
   const kpis = [
     { label: "Leads recebidos", value: String(data.leadsReceived) },
     { label: "Conversão geral", value: formatPercent(data.conversion) },
-    { label: "Receita", value: formatCurrency(data.revenue) },
-    { label: "Ticket médio", value: formatCurrency(data.avgTicket) },
+    { label: "Receita", value: formatMoney(data.revenue) },
+    { label: "Ticket médio", value: formatMoney(data.avgTicket) },
     { label: "Tempo médio", value: `${data.avgCloseDays} dias` },
     { label: "Contratos assinados", value: String(data.signedContracts) },
     { label: "Contratos pendentes", value: String(data.pendingContracts) },
@@ -91,19 +93,22 @@ export default function AdminDashboardPage() {
             Visão macro da operação
           </Typography>
         </Box>
-        <TextField
-          select
-          size="small"
-          label="Período"
-          value={period}
-          onChange={(e) => router.push(`/dashboard/admin?period=${e.target.value}`)}
-          sx={{ minWidth: 140 }}
-        >
-          <MenuItem value="7">7 dias</MenuItem>
-          <MenuItem value="30">30 dias</MenuItem>
-          <MenuItem value="90">90 dias</MenuItem>
-          <MenuItem value="365">12 meses</MenuItem>
-        </TextField>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <MoneyVisibilityToggle />
+          <TextField
+            select
+            size="small"
+            label="Período"
+            value={period}
+            onChange={(e) => router.push(`/dashboard/admin?period=${e.target.value}`)}
+            sx={{ minWidth: 140 }}
+          >
+            <MenuItem value="7">7 dias</MenuItem>
+            <MenuItem value="30">30 dias</MenuItem>
+            <MenuItem value="90">90 dias</MenuItem>
+            <MenuItem value="365">12 meses</MenuItem>
+          </TextField>
+        </Stack>
       </Stack>
 
       <Grid container spacing={2}>
@@ -133,7 +138,14 @@ export default function AdminDashboardPage() {
               <BarChart
                 height={300}
                 xAxis={[{ data: data.monthlyRevenue.map((m) => m.month), scaleType: "band" }]}
-                series={[{ data: data.monthlyRevenue.map((m) => m.value), label: "Receita" }]}
+                yAxis={[{ valueFormatter: moneyAxisFormatter }]}
+                series={[
+                  {
+                    data: data.monthlyRevenue.map((m) => (moneyVisible ? m.value : 0)),
+                    label: "Receita",
+                    valueFormatter: (v) => formatMoney(Number(v ?? 0)),
+                  },
+                ]}
               />
             </CardContent>
           </Card>
@@ -178,7 +190,7 @@ export default function AdminDashboardPage() {
               <TableRow key={row.name}>
                 <TableCell>{row.name}</TableCell>
                 <TableCell>{formatPercent(row.conversion)}</TableCell>
-                <TableCell align="right">{formatCurrency(row.revenue)}</TableCell>
+                <TableCell align="right">{formatMoney(row.revenue)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
