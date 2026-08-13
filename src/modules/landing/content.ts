@@ -13,7 +13,10 @@ export const hero = {
   subtitle:
     "CRM, agenda, contratos, financeiro e administração em um só lugar — com planos sob medida para a operação da sua empresa.",
   primaryCta: { label: "Criar conta", href: "/signup" },
-  secondaryCta: { label: "Falar com vendas", href: "mailto:comercial@cypherops.com.br" },
+  secondaryCta: {
+    label: "Falar com vendas",
+    href: "mailto:comercial@cypherops.com.br",
+  },
 } as const;
 
 export const features = [
@@ -78,9 +81,13 @@ export const plans: Plan[] = [
   {
     id: "essencial",
     name: "Essencial",
-    price: "R$ 497",
+    price: "R$ 349,90",
     priceNote: "/mês",
-    cta: { label: "Começar no Essencial", href: "/signup?plan=essencial", variant: "outline" },
+    cta: {
+      label: "Começar no Essencial",
+      href: "/signup?plan=essencial",
+      variant: "outline",
+    },
     features: [
       "Até 5 usuários",
       "CRM + Pipeline Kanban",
@@ -96,11 +103,15 @@ export const plans: Plan[] = [
   {
     id: "profissional",
     name: "Profissional",
-    price: "R$ 797",
+    price: "R$ 449,90",
     priceNote: "/mês",
     highlight: true,
     badge: "Mais popular",
-    cta: { label: "Começar no Profissional", href: "/signup?plan=profissional", variant: "solid" },
+    cta: {
+      label: "Começar no Profissional",
+      href: "/signup?plan=profissional",
+      variant: "solid",
+    },
     features: [
       "Até 15 usuários",
       "Tudo do Essencial",
@@ -118,9 +129,13 @@ export const plans: Plan[] = [
   {
     id: "enterprise",
     name: "Enterprise",
-    price: "R$ 1.497",
+    price: "R$ 1.397,90",
     priceNote: "/mês",
-    cta: { label: "Falar com vendas", href: "mailto:comercial@cypherops.com.br", variant: "outline" },
+    cta: {
+      label: "Falar com vendas",
+      href: "mailto:comercial@cypherops.com.br",
+      variant: "outline",
+    },
     features: [
       "Usuários personalizados",
       "Tudo do Profissional",
@@ -141,23 +156,88 @@ export const proofPoints = [
   { value: String(plans.length), label: "Planos comerciais" },
 ] as const;
 
-export const comparisonRows: { feature: string; essencial: boolean; profissional: boolean; enterprise: boolean }[] = [
+export const comparisonRows: {
+  feature: string;
+  essencial: boolean;
+  profissional: boolean;
+  enterprise: boolean;
+}[] = [
   { feature: "CRM", essencial: true, profissional: true, enterprise: true },
   { feature: "Kanban", essencial: true, profissional: true, enterprise: true },
-  { feature: "Histórico de Leads", essencial: true, profissional: true, enterprise: true },
-  { feature: "Distribuição de Leads", essencial: true, profissional: true, enterprise: true },
-  { feature: "Dashboard Básico", essencial: true, profissional: true, enterprise: true },
-  { feature: "Dashboard Avançado", essencial: false, profissional: true, enterprise: true },
+  {
+    feature: "Histórico de Leads",
+    essencial: true,
+    profissional: true,
+    enterprise: true,
+  },
+  {
+    feature: "Distribuição de Leads",
+    essencial: true,
+    profissional: true,
+    enterprise: true,
+  },
+  {
+    feature: "Dashboard Básico",
+    essencial: true,
+    profissional: true,
+    enterprise: true,
+  },
+  {
+    feature: "Dashboard Avançado",
+    essencial: false,
+    profissional: true,
+    enterprise: true,
+  },
   { feature: "Agenda", essencial: false, profissional: true, enterprise: true },
-  { feature: "Contratos", essencial: false, profissional: true, enterprise: true },
-  { feature: "Financeiro", essencial: false, profissional: true, enterprise: true },
-  { feature: "Comissões", essencial: false, profissional: true, enterprise: true },
-  { feature: "Permissões Avançadas", essencial: false, profissional: true, enterprise: true },
+  {
+    feature: "Contratos",
+    essencial: false,
+    profissional: true,
+    enterprise: true,
+  },
+  {
+    feature: "Financeiro",
+    essencial: false,
+    profissional: true,
+    enterprise: true,
+  },
+  {
+    feature: "Comissões",
+    essencial: false,
+    profissional: true,
+    enterprise: true,
+  },
+  {
+    feature: "Permissões Avançadas",
+    essencial: false,
+    profissional: true,
+    enterprise: true,
+  },
   { feature: "API", essencial: false, profissional: false, enterprise: true },
-  { feature: "Webhooks", essencial: false, profissional: false, enterprise: true },
-  { feature: "Distribuição Avançada", essencial: false, profissional: false, enterprise: true },
-  { feature: "Dashboard Personalizado", essencial: false, profissional: false, enterprise: true },
-  { feature: "Personalizações", essencial: false, profissional: false, enterprise: true },
+  {
+    feature: "Webhooks",
+    essencial: false,
+    profissional: false,
+    enterprise: true,
+  },
+  {
+    feature: "Distribuição Avançada",
+    essencial: false,
+    profissional: false,
+    enterprise: true,
+  },
+  {
+    feature: "Dashboard Personalizado",
+    essencial: false,
+    profissional: false,
+    enterprise: true,
+  },
+  {
+    feature: "Personalizações",
+    essencial: false,
+    profissional: false,
+    enterprise: true,
+  },
 ];
 
 /** Opções do formulário de signup (preço/nome sincronizados com `plans`). */
@@ -182,7 +262,10 @@ export const signupPlanOptions = plans.map((plan) => ({
 }));
 
 export function findSignupPlanOption(code: string) {
-  return signupPlanOptions.find((option) => option.code === code) ?? signupPlanOptions[1];
+  return (
+    signupPlanOptions.find((option) => option.code === code) ??
+    signupPlanOptions[1]
+  );
 }
 
 export function findPlanById(id: PlanId) {
