@@ -3,6 +3,7 @@
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
+import EventAvailableOutlinedIcon from "@mui/icons-material/EventAvailableOutlined";
 import MeetingRoomOutlinedIcon from "@mui/icons-material/MeetingRoomOutlined";
 import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
 import VideocamOutlinedIcon from "@mui/icons-material/VideocamOutlined";
@@ -27,10 +28,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSnackbar } from "notistack";
 import { useRef, useState, type ReactNode } from "react";
+import { FeatureGate } from "@/components/auth/FeatureGate";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { downloadDataUrl, fileToDataUrl } from "@/lib/utils/download";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { ScheduleFromLeadDialog } from "@/modules/calendar/components/ScheduleFromLeadDialog";
+import { UpcomingLeadEvents } from "@/modules/calendar/components/UpcomingLeadEvents";
+import { useCanAccess } from "@/modules/auth/hooks";
 import {
   useAddAttachment,
   useAddTimelineEntry,
@@ -111,7 +116,6 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const addAttachment = useAddAttachment(lead.id);
   const removeAttachment = useRemoveAttachment(lead.id);
   const addTimeline = useAddTimelineEntry(lead.id);
-  const contracts = useLeadContracts(lead.id);
   const { enqueueSnackbar } = useSnackbar();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -120,9 +124,15 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const [draft, setDraft] = useState<Record<string, string | number>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [contactType, setContactType] =
     useState<TimelineContactType>("WhatsApp");
   const [contactNote, setContactNote] = useState("");
+  const canViewAgenda = useCanAccess("agenda", "agenda:visualizar");
+  const canSchedule = useCanAccess("agenda", "agenda:criar");
+  const canViewContracts = useCanAccess("contracts", "contratos:visualizar");
+  const canCreateContract = useCanAccess("contracts", "contratos:criar");
+  const contracts = useLeadContracts(lead.id, canViewContracts);
 
   function startEdit(
     section: SectionKey,
@@ -226,6 +236,15 @@ export function LeadDetail({ lead }: { lead: Lead }) {
               >
                 <EmailOutlinedIcon />
               </IconButton>
+              <FeatureGate feature="agenda" permission="agenda:criar">
+                <Button
+                  variant="outlined"
+                  startIcon={<EventAvailableOutlinedIcon />}
+                  onClick={() => setScheduleOpen(true)}
+                >
+                  Agendar retorno
+                </Button>
+              </FeatureGate>
               <TextField
                 select
                 size="small"
@@ -847,6 +866,13 @@ export function LeadDetail({ lead }: { lead: Lead }) {
 
         <Grid size={{ xs: 12, md: 4 }}>
           <Stack spacing={2}>
+            {canViewAgenda ? (
+              <UpcomingLeadEvents
+                leadId={lead.id}
+                canCreate={canSchedule}
+                onSchedule={() => setScheduleOpen(true)}
+              />
+            ) : null}
             <Card variant="outlined">
               <CardContent>
                 <Typography variant="h6" sx={{ mb: 1.5 }}>
@@ -1045,39 +1071,43 @@ export function LeadDetail({ lead }: { lead: Lead }) {
               </CardContent>
             </Card>
 
-            <Card variant="outlined">
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  Contratos vinculados
-                </Typography>
-                <Stack spacing={1} mb={1.5}>
-                  {(contracts.data || []).map((c) => (
+            {canViewContracts ? (
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 1 }}>
+                    Contratos vinculados
+                  </Typography>
+                  <Stack spacing={1} mb={1.5}>
+                    {(contracts.data || []).map((c) => (
+                      <Button
+                        key={c.id}
+                        component={Link}
+                        href={`/contracts/${c.id}`}
+                        size="small"
+                        sx={{ justifyContent: "flex-start" }}
+                      >
+                        {c.templateName} — {c.status}
+                      </Button>
+                    ))}
+                    {!contracts.data?.length ? (
+                      <Typography variant="body2" color="text.secondary">
+                        Nenhum contrato
+                      </Typography>
+                    ) : null}
+                  </Stack>
+                  {canCreateContract ? (
                     <Button
-                      key={c.id}
                       component={Link}
-                      href={`/contracts/${c.id}`}
+                      href={`/contracts/new?leadId=${lead.id}`}
                       size="small"
-                      sx={{ justifyContent: "flex-start" }}
+                      variant="contained"
                     >
-                      {c.templateName} — {c.status}
+                      Gerar contrato
                     </Button>
-                  ))}
-                  {!contracts.data?.length ? (
-                    <Typography variant="body2" color="text.secondary">
-                      Nenhum contrato
-                    </Typography>
                   ) : null}
-                </Stack>
-                <Button
-                  component={Link}
-                  href={`/contracts/new?leadId=${lead.id}`}
-                  size="small"
-                  variant="contained"
-                >
-                  Gerar contrato
-                </Button>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            ) : null}
           </Stack>
         </Grid>
       </Grid>
@@ -1098,6 +1128,16 @@ export function LeadDetail({ lead }: { lead: Lead }) {
           })
         }
       />
+
+      {canSchedule ? (
+        <ScheduleFromLeadDialog
+          open={scheduleOpen}
+          onClose={() => setScheduleOpen(false)}
+          leadId={lead.id}
+          leadName={lead.name}
+          defaultOwnerId={lead.ownerId}
+        />
+      ) : null}
     </Stack>
   );
 }

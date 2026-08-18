@@ -13,6 +13,12 @@ export const queryKeys = {
     templates: ["contracts", "templates"] as const,
   },
   legalKanban: ["legal", "kanban"] as const,
+  calendar: {
+    all: ["calendar"] as const,
+    list: (params?: Record<string, unknown>) => ["calendar", "list", params] as const,
+    detail: (id: string) => ["calendar", "detail", id] as const,
+    byLead: (leadId: string) => ["calendar", "lead", leadId] as const,
+  },
   payments: {
     all: ["payments"] as const,
     list: (params?: Record<string, unknown>) => ["payments", "list", params] as const,

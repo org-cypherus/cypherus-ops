@@ -224,6 +224,8 @@ Plano B → 20%
 
 **CRM**: visualizar, criar, editar, excluir
 
+**Agenda**: visualizar, criar, editar, excluir
+
 **Financeiro**: visualizar, editar
 
 **Dashboard**: visualizar
@@ -238,6 +240,31 @@ Plano B → 20%
 
 ---
 
+## Assinatura, planos e entitlements
+
+O acesso a módulos e limites **não** depende só do cargo: depende do **plano da empresa** (Company → Subscription) **e** das permissions do usuário.
+
+Modelo canônico e ADR: [`decisions/ADR-006-entitlements.md`](./decisions/ADR-006-entitlements.md).
+
+### Planos
+
+| Plano | `planCode` | Destaques |
+|---|---|---|
+| Essencial | `ESSENTIAL` | CRM + Kanban + histórico; distribuição manual; dashboard básico; até 5 usuários |
+| Profissional | `PROFESSIONAL` | + Agenda, Contratos, Financeiro/Comissões, distribuição automática, dashboard avançado, permissões granulares; até 15 usuários |
+| Enterprise | `ENTERPRISE` | + distribuição avançada, dashboard personalizado, API/webhooks/personalizações; usuários ilimitados |
+
+### Regras
+
+- O tier é da **Company**; todos os usuários vinculados compartilham as mesmas features/limites.
+- Visão efetiva do usuário = **feature do plano ∩ permission do cargo**.
+- Exemplo: company no Essencial → ninguém vê Agenda, mesmo com `agenda:visualizar`. Company no Pro + perfil Financeiro → Agenda existe no plano, mas só quem tiver a permission acessa.
+- Convite/criação de usuário ativo deve respeitar `max_users` do plano.
+- Estratégias de distribuição e variantes de dashboard seguem o tier (ver módulos CRM / Admin / Dashboard).
+- URL direta a módulo fora do plano mostra **upsell**; falta só de cargo mostra **sem permissão** (mensagens distintas).
+
+---
+
 ## Notificações
 
 Eventos que devem gerar notificação:
@@ -247,6 +274,43 @@ Eventos que devem gerar notificação:
 - Pagamento confirmado
 - Lead parado (sem movimentação por X dias)
 - Meta atingida
+- **Retornos do dia (Agenda)**: ao logar (ou no polling de notificações), se o usuário tiver um ou mais `CalendarEvent` com status `agendado` cujo `startsAt`/`remindAt` caia no dia local corrente
+- Evento de agenda atribuído a outro usuário (Gestor/Admin)
+- Remarcação material de evento (mudança de data/hora) para o responsável
+
+### Regras de notificação da Agenda
+
+- 1 evento pendente no dia → notificação específica com link para o Lead (quando houver `leadId`) ou para o evento.
+- 2+ eventos pendentes no dia → notificação agregada (“Você tem N retornos hoje”) com link para `/calendar?date=hoje`.
+- Geração **idempotente** por usuário + data (não spammar a cada refresh).
+- Eventos `concluido` ou `cancelado` não entram na contagem.
+
+Detalhamento completo: [`modules/calendar.md`](./modules/calendar.md).
+
+---
+
+## Agenda (Calendário / Retornos)
+
+Módulo V2 para Comercial e Jurídico agendarem retornos e compromissos vinculados a Leads.
+
+### Entidade `CalendarEvent` (resumo)
+
+- Tipos: `retorno` | `reuniao` | `outro`
+- Status: `agendado` | `concluido` | `cancelado`
+- Campos principais: título, descrição, `startsAt`, `endsAt`, `allDay`, `leadId`, `assigneeId`, `remindAt`
+- `type = retorno` exige `leadId`
+
+### Regras
+
+- CTA **Agendar retorno** na tela do Lead cria o evento e registra na Timeline.
+- O responsável (`assigneeId`) vê o evento na grade `/calendar` e recebe notificação no dia.
+- Comercial: apenas eventos próprios / leads próprios. Jurídico: leads do pipeline jurídico acessíveis. Gestor/Admin: equipe / todos.
+- Concluir ou cancelar atualiza status, Timeline do Lead e remove o item das pendências do dia.
+- Sync com Google/Outlook fica fora desta entrega.
+
+Permissões: `agenda:visualizar`, `agenda:criar`, `agenda:editar`, `agenda:excluir`.
+
+Spec: [`modules/calendar.md`](./modules/calendar.md). ADR: [`decisions/ADR-005-calendar-ui.md`](./decisions/ADR-005-calendar-ui.md).
 
 ---
 

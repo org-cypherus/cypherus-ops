@@ -41,3 +41,7 @@ GET /reports/export
 ## Permissões (RBAC)
 
 - `relatorios:exportar`
+
+## Entitlements (plano)
+
+Feature `dashboard_advanced` — Relatórios a partir do **Profissional**. Ver [`ADR-006`](../decisions/ADR-006-entitlements.md).

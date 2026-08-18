@@ -26,6 +26,7 @@ import { queryKeys } from "@/lib/query/keys";
 
 const modules = [
   { key: "crm", label: "CRM / Leads", actions: ["visualizar", "criar", "editar", "excluir"] },
+  { key: "agenda", label: "Agenda", actions: ["visualizar", "criar", "editar", "excluir"] },
   { key: "contratos", label: "Contratos", actions: ["visualizar", "criar", "editar"] },
   { key: "financeiro", label: "Financeiro", actions: ["visualizar", "editar"] },
   { key: "dashboard", label: "Dashboard", actions: ["visualizar"] },

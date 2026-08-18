@@ -35,10 +35,12 @@ import { useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { FeatureGate } from "@/components/auth/FeatureGate";
 import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
 import { formatCommissionRuleLabel } from "@/lib/utils/commission";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { useFeature } from "@/modules/auth/hooks";
 
 type Payment = {
   id: string;
@@ -72,6 +74,7 @@ export default function FinancialPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
+  const commissionsEnabled = useFeature("commissions").enabled;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [ruleOpen, setRuleOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
@@ -105,6 +108,7 @@ export default function FinancialPage() {
       }>("/commissions");
       return data.data;
     },
+    enabled: commissionsEnabled,
   });
 
   const rules = useQuery({
@@ -113,8 +117,8 @@ export default function FinancialPage() {
       const { data } = await api.get<{ data: CommissionRule[] }>("/commission-rules");
       return data.data;
     },
+    enabled: commissionsEnabled,
   });
-
   const selected = payments.data?.find((p) => p.id === selectedId) || null;
 
   const confirmPayment = useMutation({
@@ -185,9 +189,11 @@ export default function FinancialPage() {
         {[
           { label: "Receita recebida", value: formatCurrency(received) },
           { label: "Pendências", value: formatCurrency(pending) },
-          { label: "Comissões a pagar", value: formatCurrency(commissionsTotal) },
+          ...(commissionsEnabled
+            ? [{ label: "Comissões a pagar", value: formatCurrency(commissionsTotal) }]
+            : []),
         ].map((kpi) => (
-          <Grid key={kpi.label} size={{ xs: 12, md: 4 }}>
+          <Grid key={kpi.label} size={{ xs: 12, md: commissionsEnabled ? 4 : 6 }}>
             <Card variant="outlined">
               <CardContent>
                 <Typography variant="body2" color="text.secondary">
@@ -203,7 +209,7 @@ export default function FinancialPage() {
       </Grid>
 
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 8 }}>
+        <Grid size={{ xs: 12, md: commissionsEnabled ? 8 : 12 }}>
           <TableContainer component={Paper} variant="outlined">
             <Typography variant="h6" sx={{ p: 2 }}>
               Pagamentos
@@ -238,44 +244,47 @@ export default function FinancialPage() {
             </Table>
           </TableContainer>
         </Grid>
-        <Grid size={{ xs: 12, md: 4 }}>
+        <Grid size={{ xs: 12, md: commissionsEnabled ? 4 : 12 }}>
           <Stack spacing={2}>
-            <Card variant="outlined">
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  Comissões
-                </Typography>
-                {(commissions.data || []).map((item) => (
-                  <Stack key={item.id} direction="row" justifyContent="space-between" mb={1}>
-                    <Typography variant="body2">{item.userName}</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {formatCurrency(item.amount)}
-                    </Typography>
+            <FeatureGate feature="commissions">
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 1 }}>
+                    Comissões
+                  </Typography>
+                  {(commissions.data || []).map((item) => (
+                    <Stack key={item.id} direction="row" justifyContent="space-between" mb={1}>
+                      <Typography variant="body2">{item.userName}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {formatCurrency(item.amount)}
+                      </Typography>
+                    </Stack>
+                  ))}
+                </CardContent>
+              </Card>
+            </FeatureGate>
+            <FeatureGate feature="commissions" permission="financeiro:editar">
+              <Card variant="outlined">
+                <CardContent>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+                    <Typography variant="h6">Regras de comissão</Typography>
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        setEditingRule(null);
+                        setRuleForm({
+                          plan: "Meta mínima 10k",
+                          type: "percentual_meta",
+                          value: 10,
+                          threshold: 10000,
+                          active: false,
+                        });
+                        setRuleOpen(true);
+                      }}
+                    >
+                      Adicionar
+                    </Button>
                   </Stack>
-                ))}
-              </CardContent>
-            </Card>
-            <Card variant="outlined">
-              <CardContent>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-                  <Typography variant="h6">Regras de comissão</Typography>
-                  <Button
-                    size="small"
-                    onClick={() => {
-                      setEditingRule(null);
-                      setRuleForm({
-                        plan: "Meta mínima 10k",
-                        type: "percentual_meta",
-                        value: 10,
-                        threshold: 10000,
-                        active: false,
-                      });
-                      setRuleOpen(true);
-                    }}
-                  >
-                    Adicionar
-                  </Button>
-                </Stack>
                 <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                   Vigente: soma as vendas do período; ao bater a meta mínima, % sobre o total
                   acumulado (ex.: 3k+2k+6k=11k → 10% de 11k).
@@ -322,6 +331,7 @@ export default function FinancialPage() {
                 ))}
               </CardContent>
             </Card>
+            </FeatureGate>
           </Stack>
         </Grid>
       </Grid>
@@ -338,9 +348,11 @@ export default function FinancialPage() {
               {selected.paidAt ? (
                 <Typography variant="body2">Recebido em: {formatDate(selected.paidAt)}</Typography>
               ) : null}
-              <Button component={Link} href={`/contracts/${selected.contractId}`} size="small">
-                Ver contrato
-              </Button>
+              <FeatureGate feature="contracts" permission="contratos:visualizar">
+                <Button component={Link} href={`/contracts/${selected.contractId}`} size="small">
+                  Ver contrato
+                </Button>
+              </FeatureGate>
               {selected.leadId ? (
                 <Button component={Link} href={`/leads/${selected.leadId}`} size="small">
                   Ver lead

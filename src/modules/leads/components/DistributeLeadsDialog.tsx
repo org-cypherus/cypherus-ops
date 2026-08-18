@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -15,20 +16,16 @@ import {
   Typography,
 } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useSnackbar } from "notistack";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
+import { distributionStrategyOptions, type DistributionStrategy } from "@/lib/billing/distribution";
+import { planLabel } from "@/lib/billing/plan-catalog";
 import { queryKeys } from "@/lib/query/keys";
+import { useCompanyPlan } from "@/modules/auth/hooks";
 import { useDistributeLeads } from "../hooks";
-
-const strategies = [
-  { value: "manual", label: "Manual" },
-  { value: "round_robin", label: "Round Robin" },
-  { value: "team", label: "Distribuição por equipe" },
-  { value: "automatic", label: "Distribuição automática" },
-  { value: "redistribute", label: "Redistribuição (leads parados)" },
-];
 
 type Props = {
   open: boolean;
@@ -37,7 +34,9 @@ type Props = {
 };
 
 export function DistributeLeadsDialog({ open, onClose, leadIds }: Props) {
-  const [strategy, setStrategy] = useState("round_robin");
+  const { planCode } = useCompanyPlan();
+  const strategies = distributionStrategyOptions(planCode);
+  const [strategy, setStrategy] = useState<DistributionStrategy>(strategies[0]?.value ?? "manual");
   const [ownerId, setOwnerId] = useState("");
   const distribute = useDistributeLeads();
   const { enqueueSnackbar } = useSnackbar();
@@ -49,6 +48,15 @@ export function DistributeLeadsDialog({ open, onClose, leadIds }: Props) {
     },
   });
 
+  useEffect(() => {
+    const allowed = distributionStrategyOptions(planCode).map((item) => item.value);
+    if (!allowed.includes(strategy)) {
+      setStrategy(allowed[0] ?? "manual");
+    }
+  }, [planCode, strategy]);
+
+  const showsAdvancedUpsell = planCode === "ESSENTIAL" || planCode === "PROFESSIONAL";
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Distribuição de Leads</DialogTitle>
@@ -58,8 +66,21 @@ export function DistributeLeadsDialog({ open, onClose, leadIds }: Props) {
             ? `${leadIds.length} lead(s) selecionado(s).`
             : "Aplica a todos os leads elegíveis conforme a estratégia."}
         </Typography>
-        <RadioGroup value={strategy} onChange={(e) => setStrategy(e.target.value)}>
-          <Stack>
+        {showsAdvancedUpsell ? (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {planCode === "ESSENTIAL"
+              ? `No plano ${planLabel("ESSENTIAL")} a distribuição é manual/Round Robin. Automática e por equipe no ${planLabel("PROFESSIONAL")}.`
+              : `Redistribuição avançada de leads parados disponível no ${planLabel("ENTERPRISE")}.`}
+            {" "}
+            <Button component={Link} href="/#pricing" size="small" sx={{ ml: 0.5 }}>
+              Ver planos
+            </Button>
+          </Alert>
+        ) : null}
+        <RadioGroup
+          value={strategy}
+          onChange={(e) => setStrategy(e.target.value as DistributionStrategy)}
+        >          <Stack>
             {strategies.map((item) => (
               <FormControlLabel
                 key={item.value}
@@ -99,6 +120,12 @@ export function DistributeLeadsDialog({ open, onClose, leadIds }: Props) {
                 onSuccess: (res) => {
                   enqueueSnackbar(`${res.affected} leads processados`, { variant: "success" });
                   onClose();
+                },
+                onError: (err: unknown) => {
+                  const message =
+                    (err as { response?: { data?: { message?: string } } })?.response?.data
+                      ?.message || "Falha ao distribuir";
+                  enqueueSnackbar(message, { variant: "error" });
                 },
               },
             )

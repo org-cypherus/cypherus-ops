@@ -65,3 +65,9 @@ PATCH /payments/:id
 - `financeiro:editar`
 
 Perfil Financeiro tem acesso completo; demais perfis (exceto Administrador) não visualizam por padrão.
+
+## Entitlements (plano)
+
+- Feature `financial` — **Profissional e Enterprise** (módulo `/financial`).
+- Feature `commissions` — painel e regras de comissão (mesmo tier no catálogo atual).
+- Ver [`ADR-006`](../decisions/ADR-006-entitlements.md).

@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { FeatureGate } from "@/components/auth/FeatureGate";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { queryKeys } from "@/lib/query/keys";
 import { fetchContracts } from "@/modules/contracts/services";
@@ -41,12 +42,16 @@ export default function ContractsPage() {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
-          <Button component={Link} href="/contracts/templates" variant="outlined">
-            Modelos
-          </Button>
-          <Button component={Link} href="/contracts/new" variant="contained">
-            Novo contrato
-          </Button>
+          <FeatureGate feature="contracts" permission="contratos:editar">
+            <Button component={Link} href="/contracts/templates" variant="outlined">
+              Modelos
+            </Button>
+          </FeatureGate>
+          <FeatureGate feature="contracts" permission="contratos:criar">
+            <Button component={Link} href="/contracts/new" variant="contained">
+              Novo contrato
+            </Button>
+          </FeatureGate>
         </Stack>
       </Stack>
 

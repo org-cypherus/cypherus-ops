@@ -1,13 +1,40 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildSessionUser,
   createLead,
   deleteLead,
   distributeLeadsInStore,
   filterLeads,
   mockCommissionRules,
   mockLeads,
+  mockUsers,
   patchLead,
 } from "@/mocks/data";
+
+describe("buildSessionUser (company tier)", () => {
+  it("gives two users in the same company the same planCode and features", () => {
+    const bruno = mockUsers.find((u) => u.email === "bruno@cypherops.com")!;
+    const elena = mockUsers.find((u) => u.email === "elena@cypherops.com")!;
+    expect(bruno.companyId).toBe(elena.companyId);
+
+    const sessionBruno = buildSessionUser(bruno);
+    const sessionElena = buildSessionUser(elena);
+
+    expect(sessionBruno.subscription.planCode).toBe("PROFESSIONAL");
+    expect(sessionElena.subscription.planCode).toBe("PROFESSIONAL");
+    expect(sessionBruno.features).toEqual(sessionElena.features);
+    expect(sessionBruno.role).not.toBe(sessionElena.role);
+  });
+
+  it("resolves different tiers per company", () => {
+    const ana = buildSessionUser(mockUsers.find((u) => u.email === "ana@cypherops.com")!);
+    const carla = buildSessionUser(mockUsers.find((u) => u.email === "carla@cypherops.com")!);
+    expect(ana.subscription.planCode).toBe("ENTERPRISE");
+    expect(carla.subscription.planCode).toBe("ESSENTIAL");
+    expect(ana.features.agenda?.enabled).toBe(true);
+    expect(carla.features.agenda?.enabled).toBe(false);
+  });
+});
 
 describe("mock store mutations", () => {
   it("creates, patches and deletes a lead", () => {

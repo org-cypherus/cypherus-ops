@@ -24,6 +24,8 @@ type NotificationItem = {
   createdAt: string;
   read: boolean;
   href?: string;
+  kind?: string;
+  meta?: { eventIds?: string[]; leadId?: string; date?: string };
 };
 
 export function NotificationsDrawer() {
@@ -38,7 +40,6 @@ export function NotificationsDrawer() {
       const { data } = await api.get<{ data: NotificationItem[] }>("/notifications");
       return data.data;
     },
-    enabled: open,
   });
 
   const markRead = useMutation({

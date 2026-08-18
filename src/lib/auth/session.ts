@@ -1,3 +1,4 @@
+import type { CompanySummary, ResolvedFeatures, SubscriptionSummary } from "@/lib/billing/types";
 import type { Permission, RoleName } from "./permissions";
 
 export type SessionUser = {
@@ -10,6 +11,10 @@ export type SessionUser = {
   permissions: Permission[];
   avatarUrl?: string;
   mustChangePassword?: boolean;
+  companyId: string;
+  company: CompanySummary;
+  subscription: SubscriptionSummary;
+  features: ResolvedFeatures;
 };
 
 const ACCESS_KEY = "cypher_ops_access_token";

@@ -1,7 +1,14 @@
 import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
 import { ROLE_PERMISSIONS } from "@/lib/auth/permissions";
+import { resolveFeatures } from "@/lib/billing/access";
+import type {
+  CompanySummary,
+  PlanCode,
+  SubscriptionStatus,
+} from "@/lib/billing/types";
 import type { SessionUser } from "@/lib/auth/session";
 import { defaultPasswordFromName } from "@/lib/utils/password";
+import type { CalendarEvent } from "@/modules/calendar/types";
 import type {
   Attachment,
   Lead,
@@ -75,9 +82,22 @@ export type AppUser = {
   role: RoleName;
   team: string;
   status: "Ativo" | "Inativo";
+  companyId: string;
   /** Senha mock (padrão: último sobrenome + ano atual) */
   password: string;
   mustChangePassword: boolean;
+};
+
+export type MockCompany = CompanySummary & {
+  legalName: string;
+  document: string;
+};
+
+export type MockSubscription = {
+  id: string;
+  companyId: string;
+  planCode: PlanCode;
+  status: SubscriptionStatus;
 };
 
 export type NotificationItem = {
@@ -87,6 +107,8 @@ export type NotificationItem = {
   createdAt: string;
   read: boolean;
   href?: string;
+  kind?: string;
+  meta?: { eventIds?: string[]; leadId?: string; date?: string };
 };
 
 export type StoredFile = {
@@ -104,6 +126,57 @@ function daysAgo(n: number) {
 
 /** Contas demo do MVP prévio — senha única para facilitar a call com o cliente */
 export const DEMO_PASSWORD = "123456";
+
+export const COMPANY_IDS = {
+  enterprise: "co-enterprise",
+  professional: "co-professional",
+  essential: "co-essential",
+} as const;
+
+export const mockCompanies: MockCompany[] = [
+  {
+    id: COMPANY_IDS.enterprise,
+    name: "Cypher Ops Demo Enterprise",
+    legalName: "Cypher Ops Demo Enterprise LTDA",
+    document: "04.252.011/0001-10",
+    status: "ACTIVE",
+  },
+  {
+    id: COMPANY_IDS.professional,
+    name: "Cypher Ops Demo Pro",
+    legalName: "Cypher Ops Demo Pro LTDA",
+    document: "11.222.333/0001-81",
+    status: "ACTIVE",
+  },
+  {
+    id: COMPANY_IDS.essential,
+    name: "Cypher Ops Demo Essencial",
+    legalName: "Cypher Ops Demo Essencial LTDA",
+    document: "22.333.444/0001-55",
+    status: "ACTIVE",
+  },
+];
+
+export const mockSubscriptions: MockSubscription[] = [
+  {
+    id: "sub-enterprise",
+    companyId: COMPANY_IDS.enterprise,
+    planCode: "ENTERPRISE",
+    status: "ACTIVE",
+  },
+  {
+    id: "sub-professional",
+    companyId: COMPANY_IDS.professional,
+    planCode: "PROFESSIONAL",
+    status: "ACTIVE",
+  },
+  {
+    id: "sub-essential",
+    companyId: COMPANY_IDS.essential,
+    planCode: "ESSENTIAL",
+    status: "TRIAL",
+  },
+];
 
 export const DEMO_ACCOUNTS = [
   {
@@ -138,6 +211,7 @@ export const mockUsers: AppUser[] = [
     role: Role.Administrador,
     team: "Operações",
     status: "Ativo",
+    companyId: COMPANY_IDS.enterprise,
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
@@ -149,6 +223,7 @@ export const mockUsers: AppUser[] = [
     role: Role.Comercial,
     team: "Vendas",
     status: "Ativo",
+    companyId: COMPANY_IDS.professional,
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
@@ -160,6 +235,7 @@ export const mockUsers: AppUser[] = [
     role: Role.Gestor,
     team: "Vendas",
     status: "Ativo",
+    companyId: COMPANY_IDS.essential,
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
@@ -171,6 +247,7 @@ export const mockUsers: AppUser[] = [
     role: Role.Financeiro,
     team: "Financeiro",
     status: "Ativo",
+    companyId: COMPANY_IDS.essential,
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
@@ -182,21 +259,11 @@ export const mockUsers: AppUser[] = [
     role: Role.Jurídico,
     team: "Jurídico",
     status: "Ativo",
+    companyId: COMPANY_IDS.professional,
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
 ];
-
-export const currentUser: SessionUser = {
-  id: "u1",
-  name: "Ana Souza",
-  email: "ana@cypherops.com",
-  phone: "(11) 98888-1001",
-  role: Role.Administrador,
-  team: "Operações",
-  permissions: [...ROLE_PERMISSIONS[Role.Administrador]],
-  mustChangePassword: false,
-};
 
 export const mockRolePermissions: Record<RoleName, Permission[]> = {
   [Role.Administrador]: [...ROLE_PERMISSIONS[Role.Administrador]],
@@ -206,14 +273,63 @@ export const mockRolePermissions: Record<RoleName, Permission[]> = {
   [Role.Jurídico]: [...ROLE_PERMISSIONS[Role.Jurídico]],
 };
 
-export const generatedPdfs = new Map<string, StoredFile>();
+export function getCompanyById(companyId: string) {
+  return mockCompanies.find((company) => company.id === companyId);
+}
 
+export function getSubscriptionByCompanyId(companyId: string) {
+  return mockSubscriptions.find(
+    (subscription) => subscription.companyId === companyId,
+  );
+}
+
+/** Resolve User → Company → Subscription → features do catálogo (tier da empresa). */
+export function buildSessionUser(user: AppUser): SessionUser {
+  const company = getCompanyById(user.companyId);
+  const subscription = getSubscriptionByCompanyId(user.companyId);
+  if (!company || !subscription) {
+    throw new Error(`Company/subscription missing for user ${user.id}`);
+  }
+
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    team: user.team,
+    permissions: [
+      ...(mockRolePermissions[user.role] ?? ROLE_PERMISSIONS[user.role]),
+    ],
+    mustChangePassword: user.mustChangePassword,
+    companyId: company.id,
+    company: {
+      id: company.id,
+      name: company.name,
+      status: company.status,
+    },
+    subscription: {
+      planCode: subscription.planCode,
+      status: subscription.status,
+    },
+    features: resolveFeatures(subscription.planCode),
+  };
+}
+
+export const currentUser: SessionUser = buildSessionUser(mockUsers[0]);
+
+export const generatedPdfs = new Map<string, StoredFile>();
 let roundRobinIndex = 0;
 
 /** Regra padrão aplicada quando um lead novo entra sem responsável explícito */
 export const distributionSettings = {
-  /** Estratégias: round_robin | automatic | team */
-  defaultStrategy: "round_robin" as "round_robin" | "automatic" | "team",
+  /** Estratégias: manual | round_robin | automatic | team | redistribute */
+  defaultStrategy: "round_robin" as
+    | "manual"
+    | "round_robin"
+    | "automatic"
+    | "team"
+    | "redistribute",
 };
 
 export function commercialAssignees() {
@@ -583,6 +699,405 @@ export const mockNotifications: NotificationItem[] = [
   },
 ];
 
+function atLocal(dayOffset: number, hour: number, minute = 0) {
+  const d = new Date();
+  d.setDate(d.getDate() + dayOffset);
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+}
+
+function findUserName(userId: string) {
+  return mockUsers.find((u) => u.id === userId)?.name || "Usuário";
+}
+
+function findLeadName(leadId: string | null | undefined) {
+  if (!leadId) return null;
+  return mockLeads.find((l) => l.id === leadId)?.name || null;
+}
+
+export let mockCalendarEvents: CalendarEvent[] = [
+  {
+    id: "evt-1",
+    title: "Retorno — Carlos Eduardo Silva",
+    description: "Confirmar interesse e enviar proposta",
+    type: "retorno",
+    status: "agendado",
+    startsAt: atLocal(0, 10, 0),
+    endsAt: atLocal(0, 10, 30),
+    allDay: false,
+    leadId: "lead-1",
+    leadName: "Carlos Eduardo Silva",
+    assigneeId: "u2",
+    assigneeName: "Bruno Lima",
+    createdById: "u2",
+    remindAt: atLocal(0, 0, 0),
+    completedAt: null,
+    createdAt: daysAgo(2),
+    updatedAt: daysAgo(2),
+  },
+  {
+    id: "evt-2",
+    title: "Retorno — Mariana Costa",
+    description: "Ligar para qualificar orçamento",
+    type: "retorno",
+    status: "agendado",
+    startsAt: atLocal(0, 14, 0),
+    endsAt: atLocal(0, 14, 30),
+    allDay: false,
+    leadId: "lead-2",
+    leadName: "Mariana Costa",
+    assigneeId: "u2",
+    assigneeName: "Bruno Lima",
+    createdById: "u1",
+    remindAt: atLocal(0, 0, 0),
+    completedAt: null,
+    createdAt: daysAgo(1),
+    updatedAt: daysAgo(1),
+  },
+  {
+    id: "evt-3",
+    title: "Reunião — Fernanda Oliveira",
+    description: "Alinhamento jurídico pós-assinatura",
+    type: "reuniao",
+    status: "agendado",
+    startsAt: atLocal(1, 11, 0),
+    endsAt: atLocal(1, 12, 0),
+    allDay: false,
+    leadId: "lead-5",
+    leadName: "Fernanda Oliveira",
+    assigneeId: "u5",
+    assigneeName: "Elena Rocha",
+    createdById: "u5",
+    remindAt: atLocal(1, 0, 0),
+    completedAt: null,
+    createdAt: daysAgo(1),
+    updatedAt: daysAgo(1),
+  },
+  {
+    id: "evt-4",
+    title: "Retorno — Helena Martins",
+    description: "Follow-up da proposta enviada",
+    type: "retorno",
+    status: "agendado",
+    startsAt: atLocal(2, 16, 0),
+    endsAt: atLocal(2, 16, 30),
+    allDay: false,
+    leadId: "lead-9",
+    leadName: "Helena Martins",
+    assigneeId: "u3",
+    assigneeName: "Carla Mendes",
+    createdById: "u3",
+    remindAt: atLocal(2, 0, 0),
+    completedAt: null,
+    createdAt: daysAgo(0),
+    updatedAt: daysAgo(0),
+  },
+];
+
+export function canAccessCalendarEvent(event: CalendarEvent) {
+  if (currentUser.role === Role.Comercial) {
+    return event.assigneeId === currentUser.id;
+  }
+  return true;
+}
+
+export function resolveCalendarAssigneeScope(
+  requestedAssigneeId?: string | null,
+) {
+  if (currentUser.role === Role.Comercial) return currentUser.id;
+  return requestedAssigneeId || undefined;
+}
+
+export function filterCalendarEvents(
+  events: CalendarEvent[],
+  filters?: {
+    from?: string;
+    to?: string;
+    assigneeId?: string;
+    leadId?: string;
+    type?: string;
+    status?: string;
+  },
+) {
+  let items = events.filter((event) => canAccessCalendarEvent(event));
+  if (!filters) return items;
+  if (filters.from) items = items.filter((e) => e.endsAt >= filters.from!);
+  if (filters.to) items = items.filter((e) => e.startsAt <= filters.to!);
+  const assigneeId = resolveCalendarAssigneeScope(filters.assigneeId);
+  if (assigneeId) items = items.filter((e) => e.assigneeId === assigneeId);
+  if (filters.leadId) items = items.filter((e) => e.leadId === filters.leadId);
+  if (filters.type) items = items.filter((e) => e.type === filters.type);
+  if (filters.status) items = items.filter((e) => e.status === filters.status);
+  return items.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+}
+
+function formatTimelineWhen(iso: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(iso));
+}
+
+function appendCalendarTimeline(
+  leadId: string | null | undefined,
+  type: string,
+  description: string,
+) {
+  if (!leadId) return;
+  addTimelineEntry(leadId, type, description);
+}
+
+export function createCalendarEventInStore(payload: {
+  title: string;
+  description?: string;
+  type: CalendarEvent["type"];
+  startsAt: string;
+  endsAt: string;
+  allDay?: boolean;
+  leadId?: string | null;
+  assigneeId: string;
+  remindAt?: string | null;
+}) {
+  const now = new Date().toISOString();
+  const start = new Date(payload.startsAt);
+  const end = new Date(payload.endsAt);
+  if (!(end > start)) throw new Error("endsAt deve ser após startsAt");
+  if (end.getTime() - start.getTime() > 24 * 60 * 60 * 1000) {
+    throw new Error("Duração máxima de 24h");
+  }
+  if (payload.type === "retorno" && !payload.leadId) {
+    throw new Error("Retorno exige leadId");
+  }
+
+  const event: CalendarEvent = {
+    id: `evt-${Date.now()}`,
+    title: payload.title.trim(),
+    description: payload.description?.trim() || undefined,
+    type: payload.type,
+    status: "agendado",
+    startsAt: payload.startsAt,
+    endsAt: payload.endsAt,
+    allDay: Boolean(payload.allDay),
+    leadId: payload.leadId || null,
+    leadName: findLeadName(payload.leadId),
+    assigneeId: payload.assigneeId,
+    assigneeName: findUserName(payload.assigneeId),
+    createdById: currentUser.id,
+    remindAt:
+      payload.remindAt ??
+      new Date(new Date(payload.startsAt).setHours(0, 0, 0, 0)).toISOString(),
+    completedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  mockCalendarEvents = [event, ...mockCalendarEvents];
+  appendCalendarTimeline(
+    event.leadId,
+    "Agenda",
+    `Retorno agendado para ${formatTimelineWhen(event.startsAt)}`,
+  );
+  syncCalendarReminderNotifications();
+  return event;
+}
+
+export function patchCalendarEventInStore(
+  id: string,
+  payload: Partial<{
+    title: string;
+    description: string;
+    type: CalendarEvent["type"];
+    startsAt: string;
+    endsAt: string;
+    allDay: boolean;
+    leadId: string | null;
+    assigneeId: string;
+    remindAt: string | null;
+    status: CalendarEvent["status"];
+  }>,
+) {
+  const index = mockCalendarEvents.findIndex((e) => e.id === id);
+  if (index < 0) return null;
+  const prev = mockCalendarEvents[index];
+  const next: CalendarEvent = {
+    ...prev,
+    ...payload,
+    title: payload.title?.trim() ?? prev.title,
+    description:
+      payload.description !== undefined
+        ? payload.description.trim() || undefined
+        : prev.description,
+    leadId: payload.leadId !== undefined ? payload.leadId : prev.leadId,
+    leadName:
+      payload.leadId !== undefined
+        ? findLeadName(payload.leadId)
+        : prev.leadName,
+    assigneeId: payload.assigneeId ?? prev.assigneeId,
+    assigneeName: payload.assigneeId
+      ? findUserName(payload.assigneeId)
+      : prev.assigneeName,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (new Date(next.endsAt) <= new Date(next.startsAt)) {
+    throw new Error("endsAt deve ser após startsAt");
+  }
+  if (next.type === "retorno" && !next.leadId) {
+    throw new Error("Retorno exige leadId");
+  }
+
+  const rescheduled =
+    payload.startsAt !== undefined && payload.startsAt !== prev.startsAt;
+  mockCalendarEvents[index] = next;
+
+  if (rescheduled) {
+    appendCalendarTimeline(
+      next.leadId,
+      "Agenda",
+      `Retorno remarcado para ${formatTimelineWhen(next.startsAt)}`,
+    );
+  }
+  syncCalendarReminderNotifications();
+  return next;
+}
+
+export function completeCalendarEventInStore(id: string) {
+  const index = mockCalendarEvents.findIndex((e) => e.id === id);
+  if (index < 0) return null;
+  const event = mockCalendarEvents[index];
+  const next: CalendarEvent = {
+    ...event,
+    status: "concluido",
+    completedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  mockCalendarEvents[index] = next;
+  appendCalendarTimeline(next.leadId, "Agenda", "Retorno concluído");
+  syncCalendarReminderNotifications();
+  return next;
+}
+
+export function cancelCalendarEventInStore(id: string) {
+  const index = mockCalendarEvents.findIndex((e) => e.id === id);
+  if (index < 0) return null;
+  const event = mockCalendarEvents[index];
+  const next: CalendarEvent = {
+    ...event,
+    status: "cancelado",
+    updatedAt: new Date().toISOString(),
+  };
+  mockCalendarEvents[index] = next;
+  appendCalendarTimeline(next.leadId, "Agenda", "Retorno cancelado");
+  syncCalendarReminderNotifications();
+  return next;
+}
+
+export function deleteCalendarEventInStore(id: string) {
+  const index = mockCalendarEvents.findIndex((e) => e.id === id);
+  if (index < 0) return false;
+  mockCalendarEvents.splice(index, 1);
+  syncCalendarReminderNotifications();
+  return true;
+}
+
+function sameLocalDay(a: string | Date, b: string | Date) {
+  const da = new Date(a);
+  const db = new Date(b);
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  );
+}
+
+function localDateKey(value: string | Date = new Date()) {
+  const d = new Date(value);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Garante notificação idempotente de retornos do dia para o usuário atual */
+export function syncCalendarReminderNotifications() {
+  const todayKey = localDateKey();
+  const due = mockCalendarEvents.filter(
+    (event) =>
+      event.assigneeId === currentUser.id &&
+      event.status === "agendado" &&
+      sameLocalDay(event.startsAt, new Date()) &&
+      (event.remindAt == null || new Date(event.remindAt) <= new Date()),
+  );
+
+  const notifId = `n-cal-${todayKey}-${currentUser.id}`;
+  const existingIdx = mockNotifications.findIndex((n) => n.id === notifId);
+
+  if (!due.length) {
+    if (existingIdx >= 0) mockNotifications.splice(existingIdx, 1);
+    return;
+  }
+
+  const eventIds = due.map((e) => e.id);
+  const nextMeta = {
+    eventIds,
+    leadId: due.length === 1 ? due[0].leadId || undefined : undefined,
+    date: todayKey,
+  };
+
+  const next =
+    due.length === 1
+      ? {
+          title: "Retorno do dia",
+          body: `Retorno: ${due[0].leadName || due[0].title} às ${new Intl.DateTimeFormat(
+            "pt-BR",
+            {
+              hour: "2-digit",
+              minute: "2-digit",
+            },
+          ).format(new Date(due[0].startsAt))}`,
+          href: due[0].leadId
+            ? `/leads/${due[0].leadId}`
+            : `/calendar?date=${todayKey}`,
+        }
+      : {
+          title: "Retornos do dia",
+          body: `Você tem ${due.length} retornos pendentes hoje`,
+          href: `/calendar?date=${todayKey}`,
+        };
+
+  if (existingIdx >= 0) {
+    const existing = mockNotifications[existingIdx];
+    const prevIds = [...(existing.meta?.eventIds || [])].sort().join(",");
+    const nextIds = [...eventIds].sort().join(",");
+    mockNotifications[existingIdx] = {
+      ...existing,
+      title: next.title,
+      body: next.body,
+      href: next.href,
+      kind: "calendar_reminder",
+      meta: nextMeta,
+      // Só volta a não-lida se o conjunto de eventos do dia mudou
+      read: prevIds === nextIds ? existing.read : false,
+    };
+    return;
+  }
+
+  mockNotifications.unshift({
+    id: notifId,
+    title: next.title,
+    body: next.body,
+    createdAt: new Date().toISOString(),
+    read: false,
+    href: next.href,
+    kind: "calendar_reminder",
+    meta: nextMeta,
+  });
+}
+
+export function listNotificationsForCurrentUser() {
+  syncCalendarReminderNotifications();
+  return mockNotifications;
+}
 export function buildKanban(filters?: {
   ownerId?: string;
   origin?: string;

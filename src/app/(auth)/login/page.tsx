@@ -9,16 +9,19 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Link as MuiLink,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
+import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
+import { AuthShell } from "@/components/auth/AuthShell";
 import { getAccessToken } from "@/lib/auth/session";
 import { DEMO_ACCOUNTS } from "@/mocks/data";
-import { homePathForRole, useLogin, useSession } from "@/modules/auth/hooks";
+import { homePathForSession, useLogin, useSession } from "@/modules/auth/hooks";
 import { loginSchema, type LoginFormValues } from "@/modules/auth/schemas";
 
 export default function LoginPage() {
@@ -38,29 +41,28 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (hasToken && session.isSuccess && session.data) {
-      router.replace(homePathForRole(session.data.role));
+      router.replace(homePathForSession(session.data));
     }
   }, [hasToken, session.isSuccess, session.data, router]);
 
   return (
-    <Box
-      minHeight="100vh"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      px={2}
-      sx={{
-        background: (theme) =>
-          theme.palette.mode === "light"
-            ? "linear-gradient(160deg, #F5F7FA 0%, #E3F2FD 100%)"
-            : "linear-gradient(160deg, #0F1419 0%, #1A2332 100%)",
-      }}
-    >
+    <AuthShell>
       <Card sx={{ width: "100%", maxWidth: 420 }} elevation={0} variant="outlined">
         <CardContent sx={{ p: 4 }}>
           <Stack spacing={3} component="form" onSubmit={handleSubmit((values) => login.mutate(values))}>
             <Box textAlign="center">
-              <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: "-0.03em" }}>
+              <Typography
+                component={NextLink}
+                href="/"
+                variant="h4"
+                sx={{
+                  fontWeight: 800,
+                  letterSpacing: "-0.03em",
+                  textDecoration: "none",
+                  color: "primary.main",
+                  display: "inline-block",
+                }}
+              >
                 Cypher Ops
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -118,9 +120,16 @@ export default function LoginPage() {
                 ))}
               </Stack>
             </Box>
+
+            <Typography variant="body2" color="text.secondary" textAlign="center">
+              Não tem conta?{" "}
+              <MuiLink component={NextLink} href="/signup" underline="hover">
+                Criar conta
+              </MuiLink>
+            </Typography>
           </Stack>
         </CardContent>
       </Card>
-    </Box>
+    </AuthShell>
   );
 }

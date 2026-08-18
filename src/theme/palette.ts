@@ -1,21 +1,53 @@
+/** Paleta canônica Cypher Ops — alinhada à home (landing). */
 export const brand = {
-  primary: "#1B3A5C",
-  primaryLight: "#2E5A8A",
-  accent: "#1E88E5",
-  accentSoft: "#E3F2FD",
+  bg: "#081424",
+  surface: "#111c2d",
+  surfaceHigh: "#1f2a3c",
+  surfaceBright: "#2a3547",
+  primary: "#4cd7f6",
+  primarySolid: "#06b6d4",
+  primaryDark: "#0891b2",
+  onPrimary: "#003640",
+  text: "#d8e3fa",
+  muted: "#bcc9cd",
+  border: "rgba(255,255,255,0.10)",
   success: "#2E7D32",
   warning: "#ED6C02",
   error: "#D32F2F",
   info: "#0288D1",
-};
+} as const;
+
+/** Tokens usados pela LP — mesmo objeto do tema dark. */
+export const landingColors = {
+  bg: brand.bg,
+  surface: brand.surface,
+  surfaceHigh: brand.surfaceHigh,
+  surfaceBright: brand.surfaceBright,
+  primary: brand.primary,
+  primarySolid: brand.primarySolid,
+  onPrimary: brand.onPrimary,
+  text: brand.text,
+  muted: brand.muted,
+  border: brand.border,
+} as const;
 
 export const lightPalette = {
   mode: "light" as const,
-  primary: { main: brand.primary, light: brand.primaryLight, dark: "#0F2438", contrastText: "#FFFFFF" },
-  secondary: { main: brand.accent, light: "#64B5F6", dark: "#1565C0", contrastText: "#FFFFFF" },
-  background: { default: "#F5F7FA", paper: "#FFFFFF" },
-  text: { primary: "#1B1B1D", secondary: "#5A5F6B" },
-  divider: "#E4E6EB",
+  primary: {
+    main: brand.primarySolid,
+    light: brand.primary,
+    dark: brand.primaryDark,
+    contrastText: "#FFFFFF",
+  },
+  secondary: {
+    main: brand.primaryDark,
+    light: brand.primary,
+    dark: brand.onPrimary,
+    contrastText: "#FFFFFF",
+  },
+  background: { default: "#F0F6FA", paper: "#FFFFFF" },
+  text: { primary: brand.bg, secondary: "#5A6B7A" },
+  divider: "#D5E0EA",
   success: { main: brand.success },
   warning: { main: brand.warning },
   error: { main: brand.error },
@@ -24,13 +56,23 @@ export const lightPalette = {
 
 export const darkPalette = {
   mode: "dark" as const,
-  primary: { main: "#90CAF9", light: "#BBDEFB", dark: "#42A5F5", contrastText: "#0D1B2A" },
-  secondary: { main: "#64B5F6", light: "#90CAF9", dark: "#1E88E5", contrastText: "#0D1B2A" },
-  background: { default: "#0F1419", paper: "#1A2332" },
-  text: { primary: "#F0F3F7", secondary: "#A8B0BD" },
-  divider: "#2A3441",
+  primary: {
+    main: brand.primary,
+    light: "#7EE3F9",
+    dark: brand.primarySolid,
+    contrastText: brand.onPrimary,
+  },
+  secondary: {
+    main: brand.primarySolid,
+    light: brand.primary,
+    dark: brand.primaryDark,
+    contrastText: brand.onPrimary,
+  },
+  background: { default: brand.bg, paper: brand.surface },
+  text: { primary: brand.text, secondary: brand.muted },
+  divider: brand.border,
   success: { main: "#66BB6A" },
   warning: { main: "#FFA726" },
   error: { main: "#EF5350" },
-  info: { main: "#29B6F6" },
+  info: { main: brand.primarySolid },
 };
