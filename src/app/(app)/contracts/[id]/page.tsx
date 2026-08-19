@@ -38,7 +38,6 @@ export default function ContractDetailPage() {
     queryKey: queryKeys.contracts.detail(id),
     queryFn: () => fetchContract(id),
     enabled: Boolean(id),
-    retry: 1,
   });
 
   function invalidate() {

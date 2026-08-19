@@ -1,9 +1,11 @@
 export type ApiErrorBody = {
-  error?: {
-    code?: string;
-    message?: string;
-    details?: unknown;
-  };
+  error?:
+    | string
+    | {
+        code?: string;
+        message?: string;
+        details?: unknown;
+      };
   request_id?: string;
   statusCode?: number;
   message?: string;
@@ -19,18 +21,27 @@ export type ParsedApiError = {
 
 export function parseApiError(status: number, body: unknown): ParsedApiError {
   const payload = (body ?? {}) as ApiErrorBody;
-  const code = payload.error?.code || (status === 401 ? "AUTHENTICATION_FAILED" : "UNKNOWN");
-  const message =
-    payload.error?.message ||
-    payload.message ||
-    defaultMessageForStatus(status);
+  const nested = typeof payload.error === "object" ? payload.error : undefined;
+  const code =
+    (typeof payload.error === "string" ? payload.error : nested?.code) ||
+    (status === 401 ? "AUTHENTICATION_FAILED" : "UNKNOWN");
+  const message = nested?.message || payload.message || defaultMessageForStatus(status);
   return {
     status,
     code,
     message,
-    details: payload.error?.details,
+    details: nested?.details,
     requestId: payload.request_id,
   };
+}
+
+export function isGatewayUpstreamTimeout(error: Pick<ParsedApiError, "status" | "code" | "message">) {
+  if (error.status !== 503 && error.status !== 504) return false;
+  return (
+    error.code === "ServiceUnavailable" ||
+    /unable to reach upstream/i.test(error.message) ||
+    /service unavailable/i.test(error.message)
+  );
 }
 
 function defaultMessageForStatus(status: number) {

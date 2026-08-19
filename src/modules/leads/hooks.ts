@@ -23,8 +23,7 @@ import {
 import type { Attachment, KanbanBoard, Lead, LegalStage, PipelineStage } from "./types";
 
 function invalidateLeadQueries(queryClient: ReturnType<typeof useQueryClient>, id?: string) {
-  // Prefixo ["kanban"] — cobre todas as variantes com filtros
-  void queryClient.invalidateQueries({ queryKey: ["kanban"] });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.kanban });
   void queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
   void queryClient.invalidateQueries({ queryKey: queryKeys.legalKanban });
   if (id) void queryClient.invalidateQueries({ queryKey: queryKeys.leads.detail(id) });
@@ -72,17 +71,19 @@ function moveLeadInLegalBoard(board: LegalBoard, leadId: string, status: LegalSt
   };
 }
 
-export function useKanban(params?: LeadFilters) {
+export function useKanban(enabled = true) {
   return useQuery({
-    queryKey: queryKeys.kanban(params),
-    queryFn: () => fetchKanban(params),
+    queryKey: queryKeys.kanban,
+    queryFn: fetchKanban,
+    enabled,
   });
 }
 
-export function useLeads(params?: LeadFilters) {
+export function useLeads(params?: LeadFilters, enabled = true) {
   return useQuery({
     queryKey: queryKeys.leads.list(params),
     queryFn: () => fetchLeads(params),
+    enabled,
   });
 }
 

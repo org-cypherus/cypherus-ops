@@ -16,15 +16,13 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { queryKeys } from "@/lib/query/keys";
-import { fetchUsers } from "@/modules/admin/services";
 import { formatCurrency } from "@/lib/utils/format";
 import { useSession } from "@/modules/auth/hooks";
 import { Role } from "@/lib/auth/permissions";
+import { useUserDirectory } from "@/modules/users/hooks";
 import { useCreateLead } from "../hooks";
 import { leadFormSchema, type LeadFormValues } from "../schemas";
 import { PIPELINE_STAGES } from "../types";
@@ -42,11 +40,7 @@ export function CreateLeadDialog({ open, onClose }: Props) {
   const { enqueueSnackbar } = useSnackbar();
   const { data: session } = useSession();
   const isComercial = session?.role === Role.Comercial;
-  const users = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: fetchUsers,
-    enabled: !isComercial,
-  });
+  const users = useUserDirectory(open && !isComercial);
 
   const {
     register,

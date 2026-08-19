@@ -41,6 +41,19 @@ npm run dev
 
 Abra [http://localhost:3000](http://localhost:3000).
 
+## Docker
+
+O back-end (API, Postgres, Redis) vive em outro repositório. Este Compose sobe só o Next.js; o BFF continua falando com o gateway via `GATEWAY_*`.
+
+```bash
+cp .env.example .env.local
+docker compose --env-file .env.local up --build
+```
+
+`--env-file` injeta `NEXT_PUBLIC_*` no **build** da imagem. `GATEWAY_*` entram em runtime pelo `env_file` do serviço. Alterar `NEXT_PUBLIC_*` exige rebuild (`--build`).
+
+Abra [http://localhost:3000](http://localhost:3000).
+
 ## Scripts
 
 - `npm run dev` — servidor de desenvolvimento
@@ -61,3 +74,5 @@ Abra [http://localhost:3000](http://localhost:3000).
 ## Documentação
 
 Comece por [`specs/00-product.md`](./specs/00-product.md).
+
+Fan-out de GETs no CRM (o que mudar neste repo): [`docs/crm-request-fanout.md`](./docs/crm-request-fanout.md).

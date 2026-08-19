@@ -13,14 +13,12 @@ import {
   Switch,
   TextField,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { api } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
-import { queryKeys } from "@/lib/query/keys";
 import { useSession } from "@/modules/auth/hooks";
+import { useUserDirectory } from "@/modules/users/hooks";
 import { useCreateCalendarEvent } from "../hooks";
 import { calendarEventFormSchema, type CalendarEventFormValues } from "../schemas";
 import { CALENDAR_EVENT_TYPES, EVENT_TYPE_LABELS } from "../types";
@@ -52,14 +50,7 @@ export function ScheduleFromLeadDialog({
   const { data: session } = useSession();
   const isComercial = session?.role === Role.Comercial;
 
-  const users = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: async () => {
-      const { data } = await api.get<{ data: Array<{ id: string; name: string }> }>("/users");
-      return data.data;
-    },
-    enabled: open && !isComercial,
-  });
+  const users = useUserDirectory(open && !isComercial);
 
   const windowDefaults = defaultEventWindow(defaultStartsAt);
   const {

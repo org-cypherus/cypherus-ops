@@ -18,15 +18,13 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSnackbar } from "notistack";
 import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { api } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
-import { queryKeys } from "@/lib/query/keys";
 import { useCanAccess, useSession } from "@/modules/auth/hooks";
+import { useUserDirectory } from "@/modules/users/hooks";
 import {
   useCancelCalendarEvent,
   useCompleteCalendarEvent,
@@ -80,14 +78,7 @@ export function CalendarEventDrawer({
   const cancelEvent = useCancelCalendarEvent();
   const deleteEvent = useDeleteCalendarEvent();
 
-  const users = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: async () => {
-      const { data } = await api.get<{ data: Array<{ id: string; name: string }> }>("/users");
-      return data.data;
-    },
-    enabled: open && !isComercial,
-  });
+  const users = useUserDirectory(open && !isComercial);
 
   const {
     register,

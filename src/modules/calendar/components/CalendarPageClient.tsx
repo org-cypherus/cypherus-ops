@@ -16,15 +16,13 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { FeatureGate } from "@/components/auth/FeatureGate";
-import { api } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
-import { queryKeys } from "@/lib/query/keys";
 import { useCanAccess, useSession } from "@/modules/auth/hooks";
+import { useUserDirectory } from "@/modules/users/hooks";
 import { useCalendarEvents } from "../hooks";
 import type { CalendarEvent, CalendarView } from "../types";
 import { dayjs, monthRange, weekRange } from "../utils";
@@ -55,14 +53,7 @@ export function CalendarPageClient() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [createSlot, setCreateSlot] = useState<string | undefined>();
 
-  const users = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: async () => {
-      const { data } = await api.get<{ data: Array<{ id: string; name: string }> }>("/users");
-      return data.data;
-    },
-    enabled: !isComercial,
-  });
+  const users = useUserDirectory(!isComercial);
 
   const range = useMemo(() => {
     if (view === "day") {

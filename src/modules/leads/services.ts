@@ -1,6 +1,9 @@
 import { api, type Paginated } from "@/lib/api/client";
-import { companyPath, getCompanyId } from "@/lib/auth/session";
-import type { Attachment, Lead, LegalStage, PipelineStage } from "./types";
+import { companyPath } from "@/lib/auth/session";
+import { getQueryClient, PIPELINE_STALE_TIME_MS } from "@/lib/query/client";
+import { queryKeys } from "@/lib/query/keys";
+import { fetchOwnerMap } from "@/modules/users/directory";
+import type { Attachment, KanbanBoard, Lead, LegalStage, PipelineStage } from "./types";
 import {
   leadToCreateRequest,
   leadToUpdateRequest,
@@ -25,13 +28,29 @@ export type LeadFilters = {
   to?: string;
 };
 
-type OwnerMap = Record<string, string>;
-
-async function fetchOwnerMap(): Promise<OwnerMap> {
-  const companyId = getCompanyId();
-  if (!companyId) return {};
-  const { data } = await api.get<Array<{ id: string; name: string }>>(companyPath("/users"));
-  return Object.fromEntries(data.map((user) => [user.id, user.name]));
+export function filterKanbanBoard(board: KanbanBoard, filters?: LeadFilters): KanbanBoard {
+  if (!filters) return board;
+  const q = filters.q?.trim().toLowerCase();
+  return {
+    columns: board.columns.map((column) => {
+      const leads = column.leads.filter((lead) => {
+        if (q && !`${lead.name} ${lead.email} ${lead.phone}`.toLowerCase().includes(q)) return false;
+        if (filters.ownerId && lead.ownerId !== filters.ownerId) return false;
+        if (filters.origin && lead.origin !== filters.origin) return false;
+        if (filters.priority && lead.priority !== filters.priority) return false;
+        if (filters.tag && !lead.tags.includes(filters.tag)) return false;
+        if (filters.from && lead.createdAt < filters.from) return false;
+        if (filters.to && lead.createdAt > filters.to) return false;
+        return true;
+      });
+      return {
+        ...column,
+        leads,
+        count: leads.length,
+        potentialValue: leads.reduce((sum, lead) => sum + lead.process.totalValue, 0),
+      };
+    }),
+  };
 }
 
 function paginate<T>(items: T[], params?: LeadFilters): Paginated<T> {
@@ -65,9 +84,8 @@ export async function fetchLeads(params?: LeadFilters) {
 }
 
 export async function fetchLead(id: string) {
-  const [{ data: lead }, owners, events, attachments] = await Promise.all([
+  const [{ data: lead }, events, attachments] = await Promise.all([
     api.get<CrmLead>(companyPath(`/leads/${id}`)),
-    fetchOwnerMap(),
     api.get<Array<{ type: string; payload?: Record<string, unknown>; created_at: string; actor_user_id?: string | null }>>(
       companyPath(`/leads/${id}/events`),
     ).catch(() => ({ data: [] })),
@@ -75,6 +93,7 @@ export async function fetchLead(id: string) {
       companyPath(`/leads/${id}/attachments`),
     ).catch(() => ({ data: [] })),
   ]);
+  const owners = await fetchOwnerMap();
   return toUiLead(lead, owners[lead.owner_user_id], {
     events: events.data,
     attachments: attachments.data.map((item) => ({
@@ -125,16 +144,24 @@ export async function deleteLead(id: string) {
 }
 
 async function getDefaultPipeline(): Promise<CrmPipeline> {
-  const { data } = await api.get<CrmPipeline[]>(companyPath("/pipelines"));
-  const pipeline = data.find((item) => item.is_default) ?? data[0];
-  if (!pipeline) throw new Error("Nenhum pipeline encontrado para a empresa.");
-  return pipeline;
+  return getQueryClient().ensureQueryData({
+    queryKey: queryKeys.defaultPipeline,
+    staleTime: PIPELINE_STALE_TIME_MS,
+    queryFn: async () => {
+      const { data } = await api.get<CrmPipeline[]>(companyPath("/pipelines"));
+      const pipeline = data.find((item) => item.is_default) ?? data[0];
+      if (!pipeline) throw new Error("Nenhum pipeline encontrado para a empresa.");
+      return pipeline;
+    },
+  });
 }
 
-export async function fetchKanban(_filters?: LeadFilters) {
+export async function fetchKanban() {
   const pipeline = await getDefaultPipeline();
-  const { data } = await api.get<CrmPipelineBoard>(companyPath(`/pipelines/${pipeline.id}/board`));
-  const owners = await fetchOwnerMap();
+  const [{ data }, owners] = await Promise.all([
+    api.get<CrmPipelineBoard>(companyPath(`/pipelines/${pipeline.id}/board`)),
+    fetchOwnerMap(),
+  ]);
   return toKanbanBoard(data, owners);
 }
 
@@ -146,7 +173,6 @@ export async function moveLead(leadId: string, status: PipelineStage) {
     pipeline.stages.find((item) => item.name === status);
   if (!stage) throw new Error("Estágio do pipeline não encontrado.");
   await api.patch(companyPath(`/leads/${leadId}/stage`), { stage_id: stage.id });
-  return fetchKanban();
 }
 
 export async function updateLead(id: string, payload: Partial<Lead>) {

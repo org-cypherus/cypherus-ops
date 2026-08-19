@@ -1,5 +1,6 @@
 import { api } from "@/lib/api/client";
 import { companyPath } from "@/lib/auth/session";
+import { fetchOwnerMap } from "@/modules/users/directory";
 
 export type Payment = {
   id: string;
@@ -82,11 +83,8 @@ export async function confirmPayment(id: string) {
 }
 
 export async function fetchCommissions(): Promise<Commission[]> {
-  const [{ data }, users] = await Promise.all([
-    api.get<CrmCommission[]>(companyPath("/commissions")),
-    api.get<Array<{ id: string; name: string }>>(companyPath("/users")).catch(() => ({ data: [] as Array<{ id: string; name: string }> })),
-  ]);
-  const names = Object.fromEntries(users.data.map((user) => [user.id, user.name]));
+  const { data } = await api.get<CrmCommission[]>(companyPath("/commissions"));
+  const names = await fetchOwnerMap().catch(() => ({} as Record<string, string>));
   return data.map((item) => ({
     id: item.id,
     userName: names[item.beneficiary_user_id] || "",

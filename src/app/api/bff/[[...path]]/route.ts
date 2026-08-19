@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isGatewayUpstreamTimeout, parseApiError } from "@/lib/api/errors";
+import { GATEWAY_UPSTREAM_RETRY_DELAY_MS } from "@/lib/api/config";
 import {
   clearAuthCookies,
   GatewayConfigError,
@@ -6,6 +8,7 @@ import {
   describeGatewayFetchError,
   gatewayConfig,
   getGatewayAccessToken,
+  gatewayFetch,
   newRequestId,
   readCrmTokens,
   setAuthCookies,
@@ -43,6 +46,29 @@ function isPublicCrmPath(path: string, method: string) {
 
 function needsUpstreamAuth(path: string, method: string) {
   return !isPublicCrmPath(path, method);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function copyRequestBody(body: ArrayBuffer | string | undefined) {
+  if (body instanceof ArrayBuffer) return body.slice(0);
+  return body;
+}
+
+function shouldRetryAfterGatewayTimeout(method: string, path: string) {
+  return method === "POST" && path === "v1/companies";
+}
+
+function decodeErrorBody(buffer: ArrayBuffer): unknown {
+  const text = new TextDecoder().decode(buffer);
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text.slice(0, 4000);
+  }
 }
 
 async function proxy(request: NextRequest, path: string) {
@@ -130,15 +156,31 @@ async function proxy(request: NextRequest, path: string) {
 
   let upstream: Response;
   try {
-    upstream = await fetch(upstreamUrl, {
+    upstream = await gatewayFetch(upstreamUrl, {
       method: request.method,
       headers,
-      body,
-      cache: "no-store",
+      body: copyRequestBody(body),
       redirect: "manual",
     });
   } catch (error) {
     throw new GatewayRequestError(502, describeGatewayFetchError(error, upstreamUrl), null);
+  }
+
+  if (!upstream.ok && shouldRetryAfterGatewayTimeout(request.method, path)) {
+    const timeoutBody = decodeErrorBody(await upstream.clone().arrayBuffer());
+    if (isGatewayUpstreamTimeout(parseApiError(upstream.status, timeoutBody))) {
+      await sleep(GATEWAY_UPSTREAM_RETRY_DELAY_MS);
+      try {
+        upstream = await gatewayFetch(upstreamUrl, {
+          method: request.method,
+          headers,
+          body: copyRequestBody(body),
+          redirect: "manual",
+        });
+      } catch (error) {
+        throw new GatewayRequestError(502, describeGatewayFetchError(error, upstreamUrl), null);
+      }
+    }
   }
 
   if (path === "v1/auth/logout") {

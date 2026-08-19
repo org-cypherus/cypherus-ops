@@ -29,7 +29,6 @@ export default function ContractsPage() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.contracts.list(),
     queryFn: () => fetchContracts(),
-    retry: 1,
   });
 
   return (

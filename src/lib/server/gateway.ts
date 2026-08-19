@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { createRequire } from "node:module";
+import { API_REQUEST_TIMEOUT_MS } from "@/lib/api/config";
 
 export const CRM_ACCESS_COOKIE = "cypher_crm_access";
 export const CRM_REFRESH_COOKIE = "cypher_crm_refresh";
@@ -7,6 +9,40 @@ export const GW_ACCESS_COOKIE = "cypher_gw_access";
 const CRM_ACCESS_MAX_AGE = 60 * 14;
 const CRM_REFRESH_MAX_AGE = 60 * 60 * 24 * 14;
 const GW_ACCESS_MAX_AGE = 60 * 9;
+
+type FetchInit = RequestInit & { dispatcher?: unknown };
+
+let gatewayDispatcher: unknown;
+
+async function getGatewayDispatcher() {
+  if (gatewayDispatcher !== undefined) return gatewayDispatcher;
+  try {
+    const require = createRequire(import.meta.url);
+    const { Agent } = require("undici") as {
+      Agent: new (options?: Record<string, unknown>) => unknown;
+    };
+    gatewayDispatcher = new Agent({
+      connectTimeout: API_REQUEST_TIMEOUT_MS,
+      headersTimeout: API_REQUEST_TIMEOUT_MS,
+      bodyTimeout: API_REQUEST_TIMEOUT_MS,
+      connect: { timeout: API_REQUEST_TIMEOUT_MS },
+    });
+  } catch {
+    gatewayDispatcher = null;
+  }
+  return gatewayDispatcher;
+}
+
+export async function gatewayFetch(url: string, init: RequestInit = {}) {
+  const dispatcher = await getGatewayDispatcher();
+  const options: FetchInit = {
+    ...init,
+    cache: init.cache ?? "no-store",
+    signal: init.signal ?? AbortSignal.timeout(API_REQUEST_TIMEOUT_MS),
+  };
+  if (dispatcher) options.dispatcher = dispatcher;
+  return fetch(url, options);
+}
 
 export function gatewayConfig() {
   const url = (process.env.GATEWAY_URL || "").replace(/\/$/, "");
@@ -81,7 +117,7 @@ export async function getGatewayAccessToken(): Promise<string> {
   const tokenUrl = `${config.url}/api/auth/token`;
   let response: Response;
   try {
-    response = await fetch(tokenUrl, {
+    response = await gatewayFetch(tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
@@ -89,7 +125,6 @@ export async function getGatewayAccessToken(): Promise<string> {
         client_secret: config.clientSecret,
         target_service: config.targetService,
       }),
-      cache: "no-store",
     });
   } catch (error) {
     throw new GatewayRequestError(502, describeGatewayFetchError(error, tokenUrl), null);
@@ -138,8 +173,14 @@ export function describeGatewayFetchError(error: unknown, url: string): string {
   } catch {
     /* keep raw url */
   }
-  if (causeCode === "UND_ERR_CONNECT_TIMEOUT" || err.message === "fetch failed") {
-    return `Timeout TLS ao conectar em ${host}. O handshake HTTPS não completa nesta máquina (VPN/firewall). A allowlist de IP só é avaliada depois do TLS.`;
+  if (
+    err.name === "TimeoutError" ||
+    err.name === "AbortError" ||
+    err.message.includes("aborted") ||
+    causeCode === "UND_ERR_CONNECT_TIMEOUT" ||
+    err.message === "fetch failed"
+  ) {
+    return `Timeout ao conectar em ${host} (${API_REQUEST_TIMEOUT_MS / 1000}s). Verifique VPN/firewall e a allowlist de IP do gateway.`;
   }
   return cause instanceof Error ? `${err.message}: ${cause.message}` : err.message;
 }

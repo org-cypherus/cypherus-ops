@@ -2,6 +2,8 @@ import { api } from "@/lib/api/client";
 import { mapRoleCode, roleCodeFromUi } from "@/lib/auth/mappers";
 import type { RoleName } from "@/lib/auth/permissions";
 import { companyPath } from "@/lib/auth/session";
+import { mapWithConcurrency } from "@/lib/utils/concurrency";
+import { seedUserDirectory } from "@/modules/users/directory";
 
 export type AppUser = {
   id: string;
@@ -40,27 +42,29 @@ async function roleIdFor(role: RoleName, roles: CrmRole[]) {
     ?? roles[0]?.id;
 }
 
-async function toAppUser(user: CrmUser, roles: CrmRole[]): Promise<AppUser> {
-  const { data: assigned } = await api.get<CrmRole[]>(companyPath(`/users/${user.id}/roles`)).catch(() => ({ data: [] as CrmRole[] }));
-  const detail = await api.get<{ phone?: string; job_title?: string } & CrmUser>(companyPath(`/users/${user.id}`)).catch(() => ({ data: user }));
+export function mapCrmUserToAppUser(user: CrmUser, roleCode?: string): AppUser {
   return {
     id: user.id,
     name: user.name,
     email: user.email,
-    phone: (detail.data as { phone?: string }).phone || "",
-    role: mapRoleCode(assigned[0]?.code, user.is_owner),
-    team: (detail.data as { job_title?: string }).job_title || "",
+    phone: "",
+    role: mapRoleCode(roleCode, user.is_owner),
+    team: "",
     status: user.status === "ACTIVE" ? "Ativo" : "Inativo",
   };
 }
 
+async function toAppUser(user: CrmUser): Promise<AppUser> {
+  const { data: assigned } = await api
+    .get<CrmRole[]>(companyPath(`/users/${user.id}/roles`))
+    .catch(() => ({ data: [] as CrmRole[] }));
+  return mapCrmUserToAppUser(user, assigned[0]?.code);
+}
+
 export async function fetchUsers() {
-  const [{ data }, roles] = await Promise.all([
-    api.get<CrmUser[]>(companyPath("/users")),
-    fetchRoles(),
-  ]);
-  const mapped = await Promise.all(data.map((user) => toAppUser(user, roles)));
-  return mapped;
+  const { data } = await api.get<CrmUser[]>(companyPath("/users"));
+  seedUserDirectory(data);
+  return mapWithConcurrency(data, 2, (user) => toAppUser(user));
 }
 
 export async function createUser(values: {
@@ -84,7 +88,7 @@ export async function createUser(values: {
       job_title: values.team,
     });
   }
-  const appUser = await toAppUser(created, roles);
+  const appUser = await toAppUser(created);
   return { ...appUser, invitationToken: data.invitation_token };
 }
 
@@ -102,8 +106,11 @@ export async function updateUser(id: string, values: Partial<AppUser>) {
   if (values.status === "Inativo") {
     await api.post(companyPath(`/users/${id}/deactivate`));
   }
-  const users = await fetchUsers();
-  return users.find((user) => user.id === id)!;
+  const { data } = await api.get<CrmUser[]>(companyPath("/users"));
+  seedUserDirectory(data);
+  const user = data.find((item) => item.id === id);
+  if (!user) throw new Error("Usuário não encontrado após atualizar.");
+  return toAppUser(user);
 }
 
 export async function deactivateUser(id: string) {
@@ -128,4 +135,3 @@ export async function replaceRolePermissions(roleId: string, permissionKey: stri
     scope,
   });
 }
-

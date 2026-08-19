@@ -5,7 +5,8 @@ export const queryKeys = {
     list: (params?: Record<string, unknown>) => ["leads", "list", params] as const,
     detail: (id: string) => ["leads", "detail", id] as const,
   },
-  kanban: (params?: Record<string, unknown>) => ["kanban", params] as const,
+  kanban: ["kanban"] as const,
+  defaultPipeline: ["pipelines", "default"] as const,
   contracts: {
     all: ["contracts"] as const,
     list: (params?: Record<string, unknown>) => ["contracts", "list", params] as const,
@@ -31,6 +32,8 @@ export const queryKeys = {
   },
   reports: (params?: Record<string, unknown>) => ["reports", params] as const,
   users: ["users"] as const,
+  userDirectory: ["users", "directory"] as const,
+  plans: ["plans"] as const,
   roles: ["roles"] as const,
   notifications: ["notifications"] as const,
   search: (q: string) => ["search", q] as const,

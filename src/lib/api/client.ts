@@ -1,5 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
-import { BFF_BASE_PATH, isMockMode } from "@/lib/api/config";
+import { API_CLIENT_TIMEOUT_MS, BFF_BASE_PATH, isMockMode } from "@/lib/api/config";
 import { parseApiError, type ParsedApiError } from "@/lib/api/errors";
 import { clearAccessToken, getAccessToken, hasSession, setAccessToken } from "@/lib/auth/session";
 
@@ -16,6 +16,7 @@ export const api = axios.create({
   baseURL: BFF_BASE_PATH,
   headers: { Accept: "application/json" },
   withCredentials: true,
+  timeout: API_CLIENT_TIMEOUT_MS,
 });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -41,7 +42,11 @@ async function refreshSession() {
     const { data } = await axios.post(
       `${BFF_BASE_PATH}/v1/auth/refresh`,
       {},
-      { withCredentials: true, headers: { "Content-Type": "application/json" } },
+      {
+        withCredentials: true,
+        headers: { "Content-Type": "application/json" },
+        timeout: API_CLIENT_TIMEOUT_MS,
+      },
     );
     if (isMockMode() && data?.access_token) {
       setAccessToken(data.access_token);
@@ -78,6 +83,9 @@ export function getApiError(error: unknown): ParsedApiError {
   }
   if (axios.isAxiosError(error)) {
     return parseApiError(error.response?.status || 0, error.response?.data);
+  }
+  if (error instanceof Error) {
+    return parseApiError(0, { error: { code: "UNKNOWN", message: error.message } });
   }
   return parseApiError(0, { error: { code: "UNKNOWN", message: "Erro inesperado." } });
 }

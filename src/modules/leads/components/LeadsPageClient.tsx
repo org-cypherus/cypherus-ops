@@ -20,7 +20,6 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSnackbar } from "notistack";
 import { useEffect, useMemo, useState } from "react";
@@ -28,11 +27,9 @@ import { PermissionGate } from "@/components/auth/PermissionGate";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
-import { queryKeys } from "@/lib/query/keys";
 import { downloadText } from "@/lib/utils/download";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import Link from "next/link";
-import { fetchUsers } from "@/modules/admin/services";
 import { useSession } from "@/modules/auth/hooks";
 import { Role } from "@/lib/auth/permissions";
 import { CreateLeadDialog } from "@/modules/leads/components/CreateLeadDialog";
@@ -40,7 +37,9 @@ import { DistributeLeadsDialog } from "@/modules/leads/components/DistributeLead
 import { ImportLeadsDialog } from "@/modules/leads/components/ImportLeadsDialog";
 import { KanbanBoard } from "@/modules/leads/components/KanbanBoard";
 import { useDistributeLeads, useKanban, useLeads } from "@/modules/leads/hooks";
+import { filterKanbanBoard } from "@/modules/leads/services";
 import type { Lead } from "@/modules/leads/types";
+import { useUserDirectory } from "@/modules/users/hooks";
 
 function leadsToCsv(leads: Lead[]) {
   const header = "nome,email,telefone,cpf,origem,status,responsavel,valor,prioridade,tags";
@@ -84,14 +83,19 @@ export function LeadsPageClient() {
   const [bulkTags, setBulkTags] = useState("");
   const distribute = useDistributeLeads();
 
-  const kanban = useKanban(filters);
-  const leads = useLeads({ ...filters, pageSize: 100 });
-  const users = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: fetchUsers,
-  });
+  const kanban = useKanban(view === "kanban");
+  const leads = useLeads({ ...filters, pageSize: 100 }, view === "table");
+  const users = useUserDirectory(!isComercial);
 
-  const allLeads = useMemo(() => leads.data?.data || [], [leads.data?.data]);
+  const filteredKanban = useMemo(
+    () => (kanban.data ? filterKanbanBoard(kanban.data, filters) : undefined),
+    [kanban.data, filters],
+  );
+
+  const allLeads = useMemo(() => {
+    if (view === "table") return leads.data?.data || [];
+    return filteredKanban?.columns.flatMap((column) => column.leads) || [];
+  }, [view, leads.data?.data, filteredKanban]);
   const selectedLeads = useMemo(
     () => allLeads.filter((l) => selected.includes(l.id)),
     [allLeads, selected],
@@ -317,10 +321,10 @@ export function LeadsPageClient() {
             </Box>
           ) : kanban.isError ? (
             <ErrorState onRetry={() => kanban.refetch()} />
-          ) : !kanban.data?.columns.some((c) => c.count > 0) ? (
+          ) : !filteredKanban?.columns.some((c) => c.count > 0) ? (
             <EmptyState title="Nenhum lead no pipeline" description="Crie ou importe leads para começar." />
           ) : (
-            <KanbanBoard board={kanban.data} />
+            <KanbanBoard board={filteredKanban} />
           )
         ) : leads.isLoading ? (
           <Box py={8} display="flex" justifyContent="center">

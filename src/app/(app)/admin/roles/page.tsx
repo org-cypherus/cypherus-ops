@@ -13,18 +13,17 @@ import { useQuery } from "@tanstack/react-query";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { queryKeys } from "@/lib/query/keys";
 import { fetchRoleCatalog, fetchRolePermissions } from "@/modules/admin/services";
+import { mapWithConcurrency } from "@/lib/utils/concurrency";
 
 export default function RolesPage() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.roles,
     queryFn: async () => {
       const roles = await fetchRoleCatalog();
-      const withPermissions = await Promise.all(
-        roles.map(async (role) => ({
-          ...role,
-          permissions: await fetchRolePermissions(role.id).catch(() => []),
-        })),
-      );
+      const withPermissions = await mapWithConcurrency(roles, 2, async (role) => ({
+        ...role,
+        permissions: await fetchRolePermissions(role.id).catch(() => []),
+      }));
       return withPermissions;
     },
   });

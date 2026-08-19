@@ -15,16 +15,13 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSnackbar } from "notistack";
 import { useEffect, useState } from "react";
-import { fetchUsers } from "@/modules/admin/services";
-import { Role } from "@/lib/auth/permissions";
 import { distributionStrategyOptions, type DistributionStrategy } from "@/lib/billing/distribution";
 import { planLabel } from "@/lib/billing/plan-catalog";
-import { queryKeys } from "@/lib/query/keys";
 import { useCompanyPlan } from "@/modules/auth/hooks";
+import { useUserDirectory } from "@/modules/users/hooks";
 import { useDistributeLeads } from "../hooks";
 
 type Props = {
@@ -40,13 +37,7 @@ export function DistributeLeadsDialog({ open, onClose, leadIds }: Props) {
   const [ownerId, setOwnerId] = useState("");
   const distribute = useDistributeLeads();
   const { enqueueSnackbar } = useSnackbar();
-  const users = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: async () => {
-      const users = await fetchUsers();
-      return users.filter((u) => u.role === Role.Comercial || u.role === Role.Gestor);
-    },
-  });
+  const users = useUserDirectory(open);
 
   useEffect(() => {
     const allowed = distributionStrategyOptions(planCode).map((item) => item.value);
