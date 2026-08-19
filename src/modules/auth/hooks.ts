@@ -7,6 +7,7 @@ import type { Permission } from "@/lib/auth/permissions";
 import { canAccess, getFeatureLimit, hasFeature } from "@/lib/billing/access";
 import type { FeatureKey } from "@/lib/billing/types";
 import { hasSession } from "@/lib/auth/session";
+import { SESSION_STALE_TIME_MS } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
 import { fetchMe, loginRequest, logoutRequest } from "./services";
 import type { LoginFormValues } from "./schemas";
@@ -18,6 +19,7 @@ export function useSession() {
     queryKey: queryKeys.me,
     queryFn: fetchMe,
     enabled: typeof window !== "undefined" && hasSession(),
+    staleTime: SESSION_STALE_TIME_MS,
     retry: false,
   });
 }

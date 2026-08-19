@@ -58,12 +58,19 @@ async function refreshSession() {
   }
 }
 
+function isPublicAuthPage() {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname;
+  return path.startsWith("/login") || path.startsWith("/signup");
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const parsed = parseApiError(error.response?.status || 0, error.response?.data);
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-    if (parsed.status === 401 && original && !original._retry && !original.url?.includes("/v1/auth/")) {
+    const skipRefresh = isPublicAuthPage() || Boolean(original?.url?.includes("/v1/auth/"));
+    if (parsed.status === 401 && original && !original._retry && !skipRefresh) {
       original._retry = true;
       refreshing = refreshing ?? refreshSession();
       const ok = await refreshing;

@@ -69,7 +69,7 @@ export default function PlatformCompanyDetailPage() {
     enabled: Boolean(companyId),
   });
   const plansQuery = useQuery({
-    queryKey: queryKeys.platform.plans,
+    queryKey: queryKeys.plans,
     queryFn: fetchPlatformPlans,
   });
   const catalogQuery = useQuery({

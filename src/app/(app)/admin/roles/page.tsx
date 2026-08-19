@@ -17,7 +17,7 @@ import { mapWithConcurrency } from "@/lib/utils/concurrency";
 
 export default function RolesPage() {
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.roles,
+    queryKey: queryKeys.roles.withPermissions,
     queryFn: async () => {
       const roles = await fetchRoleCatalog();
       const withPermissions = await mapWithConcurrency(roles, 2, async (role) => ({

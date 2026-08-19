@@ -2,6 +2,9 @@ import { api } from "@/lib/api/client";
 import { mapCompanyStatus, mapPlanCode, mapSubscriptionStatus } from "@/lib/auth/mappers";
 import { planLabel } from "@/lib/billing/plan-catalog";
 import type { CompanyStatus, PlanCode, SubscriptionStatus } from "@/lib/billing/types";
+import { getQueryClient, PLANS_STALE_TIME_MS } from "@/lib/query/client";
+import { queryKeys } from "@/lib/query/keys";
+import { mapWithConcurrency } from "@/lib/utils/concurrency";
 
 export type PlatformCompany = {
   id: string;
@@ -85,8 +88,14 @@ export async function updateCompanyStatus(companyId: string, status: CompanyStat
 }
 
 export async function fetchPlatformPlans() {
-  const { data } = await api.get<PlatformPlan[]>("/v1/plans");
-  return data ?? [];
+  return getQueryClient().ensureQueryData({
+    queryKey: queryKeys.plans,
+    staleTime: PLANS_STALE_TIME_MS,
+    queryFn: async () => {
+      const { data } = await api.get<PlatformPlan[]>("/v1/plans");
+      return data ?? [];
+    },
+  });
 }
 
 export async function updatePlatformPlan(
@@ -147,19 +156,16 @@ export async function updateCompanyPaymentStatus(companyId: string, status: Curr
 
 export async function fetchCompaniesOverview(): Promise<CompanyOverview[]> {
   const [companies, plans] = await Promise.all([fetchPlatformCompanies(), fetchPlatformPlans()]);
-  const subscriptions = await Promise.all(
-    companies.map(async (company) => {
-      const subscription = await fetchCompanySubscription(company.id);
-      const plan = plans.find((item) => item.id === subscription?.plan_id) ?? null;
-      const planCode = plan ? mapPlanCode(plan.code) : null;
-      return {
-        company,
-        plan,
-        planCode,
-        planName: planCode ? planLabel(planCode) : plan?.name || "—",
-        subscription,
-      };
-    }),
-  );
-  return subscriptions;
+  return mapWithConcurrency(companies, 2, async (company) => {
+    const subscription = await fetchCompanySubscription(company.id);
+    const plan = plans.find((item) => item.id === subscription?.plan_id) ?? null;
+    const planCode = plan ? mapPlanCode(plan.code) : null;
+    return {
+      company,
+      plan,
+      planCode,
+      planName: planCode ? planLabel(planCode) : plan?.name || "—",
+      subscription,
+    };
+  });
 }

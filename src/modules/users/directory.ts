@@ -8,6 +8,7 @@ export type UserDirectoryEntry = {
   name: string;
   email?: string;
   status?: string;
+  is_owner?: boolean;
 };
 
 export async function fetchUserDirectory(): Promise<UserDirectoryEntry[]> {
@@ -17,6 +18,7 @@ export async function fetchUserDirectory(): Promise<UserDirectoryEntry[]> {
     name: user.name,
     email: user.email,
     status: user.status,
+    is_owner: user.is_owner,
   }));
   getQueryClient().setQueryData(queryKeys.userDirectory, list);
   return list;
@@ -38,6 +40,7 @@ export function seedUserDirectory(users: UserDirectoryEntry[]) {
       name: user.name,
       email: user.email,
       status: user.status,
+      is_owner: user.is_owner,
     })),
   );
 }

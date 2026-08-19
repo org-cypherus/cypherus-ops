@@ -62,7 +62,7 @@ export default function AdminPage() {
   const strategyOptions = distributionStrategyOptions(planCode);
 
   const settings = useQuery({
-    queryKey: [...queryKeys.roles, "distribution"],
+    queryKey: queryKeys.distributionRules,
     queryFn: fetchDistributionRules,
   });
 
@@ -83,7 +83,7 @@ export default function AdminPage() {
       return { defaultStrategy };
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...queryKeys.roles, "distribution"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.distributionRules });
       enqueueSnackbar("Regra de distribuição atualizada", { variant: "success" });
     },
     onError: (err: unknown) => {

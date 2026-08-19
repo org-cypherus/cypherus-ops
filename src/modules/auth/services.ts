@@ -86,14 +86,16 @@ async function loadPlansCatalog() {
 async function hydrateSession(user: CrmUser, companyId: string, permissions: PermissionAccess[]): Promise<SessionUser> {
   setCompanyId(companyId);
 
-  const { data: company } = await api.get<CompanyResponse>(`/v1/companies/${companyId}`);
-  const { data: features } = await api.get<FeatureAccess[]>(`/v1/companies/${companyId}/features`);
-  const { data: roles } = await api
-    .get<RoleResponse[]>(`/v1/companies/${companyId}/users/${user.id}/roles`)
-    .catch(() => ({ data: [] as RoleResponse[] }));
-  const subscriptionRes = await api
-    .get<SubscriptionResponse>(`/v1/companies/${companyId}/subscriptions/current`)
-    .catch(() => null);
+  const [{ data: company }, { data: features }] = await Promise.all([
+    api.get<CompanyResponse>(`/v1/companies/${companyId}`),
+    api.get<FeatureAccess[]>(`/v1/companies/${companyId}/features`),
+  ]);
+  const [{ data: roles }, subscriptionRes] = await Promise.all([
+    api
+      .get<RoleResponse[]>(`/v1/companies/${companyId}/users/${user.id}/roles`)
+      .catch(() => ({ data: [] as RoleResponse[] })),
+    api.get<SubscriptionResponse>(`/v1/companies/${companyId}/subscriptions/current`).catch(() => null),
+  ]);
   const plans = await loadPlansCatalog().catch(() => [] as PlanResponse[]);
 
   const subscription = subscriptionRes?.data;

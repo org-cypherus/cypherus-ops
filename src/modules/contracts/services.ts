@@ -83,9 +83,10 @@ function toUiContract(item: CrmContract, leadName?: string, templateName?: strin
   };
 }
 
+import { fetchLeadNameMap } from "@/modules/leads/services";
+
 async function leadNameMap() {
-  const { data } = await api.get<Array<{ id: string; name: string }>>(companyPath("/leads"));
-  return Object.fromEntries(data.map((lead) => [lead.id, lead.name]));
+  return fetchLeadNameMap().catch(() => ({} as Record<string, string>));
 }
 
 export async function fetchContracts(params?: { leadId?: string }) {

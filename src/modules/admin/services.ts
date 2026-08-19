@@ -2,8 +2,10 @@ import { api } from "@/lib/api/client";
 import { mapRoleCode, roleCodeFromUi } from "@/lib/auth/mappers";
 import type { RoleName } from "@/lib/auth/permissions";
 import { companyPath } from "@/lib/auth/session";
+import { getQueryClient } from "@/lib/query/client";
+import { queryKeys } from "@/lib/query/keys";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
-import { seedUserDirectory } from "@/modules/users/directory";
+import { fetchUserDirectory, seedUserDirectory } from "@/modules/users/directory";
 
 export type AppUser = {
   id: string;
@@ -62,9 +64,19 @@ async function toAppUser(user: CrmUser): Promise<AppUser> {
 }
 
 export async function fetchUsers() {
-  const { data } = await api.get<CrmUser[]>(companyPath("/users"));
-  seedUserDirectory(data);
-  return mapWithConcurrency(data, 2, (user) => toAppUser(user));
+  const data = await getQueryClient().ensureQueryData({
+    queryKey: queryKeys.userDirectory,
+    queryFn: fetchUserDirectory,
+  });
+  return mapWithConcurrency(data, 2, (user) =>
+    toAppUser({
+      id: user.id,
+      name: user.name,
+      email: user.email ?? "",
+      status: user.status ?? "ACTIVE",
+      is_owner: user.is_owner,
+    }),
+  );
 }
 
 export async function createUser(values: {
@@ -106,11 +118,17 @@ export async function updateUser(id: string, values: Partial<AppUser>) {
   if (values.status === "Inativo") {
     await api.post(companyPath(`/users/${id}/deactivate`));
   }
-  const { data } = await api.get<CrmUser[]>(companyPath("/users"));
+  const data = await fetchUserDirectory();
   seedUserDirectory(data);
   const user = data.find((item) => item.id === id);
   if (!user) throw new Error("Usuário não encontrado após atualizar.");
-  return toAppUser(user);
+  return toAppUser({
+    id: user.id,
+    name: user.name,
+    email: user.email ?? "",
+    status: user.status ?? "ACTIVE",
+    is_owner: user.is_owner,
+  });
 }
 
 export async function deactivateUser(id: string) {

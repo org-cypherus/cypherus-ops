@@ -29,6 +29,11 @@ function invalidateLeadQueries(queryClient: ReturnType<typeof useQueryClient>, i
   if (id) void queryClient.invalidateQueries({ queryKey: queryKeys.leads.detail(id) });
 }
 
+function syncLeadDetail(queryClient: ReturnType<typeof useQueryClient>, lead: Lead) {
+  queryClient.setQueryData(queryKeys.leads.detail(lead.id), lead);
+  void queryClient.invalidateQueries({ queryKey: queryKeys.kanban });
+}
+
 function moveLeadInBoard(board: KanbanBoard, leadId: string, status: PipelineStage): KanbanBoard {
   const lead = board.columns.flatMap((c) => c.leads).find((l) => l.id === leadId);
   if (!lead) return board;
@@ -145,7 +150,9 @@ export function useMoveLead() {
         queryClient.setQueryData(key, data);
       });
     },
-    onSettled: () => invalidateLeadQueries(queryClient),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.kanban });
+    },
   });
 }
 
@@ -170,7 +177,7 @@ export function useAddAttachment(leadId: string) {
   return useMutation({
     mutationFn: (attachment: Omit<Attachment, "id" | "createdAt">) =>
       addLeadAttachment(leadId, attachment),
-    onSuccess: () => invalidateLeadQueries(queryClient, leadId),
+    onSuccess: (lead) => syncLeadDetail(queryClient, lead),
   });
 }
 
@@ -178,7 +185,7 @@ export function useRemoveAttachment(leadId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (attachmentId: string) => removeLeadAttachment(leadId, attachmentId),
-    onSuccess: () => invalidateLeadQueries(queryClient, leadId),
+    onSuccess: (lead) => syncLeadDetail(queryClient, lead),
   });
 }
 
@@ -187,7 +194,7 @@ export function useAddTimelineEntry(leadId: string) {
   return useMutation({
     mutationFn: (payload: { type: string; description: string }) =>
       addLeadTimelineEntry(leadId, payload),
-    onSuccess: () => invalidateLeadQueries(queryClient, leadId),
+    onSuccess: (lead) => syncLeadDetail(queryClient, lead),
   });
 }
 

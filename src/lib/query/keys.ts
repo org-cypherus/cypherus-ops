@@ -33,8 +33,13 @@ export const queryKeys = {
   reports: (params?: Record<string, unknown>) => ["reports", params] as const,
   users: ["users"] as const,
   userDirectory: ["users", "directory"] as const,
+  leadNames: ["lead-names"] as const,
   plans: ["plans"] as const,
-  roles: ["roles"] as const,
+  roles: {
+    catalog: ["roles", "catalog"] as const,
+    withPermissions: ["roles", "with-permissions"] as const,
+  },
+  distributionRules: ["distribution", "rules"] as const,
   notifications: ["notifications"] as const,
   search: (q: string) => ["search", q] as const,
   platform: {
@@ -43,7 +48,6 @@ export const queryKeys = {
     companyFeatures: (id: string) => ["platform", "companies", id, "features"] as const,
     companySubscription: (id: string) => ["platform", "companies", id, "subscription"] as const,
     overview: ["platform", "overview"] as const,
-    plans: ["platform", "plans"] as const,
     features: ["platform", "features"] as const,
   },
 };

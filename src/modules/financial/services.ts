@@ -1,5 +1,6 @@
 import { api } from "@/lib/api/client";
 import { companyPath } from "@/lib/auth/session";
+import { fetchLeadNameMap } from "@/modules/leads/services";
 import { fetchOwnerMap } from "@/modules/users/directory";
 
 export type Payment = {
@@ -61,11 +62,10 @@ const PAYMENT_STATUS: Record<string, string> = {
 };
 
 export async function fetchPayments(): Promise<Payment[]> {
-  const [{ data }, leads] = await Promise.all([
+  const [{ data }, names] = await Promise.all([
     api.get<CrmPayment[]>(companyPath("/payments")),
-    api.get<Array<{ id: string; name: string }>>(companyPath("/leads")).catch(() => ({ data: [] as Array<{ id: string; name: string }> })),
+    fetchLeadNameMap().catch(() => ({} as Record<string, string>)),
   ]);
-  const names = Object.fromEntries(leads.data.map((lead) => [lead.id, lead.name]));
   return data.map((item) => ({
     id: item.id,
     contractId: item.contract_id,

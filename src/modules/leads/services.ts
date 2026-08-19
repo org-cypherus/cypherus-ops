@@ -67,7 +67,26 @@ function paginate<T>(items: T[], params?: LeadFilters): Paginated<T> {
 
 async function enrichLeads(leads: CrmLead[]): Promise<Lead[]> {
   const owners = await fetchOwnerMap();
+  seedLeadNames(leads);
   return leads.map((lead) => toUiLead(lead, owners[lead.owner_user_id]));
+}
+
+export async function fetchLeadNameMap(): Promise<Record<string, string>> {
+  return getQueryClient().ensureQueryData({
+    queryKey: queryKeys.leadNames,
+    staleTime: PIPELINE_STALE_TIME_MS,
+    queryFn: async () => {
+      const { data } = await api.get<Array<{ id: string; name: string }>>(companyPath("/leads"));
+      return Object.fromEntries((data ?? []).map((lead) => [lead.id, lead.name]));
+    },
+  });
+}
+
+function seedLeadNames(leads: Array<{ id: string; name: string }>) {
+  getQueryClient().setQueryData(
+    queryKeys.leadNames,
+    Object.fromEntries(leads.map((lead) => [lead.id, lead.name])),
+  );
 }
 
 export async function fetchLeads(params?: LeadFilters) {
@@ -162,7 +181,9 @@ export async function fetchKanban() {
     api.get<CrmPipelineBoard>(companyPath(`/pipelines/${pipeline.id}/board`)),
     fetchOwnerMap(),
   ]);
-  return toKanbanBoard(data, owners);
+  const board = toKanbanBoard(data, owners);
+  seedLeadNames(board.columns.flatMap((column) => column.leads));
+  return board;
 }
 
 export async function moveLead(leadId: string, status: PipelineStage) {

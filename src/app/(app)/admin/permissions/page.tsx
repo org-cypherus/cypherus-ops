@@ -37,14 +37,14 @@ export default function PermissionsPage() {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const rolesQuery = useQuery({
-    queryKey: queryKeys.roles,
+    queryKey: queryKeys.roles.catalog,
     queryFn: fetchRoleCatalog,
   });
   const [roleId, setRoleId] = useState<string>("");
   const selectedRoleId = roleId || rolesQuery.data?.[0]?.id || "";
 
   const permissionsQuery = useQuery({
-    queryKey: [...queryKeys.roles, selectedRoleId, "permissions"],
+    queryKey: [...queryKeys.roles.catalog, selectedRoleId, "permissions"],
     queryFn: () => fetchRolePermissions(selectedRoleId),
     enabled: Boolean(selectedRoleId),
   });
@@ -67,7 +67,8 @@ export default function PermissionsPage() {
       await replaceRolePermissions(selectedRoleId, key);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.roles });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.roles.catalog });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.roles.withPermissions });
       enqueueSnackbar("Permissão atualizada", { variant: "success" });
     },
   });

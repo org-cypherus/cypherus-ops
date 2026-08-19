@@ -24,7 +24,7 @@ export default function PlatformPlansPage() {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const plans = useQuery({
-    queryKey: queryKeys.platform.plans,
+    queryKey: queryKeys.plans,
     queryFn: fetchPlatformPlans,
   });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -40,7 +40,7 @@ export default function PlatformPlansPage() {
     mutationFn: ({ planId, price }: { planId: string; price: number }) =>
       updatePlatformPlan(planId, { price }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.platform.plans });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.plans });
       void queryClient.invalidateQueries({ queryKey: queryKeys.platform.overview });
       enqueueSnackbar("Preço do plano atualizado", { variant: "success" });
     },
