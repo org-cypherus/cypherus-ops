@@ -34,4 +34,13 @@ export const queryKeys = {
   roles: ["roles"] as const,
   notifications: ["notifications"] as const,
   search: (q: string) => ["search", q] as const,
+  platform: {
+    companies: ["platform", "companies"] as const,
+    company: (id: string) => ["platform", "companies", id] as const,
+    companyFeatures: (id: string) => ["platform", "companies", id, "features"] as const,
+    companySubscription: (id: string) => ["platform", "companies", id, "subscription"] as const,
+    overview: ["platform", "overview"] as const,
+    plans: ["platform", "plans"] as const,
+    features: ["platform", "features"] as const,
+  },
 };

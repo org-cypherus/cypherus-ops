@@ -35,7 +35,7 @@ import { Controller, useForm } from "react-hook-form";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
-import { api } from "@/lib/api/client";
+import { getApiError } from "@/lib/api/client";
 import { ROLE_NAMES, type RoleName } from "@/lib/auth/permissions";
 import { canAddActiveUser, nextPlanForMoreUsers, usersLimitLabel } from "@/lib/billing/limits";
 import { planLabel } from "@/lib/billing/plan-catalog";
@@ -47,18 +47,8 @@ import {
   emptyAdminUserForm,
   type AdminUserFormValues,
 } from "@/modules/admin/schemas";
+import { createUser, deactivateUser, fetchUsers, updateUser, type AppUser } from "@/modules/admin/services";
 import { useSession } from "@/modules/auth/hooks";
-
-type AppUser = {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: RoleName;
-  team: string;
-  status: "Ativo" | "Inativo";
-  mustChangePassword?: boolean;
-};
 
 export default function UsersPage() {
   const queryClient = useQueryClient();
@@ -92,10 +82,7 @@ export default function UsersPage() {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.users,
-    queryFn: async () => {
-      const { data } = await api.get<{ data: AppUser[] }>("/users");
-      return data.data;
-    },
+    queryFn: fetchUsers,
   });
 
   const activeCount = data?.filter((u) => u.status === "Ativo").length ?? 0;
@@ -122,13 +109,13 @@ export default function UsersPage() {
   const save = useMutation({
     mutationFn: async (values: AdminUserFormValues) => {
       if (editing) {
-        const { data } = await api.patch<AppUser>(`/users/${editing.id}`, values);
-        return { user: data, temporaryPassword: undefined as string | undefined };
+        const user = await updateUser(editing.id, values);
+        return { user, invitationToken: undefined as string | undefined };
       }
-      const { data } = await api.post<AppUser & { temporaryPassword?: string }>("/users", values);
-      return { user: data, temporaryPassword: data.temporaryPassword };
+      const user = await createUser(values);
+      return { user, invitationToken: user.invitationToken };
     },
-    onSuccess: ({ temporaryPassword }, values) => {
+    onSuccess: ({ invitationToken }, values) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
       if (editing) {
         enqueueSnackbar("Usuário atualizado", { variant: "success" });
@@ -137,47 +124,37 @@ export default function UsersPage() {
         reset(emptyAdminUserForm);
       } else {
         setCreatedEmail(values.email);
-        setCreatedPassword(temporaryPassword || defaultPasswordFromName(values.name));
-        enqueueSnackbar("Usuário criado", { variant: "success" });
+        setCreatedPassword(invitationToken || defaultPasswordFromName(values.name));
+        enqueueSnackbar("Convite enviado", { variant: "success" });
       }
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        "Falha ao salvar usuário";
-      enqueueSnackbar(message, { variant: "error" });
+      enqueueSnackbar(getApiError(err).message || "Falha ao salvar usuário", { variant: "error" });
     },
   });
 
   const toggleStatus = useMutation({
-    mutationFn: (user: AppUser) =>
-      api.patch(`/users/${user.id}`, {
-        status: user.status === "Ativo" ? "Inativo" : "Ativo",
-      }),
+    mutationFn: async (user: AppUser) => {
+      if (user.status === "Ativo") await deactivateUser(user.id);
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
       enqueueSnackbar("Status atualizado", { variant: "success" });
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        "Não foi possível alterar o status";
-      enqueueSnackbar(message, { variant: "error" });
+      enqueueSnackbar(getApiError(err).message || "Não foi possível alterar o status", { variant: "error" });
     },
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => api.delete(`/users/${id}`),
+    mutationFn: (id: string) => deactivateUser(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
-      enqueueSnackbar("Usuário excluído", { variant: "success" });
+      enqueueSnackbar("Usuário desativado", { variant: "success" });
       setDeleteId(null);
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        "Não foi possível excluir";
-      enqueueSnackbar(message, { variant: "error" });
+      enqueueSnackbar(getApiError(err).message || "Não foi possível excluir", { variant: "error" });
     },
   });
 
@@ -195,7 +172,7 @@ export default function UsersPage() {
         <Box>
           <Typography variant="h4">Gestão de Usuários</Typography>
           <Typography variant="body2" color="text.secondary">
-            Colaboradores, cargos e status — senha inicial = sobrenome + ano
+            Colaboradores, cargos e convites — o token de convite é exibido uma única vez
           </Typography>
           <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
             {limitHint}
@@ -336,7 +313,7 @@ export default function UsersPage() {
                 E-mail: <strong>{createdEmail}</strong>
               </Typography>
               <Typography variant="body2">
-                Senha temporária: <strong>{createdPassword}</strong>
+                Token de convite: <strong>{createdPassword}</strong>
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 Padrão: último sobrenome + ano atual. No primeiro acesso o usuário será solicitado a

@@ -34,6 +34,13 @@ describe("buildSessionUser (company tier)", () => {
     expect(ana.features.agenda?.enabled).toBe(true);
     expect(carla.features.agenda?.enabled).toBe(false);
   });
+
+  it("marks Cypher staff email as platform admin", () => {
+    const ops = buildSessionUser(mockUsers.find((u) => u.email === "ops@cypherops.com.br")!);
+    const ana = buildSessionUser(mockUsers.find((u) => u.email === "ana@cypherops.com")!);
+    expect(ops.isPlatformAdmin).toBe(true);
+    expect(ana.isPlatformAdmin).toBe(false);
+  });
 });
 
 describe("mock store mutations", () => {

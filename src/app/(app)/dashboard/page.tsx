@@ -19,20 +19,23 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { ErrorState } from "@/components/feedback/ErrorState";
-import { api } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
 import { planLabel } from "@/lib/billing/plan-catalog";
 import { queryKeys } from "@/lib/query/keys";
 import { formatPercent } from "@/lib/utils/format";
 import { useCanAccess, useFeature, useSession } from "@/modules/auth/hooks";
 import { MoneyVisibilityToggle, useMoneyVisibility } from "@/modules/dashboard/MoneyVisibility";
+import { fetchCommercialDashboard } from "@/modules/dashboard/services";
 
 function periodFrom(value: string) {
-  const days = Number(value);
-  if (!days) return undefined;
+  const days = Number(value) || 30;
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return d.toISOString();
+  return d.toISOString().slice(0, 10);
+}
+
+function periodTo() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function DashboardPage() {
@@ -55,20 +58,7 @@ export default function DashboardPage() {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.dashboard.me({ period }),
-    queryFn: async () => {
-      const { data } = await api.get<{
-        activeLeads: number;
-        closedLeads: number;
-        conversion: number;
-        soldValue: number;
-        goal: number;
-        commission: number;
-        avgCloseDays: number;
-        funnel: Array<{ stage: string; value: number }>;
-        goalSeries: Array<{ month: string; goal: number; actual: number }>;
-      }>("/dashboard/me", { params: { from } });
-      return data;
-    },
+    queryFn: () => fetchCommercialDashboard(from!, periodTo()),
     enabled: !(isAdmin && canAdminDash),
   });
 

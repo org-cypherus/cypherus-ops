@@ -1,11 +1,9 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
-import { clearAccessToken, getAccessToken, setAccessToken } from "@/lib/auth/session";
+import { BFF_BASE_PATH, isMockMode } from "@/lib/api/config";
+import { parseApiError, type ParsedApiError } from "@/lib/api/errors";
+import { clearAccessToken, getAccessToken, hasSession, setAccessToken } from "@/lib/auth/session";
 
-export type ApiError = {
-  statusCode: number;
-  message: string;
-  error?: string;
-};
+export type ApiError = ParsedApiError;
 
 export type Paginated<T> = {
   data: T[];
@@ -14,57 +12,74 @@ export type Paginated<T> = {
   pageSize: number;
 };
 
-const baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
 export const api = axios.create({
-  baseURL,
-  headers: { "Content-Type": "application/json" },
+  baseURL: BFF_BASE_PATH,
+  headers: { Accept: "application/json" },
   withCredentials: true,
 });
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = getAccessToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (!config.headers.get("X-Request-ID")) {
+    config.headers.set("X-Request-ID", crypto.randomUUID());
+  }
+  if (isMockMode()) {
+    const token = getAccessToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (config.data instanceof FormData) {
+    config.headers.delete("Content-Type");
+  } else if (!config.headers.get("Content-Type") && config.data !== undefined && config.method !== "get") {
+    config.headers.set("Content-Type", "application/json");
   }
   return config;
 });
 
-let refreshing: Promise<string | null> | null = null;
+let refreshing: Promise<boolean> | null = null;
 
-async function refreshAccessToken() {
+async function refreshSession() {
   try {
     const { data } = await axios.post(
-      `${baseURL}/refresh`,
+      `${BFF_BASE_PATH}/v1/auth/refresh`,
       {},
-      { withCredentials: true },
+      { withCredentials: true, headers: { "Content-Type": "application/json" } },
     );
-    const token = data.access_token as string;
-    setAccessToken(token);
-    return token;
+    if (isMockMode() && data?.access_token) {
+      setAccessToken(data.access_token);
+    }
+    return true;
   } catch {
     clearAccessToken();
-    return null;
+    return false;
   }
 }
 
 api.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError<ApiError>) => {
+  async (error: AxiosError) => {
+    const parsed = parseApiError(error.response?.status || 0, error.response?.data);
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-    if (error.response?.status === 401 && original && !original._retry) {
+    if (parsed.status === 401 && original && !original._retry && !original.url?.includes("/v1/auth/")) {
       original._retry = true;
-      refreshing = refreshing ?? refreshAccessToken();
-      const token = await refreshing;
+      refreshing = refreshing ?? refreshSession();
+      const ok = await refreshing;
       refreshing = null;
-      if (token) {
-        original.headers.Authorization = `Bearer ${token}`;
-        return api(original);
-      }
+      if (ok) return api(original);
       if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
         window.location.href = "/login";
       }
     }
-    return Promise.reject(error);
+    return Promise.reject(Object.assign(error, { apiError: parsed }));
   },
 );
+
+export function getApiError(error: unknown): ParsedApiError {
+  if (error && typeof error === "object" && "apiError" in error) {
+    return (error as { apiError: ParsedApiError }).apiError;
+  }
+  if (axios.isAxiosError(error)) {
+    return parseApiError(error.response?.status || 0, error.response?.data);
+  }
+  return parseApiError(0, { error: { code: "UNKNOWN", message: "Erro inesperado." } });
+}
+
+export { hasSession };

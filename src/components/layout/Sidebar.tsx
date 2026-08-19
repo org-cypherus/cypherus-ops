@@ -1,11 +1,11 @@
 "use client";
 
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
-import AssessmentOutlinedIcon from "@mui/icons-material/AssessmentOutlined";
-import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
+import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
+import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
-import GavelOutlinedIcon from "@mui/icons-material/GavelOutlined";
+import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
 import PeopleOutlineIcon from "@mui/icons-material/PeopleOutline";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
@@ -24,6 +24,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { canAccess } from "@/lib/billing/access";
 import { APP_NAV_ROUTES } from "@/lib/billing/routes";
+import { PLATFORM_NAV_ROUTES, isPlatformPath } from "@/lib/platform/routes";
 import { Role } from "@/lib/auth/permissions";
 import { useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
@@ -35,13 +36,14 @@ const icons: Record<string, ReactNode> = {
   "/dashboard": <DashboardOutlinedIcon />,
   "/dashboard/admin": <DashboardOutlinedIcon />,
   "/leads": <AccountTreeOutlinedIcon />,
-  "/calendar": <CalendarMonthOutlinedIcon />,
-  "/legal": <GavelOutlinedIcon />,
   "/contracts": <DescriptionOutlinedIcon />,
   "/financial": <PaidOutlinedIcon />,
-  "/reports": <AssessmentOutlinedIcon />,
   "/admin/users": <PeopleOutlineIcon />,
   "/admin": <SettingsOutlinedIcon />,
+  "/platform": <HubOutlinedIcon />,
+  "/platform/companies": <BusinessOutlinedIcon />,
+  "/platform/plans": <CreditCardOutlinedIcon />,
+  "/platform/billing": <PaidOutlinedIcon />,
 };
 
 const paperSx = {
@@ -56,11 +58,12 @@ const paperSx = {
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const { data: user } = useSession();
+  const platformMode = Boolean(user?.isPlatformAdmin);
   const adminUsesAdminDash =
     user?.role === Role.Administrador &&
     canAccess(user?.features, user?.permissions, "dashboard_advanced", "dashboard:visualizar");
 
-  const visibleItems = APP_NAV_ROUTES.filter((item) => {
+  const tenantItems = APP_NAV_ROUTES.filter((item) => {
     if (item.feature) {
       return canAccess(user?.features, user?.permissions, item.feature, item.permission);
     }
@@ -70,6 +73,13 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
       ? { ...item, href: "/dashboard/admin", label: "Dashboard" }
       : item,
   );
+
+  const visibleItems = platformMode
+    ? [
+        ...PLATFORM_NAV_ROUTES,
+        { href: "/leads", label: "CRM da empresa" },
+      ]
+    : tenantItems;
 
   return (
     <>
@@ -82,7 +92,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             Cypher Ops
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Operação comercial
+            {platformMode ? "Console da plataforma" : "Operação comercial"}
           </Typography>
         </Box>
       </Toolbar>
@@ -91,8 +101,10 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           const selected =
             pathname === item.href ||
             (item.href === "/dashboard/admin" && pathname.startsWith("/dashboard")) ||
+            (item.href === "/platform" && isPlatformPath(pathname) && pathname === "/platform") ||
             (item.href !== "/admin" &&
               item.href !== "/dashboard/admin" &&
+              item.href !== "/platform" &&
               pathname.startsWith(item.href)) ||
             (item.href === "/admin" &&
               pathname.startsWith("/admin") &&

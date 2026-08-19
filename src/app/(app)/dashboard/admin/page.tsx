@@ -23,17 +23,20 @@ import { PieChart } from "@mui/x-charts/PieChart";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ErrorState } from "@/components/feedback/ErrorState";
-import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
 import { formatPercent } from "@/lib/utils/format";
 import { MoneyVisibilityToggle, useMoneyVisibility } from "@/modules/dashboard/MoneyVisibility";
+import { fetchAdminDashboard } from "@/modules/dashboard/services";
 
 function periodFrom(value: string) {
-  const days = Number(value);
-  if (!days) return undefined;
+  const days = Number(value) || 30;
   const d = new Date();
   d.setDate(d.getDate() - days);
-  return d.toISOString();
+  return d.toISOString().slice(0, 10);
+}
+
+function periodTo() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function AdminDashboardPage() {
@@ -45,21 +48,7 @@ export default function AdminDashboardPage() {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.dashboard.admin({ period }),
-    queryFn: async () => {
-      const { data } = await api.get<{
-        leadsReceived: number;
-        conversion: number;
-        revenue: number;
-        avgTicket: number;
-        avgCloseDays: number;
-        signedContracts: number;
-        pendingContracts: number;
-        leadsByOrigin: Array<{ origin: string; value: number }>;
-        monthlyRevenue: Array<{ month: string; value: number }>;
-        topPerformers: Array<{ name: string; conversion: number; revenue: number }>;
-      }>("/dashboard/admin", { params: { from } });
-      return data;
-    },
+    queryFn: () => fetchAdminDashboard(from, periodTo()),
   });
 
   if (isLoading) {

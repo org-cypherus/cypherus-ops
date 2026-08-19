@@ -19,7 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSnackbar } from "notistack";
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api/client";
+import { fetchUsers } from "@/modules/admin/services";
 import { Role } from "@/lib/auth/permissions";
 import { distributionStrategyOptions, type DistributionStrategy } from "@/lib/billing/distribution";
 import { planLabel } from "@/lib/billing/plan-catalog";
@@ -43,8 +43,8 @@ export function DistributeLeadsDialog({ open, onClose, leadIds }: Props) {
   const users = useQuery({
     queryKey: queryKeys.users,
     queryFn: async () => {
-      const { data } = await api.get<{ data: Array<{ id: string; name: string; role: string }> }>("/users");
-      return data.data.filter((u) => u.role === Role.Comercial || u.role === Role.Gestor);
+      const users = await fetchUsers();
+      return users.filter((u) => u.role === Role.Comercial || u.role === Role.Gestor);
     },
   });
 

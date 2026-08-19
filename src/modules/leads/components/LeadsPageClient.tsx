@@ -27,18 +27,18 @@ import { useEffect, useMemo, useState } from "react";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
-import { api } from "@/lib/api/client";
+import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { queryKeys } from "@/lib/query/keys";
 import { downloadText } from "@/lib/utils/download";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
-import { StatusBadge } from "@/components/feedback/StatusBadge";
 import Link from "next/link";
+import { fetchUsers } from "@/modules/admin/services";
+import { useSession } from "@/modules/auth/hooks";
+import { Role } from "@/lib/auth/permissions";
 import { CreateLeadDialog } from "@/modules/leads/components/CreateLeadDialog";
 import { DistributeLeadsDialog } from "@/modules/leads/components/DistributeLeadsDialog";
 import { ImportLeadsDialog } from "@/modules/leads/components/ImportLeadsDialog";
 import { KanbanBoard } from "@/modules/leads/components/KanbanBoard";
-import { useSession } from "@/modules/auth/hooks";
-import { Role } from "@/lib/auth/permissions";
 import { useDistributeLeads, useKanban, useLeads } from "@/modules/leads/hooks";
 import type { Lead } from "@/modules/leads/types";
 
@@ -63,7 +63,7 @@ export function LeadsPageClient() {
 
   useEffect(() => {
     if (sessionReady && session && !canViewCrm) {
-      router.replace(session.role === Role.Jurídico ? "/legal" : "/dashboard");
+      router.replace("/dashboard");
     }
   }, [sessionReady, session, canViewCrm, router]);
 
@@ -88,10 +88,7 @@ export function LeadsPageClient() {
   const leads = useLeads({ ...filters, pageSize: 100 });
   const users = useQuery({
     queryKey: queryKeys.users,
-    queryFn: async () => {
-      const { data } = await api.get<{ data: Array<{ id: string; name: string }> }>("/users");
-      return data.data;
-    },
+    queryFn: fetchUsers,
   });
 
   const allLeads = useMemo(() => leads.data?.data || [], [leads.data?.data]);

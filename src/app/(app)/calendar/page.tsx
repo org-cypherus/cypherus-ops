@@ -1,17 +1,5 @@
-import { Suspense } from "react";
-import { Box, CircularProgress } from "@mui/material";
-import { CalendarPageClient } from "@/modules/calendar/components/CalendarPageClient";
+import { redirect } from "next/navigation";
 
-export default function CalendarPage() {
-  return (
-    <Suspense
-      fallback={
-        <Box display="flex" justifyContent="center" py={8}>
-          <CircularProgress />
-        </Box>
-      }
-    >
-      <CalendarPageClient />
-    </Suspense>
-  );
+export default function CalendarRedirectPage() {
+  redirect("/leads");
 }

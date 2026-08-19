@@ -6,7 +6,7 @@ import { homePathForSession } from "@/lib/auth/access";
 import type { Permission } from "@/lib/auth/permissions";
 import { canAccess, getFeatureLimit, hasFeature } from "@/lib/billing/access";
 import type { FeatureKey } from "@/lib/billing/types";
-import { getAccessToken } from "@/lib/auth/session";
+import { hasSession } from "@/lib/auth/session";
 import { queryKeys } from "@/lib/query/keys";
 import { fetchMe, loginRequest, logoutRequest } from "./services";
 import type { LoginFormValues } from "./schemas";
@@ -14,11 +14,10 @@ import type { LoginFormValues } from "./schemas";
 export { homePathForRole, homePathForSession } from "@/lib/auth/access";
 
 export function useSession() {
-  const hasToken = typeof window !== "undefined" && Boolean(getAccessToken());
   return useQuery({
     queryKey: queryKeys.me,
     queryFn: fetchMe,
-    enabled: hasToken,
+    enabled: typeof window !== "undefined" && hasSession(),
     retry: false,
   });
 }
@@ -28,7 +27,6 @@ export function usePermission(permission: Permission) {
   return Boolean(user?.permissions.includes(permission));
 }
 
-/** Plano/tier da company do user autenticado (não do cargo). */
 export function useCompanyPlan() {
   const { data: user } = useSession();
   return {
@@ -46,7 +44,6 @@ export function useFeature(key: FeatureKey) {
   };
 }
 
-/** Acesso efetivo = feature do plano ∩ permission do role. */
 export function useCanAccess(feature: FeatureKey, permission?: Permission) {
   const { data: user } = useSession();
   return canAccess(user?.features, user?.permissions, feature, permission);

@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   CardContent,
-  Chip,
   CircularProgress,
   Link as MuiLink,
   Stack,
@@ -19,31 +18,33 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { getApiError } from "@/lib/api/client";
+import { isMockMode } from "@/lib/api/config";
 import { getAccessToken } from "@/lib/auth/session";
-import { DEMO_ACCOUNTS } from "@/mocks/data";
 import { homePathForSession, useLogin, useSession } from "@/modules/auth/hooks";
 import { loginSchema, type LoginFormValues } from "@/modules/auth/schemas";
 
 export default function LoginPage() {
   const router = useRouter();
-  const hasToken = typeof window !== "undefined" && Boolean(getAccessToken());
+  const hasMockToken = isMockMode() && typeof window !== "undefined" && Boolean(getAccessToken());
   const session = useSession();
   const login = useLogin();
   const {
     register,
     handleSubmit,
-    setValue,
     formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: DEMO_ACCOUNTS[0].email, password: DEMO_ACCOUNTS[0].password },
+    defaultValues: { email: "", password: "" },
   });
 
   useEffect(() => {
-    if (hasToken && session.isSuccess && session.data) {
+    if ((hasMockToken || session.isSuccess) && session.data) {
       router.replace(homePathForSession(session.data));
     }
-  }, [hasToken, session.isSuccess, session.data, router]);
+  }, [hasMockToken, session.isSuccess, session.data, router]);
+
+  const loginError = login.isError ? getApiError(login.error) : null;
 
   return (
     <AuthShell>
@@ -70,8 +71,12 @@ export default function LoginPage() {
               </Typography>
             </Box>
 
-            {login.isError ? (
-              <Alert severity="error">Credenciais inválidas ou usuário inativo.</Alert>
+            {loginError ? (
+              <Alert severity="error">
+                {loginError.code === "ACCOUNT_LOCKED"
+                  ? "Conta bloqueada temporariamente. Tente novamente mais tarde."
+                  : loginError.message || "Credenciais inválidas ou usuário inativo."}
+              </Alert>
             ) : null}
 
             <TextField
@@ -99,27 +104,6 @@ export default function LoginPage() {
             >
               Acessar sistema
             </Button>
-
-            <Box>
-              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1, textAlign: "center" }}>
-                Acessos demo (MVP) — senha: {DEMO_ACCOUNTS[0].password}
-              </Typography>
-              <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap" useFlexGap>
-                {DEMO_ACCOUNTS.map((account) => (
-                  <Chip
-                    key={account.email}
-                    label={account.label}
-                    clickable
-                    variant="outlined"
-                    size="small"
-                    onClick={() => {
-                      setValue("email", account.email, { shouldValidate: true });
-                      setValue("password", account.password, { shouldValidate: true });
-                    }}
-                  />
-                ))}
-              </Stack>
-            </Box>
 
             <Typography variant="body2" color="text.secondary" textAlign="center">
               Não tem conta?{" "}

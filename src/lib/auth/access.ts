@@ -4,13 +4,15 @@ import { canAccess } from "@/lib/billing/access";
 import { APP_NAV_ROUTES } from "@/lib/billing/routes";
 
 export function homePathForRole(role: RoleName) {
-  if (role === Role.Jurídico) return "/legal";
   if (role === Role.Financeiro) return "/financial";
   return "/leads";
 }
 
-/** Home respeitando role ∩ features do plano da company. */
-export function homePathForSession(user: Pick<SessionUser, "role" | "permissions" | "features">) {
+/** Home respeitando role ∩ features do plano da company. Staff Cypher cai na visão de plataforma. */
+export function homePathForSession(
+  user: Pick<SessionUser, "role" | "permissions" | "features"> & { isPlatformAdmin?: boolean },
+) {
+  if (user.isPlatformAdmin) return "/platform";
   const preferred = homePathForRole(user.role);
   const preferredRoute = APP_NAV_ROUTES.find((route) => route.href === preferred);
   if (preferredRoute) {

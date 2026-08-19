@@ -7,6 +7,7 @@ import Link from "next/link";
 import { hasFeature, minimumPlanForFeature } from "@/lib/billing/access";
 import { planLabel } from "@/lib/billing/plan-catalog";
 import { matchAppRoute } from "@/lib/billing/routes";
+import { isPlatformPath } from "@/lib/platform/routes";
 import type { FeatureKey } from "@/lib/billing/types";
 import { useSession } from "@/modules/auth/hooks";
 import { usePathname } from "next/navigation";
@@ -100,7 +101,16 @@ export function FeatureRouteGuard({ children }: { children: ReactNode }) {
   const { data: user } = useSession();
   const route = matchAppRoute(pathname);
 
-  if (!route || !user) return children;
+  if (!user) return children;
+
+  if (isPlatformPath(pathname)) {
+    if (!user.isPlatformAdmin) {
+      return <PermissionDenied label="a visão de plataforma" />;
+    }
+    return children;
+  }
+
+  if (!route) return children;
 
   if (route.feature && !hasFeature(user.features, route.feature)) {
     return <PlanUpsell feature={route.feature} label={route.label} />;

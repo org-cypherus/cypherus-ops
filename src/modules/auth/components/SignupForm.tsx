@@ -38,6 +38,7 @@ import {
   SIGNUP_STEP_FIELDS,
   validateSignupStep,
 } from "@/modules/auth/signup-flow";
+import { signupRequest } from "@/modules/auth/services";
 import {
   resolvePlanCode,
   signupSchema,
@@ -56,12 +57,6 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
       </Typography>
     </Stack>
   );
-}
-
-/** Prévia local até existir POST /signup na API. */
-async function createAccountPreview(_values: SignupFormValues) {
-  await new Promise((resolve) => setTimeout(resolve, 900));
-  return { ok: true as const };
 }
 
 export function SignupForm() {
@@ -136,8 +131,8 @@ export function SignupForm() {
     setSubmitError(null);
     setSubmitting(true);
     try {
-      const result = await createAccountPreview(formValues);
-      if (!result.ok) {
+      const result = await signupRequest(formValues);
+      if (!result.company) {
         setSubmitError("Não foi possível criar a conta. Tente novamente.");
         return;
       }

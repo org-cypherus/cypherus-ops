@@ -66,7 +66,7 @@ export default function ContractDetailPage() {
     mutationFn: () => generateContractPdf(id),
     onSuccess: async (res) => {
       invalidate();
-      const file = res.file || (res.pdfId ? await fetchFile(res.pdfId) : null);
+      const file = res.pdfId ? await fetchFile(res.pdfId) : null;
       if (file) {
         downloadDataUrl(file.name, file.dataUrl);
         enqueueSnackbar("PDF gerado e baixado", { variant: "success" });

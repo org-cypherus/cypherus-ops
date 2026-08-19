@@ -36,31 +36,20 @@ import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { FeatureGate } from "@/components/auth/FeatureGate";
-import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
 import { formatCommissionRuleLabel } from "@/lib/utils/commission";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { useFeature } from "@/modules/auth/hooks";
-
-type Payment = {
-  id: string;
-  contractId: string;
-  leadName: string;
-  leadId?: string;
-  amount: number;
-  dueDate: string;
-  status: string;
-  paidAt?: string;
-};
-
-type CommissionRule = {
-  id: string;
-  plan: string;
-  type: "percentual" | "taxa" | "percentual_meta";
-  value: number;
-  threshold?: number;
-  active?: boolean;
-};
+import {
+  confirmPayment as confirmPaymentRequest,
+  deleteCommissionRule,
+  fetchCommissionRules,
+  fetchCommissions,
+  fetchPayments,
+  saveCommissionRule,
+  type CommissionRule,
+  type Payment,
+} from "@/modules/financial/services";
 
 type RuleForm = {
   plan: string;
@@ -94,36 +83,24 @@ export default function FinancialPage() {
 
   const payments = useQuery({
     queryKey: queryKeys.payments.list(),
-    queryFn: async () => {
-      const { data } = await api.get<{ data: Payment[] }>("/payments");
-      return data.data;
-    },
+    queryFn: fetchPayments,
   });
 
   const commissions = useQuery({
     queryKey: queryKeys.payments.commissions,
-    queryFn: async () => {
-      const { data } = await api.get<{
-        data: Array<{ id: string; userName: string; amount: number; status: string }>;
-      }>("/commissions");
-      return data.data;
-    },
+    queryFn: fetchCommissions,
     enabled: commissionsEnabled,
   });
 
   const rules = useQuery({
     queryKey: queryKeys.payments.rules,
-    queryFn: async () => {
-      const { data } = await api.get<{ data: CommissionRule[] }>("/commission-rules");
-      return data.data;
-    },
+    queryFn: fetchCommissionRules,
     enabled: commissionsEnabled,
   });
   const selected = payments.data?.find((p) => p.id === selectedId) || null;
 
   const confirmPayment = useMutation({
-    mutationFn: (id: string) =>
-      api.patch(`/payments/${id}`, { status: "Recebido", paidAt: new Date().toISOString() }),
+    mutationFn: (id: string) => confirmPaymentRequest(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.payments.all });
       enqueueSnackbar("Pagamento confirmado — comissão pela regra vigente", { variant: "success" });
@@ -131,14 +108,15 @@ export default function FinancialPage() {
   });
 
   const saveRule = useMutation({
-    mutationFn: async () => {
-      if (editingRule) {
-        const { data } = await api.patch<CommissionRule>(`/commission-rules/${editingRule.id}`, ruleForm);
-        return data;
-      }
-      const { data } = await api.post<CommissionRule>("/commission-rules", ruleForm);
-      return data;
-    },
+    mutationFn: async () =>
+      saveCommissionRule({
+        id: editingRule?.id,
+        plan: ruleForm.plan,
+        type: ruleForm.type,
+        value: ruleForm.value,
+        threshold: ruleForm.threshold,
+        active: ruleForm.active,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.payments.rules });
       enqueueSnackbar(editingRule ? "Regra atualizada" : "Regra criada", { variant: "success" });
@@ -148,7 +126,7 @@ export default function FinancialPage() {
   });
 
   const removeRule = useMutation({
-    mutationFn: (id: string) => api.delete(`/commission-rules/${id}`),
+    mutationFn: (id: string) => deleteCommissionRule(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.payments.rules });
       enqueueSnackbar("Regra removida", { variant: "success" });

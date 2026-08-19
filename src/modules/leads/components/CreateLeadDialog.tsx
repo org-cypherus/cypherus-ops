@@ -20,8 +20,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
-import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
+import { fetchUsers } from "@/modules/admin/services";
 import { formatCurrency } from "@/lib/utils/format";
 import { useSession } from "@/modules/auth/hooks";
 import { Role } from "@/lib/auth/permissions";
@@ -44,10 +44,7 @@ export function CreateLeadDialog({ open, onClose }: Props) {
   const isComercial = session?.role === Role.Comercial;
   const users = useQuery({
     queryKey: queryKeys.users,
-    queryFn: async () => {
-      const { data } = await api.get<{ data: Array<{ id: string; name: string }> }>("/users");
-      return data.data;
-    },
+    queryFn: fetchUsers,
     enabled: !isComercial,
   });
 
@@ -108,7 +105,7 @@ export function CreateLeadDialog({ open, onClose }: Props) {
         origin: formValues.origin,
         campaign: formValues.campaign,
         channel: formValues.channel,
-        ownerId: isComercial ? undefined : formValues.ownerId,
+        ownerId: isComercial ? session?.id : formValues.ownerId,
         priority: formValues.priority,
         status: formValues.status,
         tags: formValues.tags ? formValues.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],

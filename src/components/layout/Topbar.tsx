@@ -3,22 +3,14 @@
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
-import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
-import SearchIcon from "@mui/icons-material/Search";
 import {
   AppBar,
   Avatar,
-  Badge,
   Box,
   IconButton,
-  InputAdornment,
-  TextField,
   Toolbar,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api/client";
-import { queryKeys } from "@/lib/query/keys";
 import { useLogout, useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
 import { DRAWER_WIDTH, TOPBAR_HEIGHT } from "./Sidebar";
@@ -28,22 +20,7 @@ export function Topbar() {
   const logout = useLogout();
   const mode = useUIStore((s) => s.mode);
   const toggleMode = useUIStore((s) => s.toggleMode);
-  const setSearchOpen = useUIStore((s) => s.setSearchOpen);
-  const setNotificationsOpen = useUIStore((s) => s.setNotificationsOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
-
-  const { data: notifications } = useQuery({
-    queryKey: queryKeys.notifications,
-    queryFn: async () => {
-      const { data } = await api.get<{
-        data: Array<{ id: string; read: boolean }>;
-      }>("/notifications");
-      return data.data;
-    },
-    enabled: Boolean(user),
-  });
-
-  const hasUnread = Boolean(notifications?.some((item) => !item.read));
 
   return (
     <AppBar
@@ -76,41 +53,10 @@ export function Topbar() {
           <MenuIcon />
         </IconButton>
 
-        <TextField
-          size="small"
-          placeholder="Pesquisar nome, CPF, telefone, contrato..."
-          onClick={() => setSearchOpen(true)}
-          InputProps={{
-            readOnly: true,
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
-          }}
-          sx={{
-            flex: 1,
-            maxWidth: 480,
-            display: { xs: "none", sm: "block" },
-          }}
-        />
-        <IconButton
-          onClick={() => setSearchOpen(true)}
-          aria-label="Pesquisar"
-          sx={{ display: { xs: "inline-flex", sm: "none" } }}
-        >
-          <SearchIcon />
-        </IconButton>
-
         <Box sx={{ flex: 1 }} />
 
         <IconButton onClick={toggleMode} aria-label="Alternar tema">
           {mode === "light" ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
-        </IconButton>
-        <IconButton onClick={() => setNotificationsOpen(true)} aria-label="Notificações">
-          <Badge color="error" variant="dot" invisible={!hasUnread}>
-            <NotificationsNoneOutlinedIcon />
-          </Badge>
         </IconButton>
         <Box
           display="flex"
@@ -128,7 +74,7 @@ export function Topbar() {
               {user?.name || "Usuário"}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {user?.role || "—"}
+              {user?.isPlatformAdmin ? "Plataforma" : user?.role || "—"}
             </Typography>
           </Box>
         </Box>

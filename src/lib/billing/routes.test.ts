@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import { matchAppRoute } from "./routes";
 
 describe("matchAppRoute", () => {
-  it("matches nested contract and calendar paths", () => {
-    expect(matchAppRoute("/calendar")?.feature).toBe("agenda");
+  it("matches nested contract paths", () => {
     expect(matchAppRoute("/contracts/new")?.feature).toBe("contracts");
     expect(matchAppRoute("/contracts/abc")?.feature).toBe("contracts");
   });
@@ -16,7 +15,16 @@ describe("matchAppRoute", () => {
     expect(matchAppRoute("/admin/users")?.feature).toBeUndefined();
   });
 
-  it("maps legal to contracts feature", () => {
-    expect(matchAppRoute("/legal")?.feature).toBe("contracts");
+  it("does not expose calendar, legal or reports in the gated nav", () => {
+    expect(matchAppRoute("/calendar")).toBeUndefined();
+    expect(matchAppRoute("/legal")).toBeUndefined();
+    expect(matchAppRoute("/reports")).toBeUndefined();
+  });
+
+  it("does not treat platform console as a tenant-gated route", () => {
+    expect(matchAppRoute("/platform")).toBeUndefined();
+    expect(matchAppRoute("/platform/companies")).toBeUndefined();
+    expect(matchAppRoute("/platform/plans")).toBeUndefined();
+    expect(matchAppRoute("/platform/billing")).toBeUndefined();
   });
 });

@@ -28,18 +28,6 @@ export const APP_NAV_ROUTES: AppRouteConfig[] = [
     permission: "crm:visualizar",
   },
   {
-    href: "/calendar",
-    label: "Agenda",
-    feature: "agenda",
-    permission: "agenda:visualizar",
-  },
-  {
-    href: "/legal",
-    label: "Jurídico",
-    feature: "contracts",
-    permission: "contratos:editar",
-  },
-  {
     href: "/contracts",
     label: "Contratos",
     feature: "contracts",
@@ -50,12 +38,6 @@ export const APP_NAV_ROUTES: AppRouteConfig[] = [
     label: "Financeiro",
     feature: "financial",
     permission: "financeiro:visualizar",
-  },
-  {
-    href: "/reports",
-    label: "Relatórios",
-    feature: "dashboard_advanced",
-    permission: "relatorios:exportar",
   },
   {
     href: "/admin/users",

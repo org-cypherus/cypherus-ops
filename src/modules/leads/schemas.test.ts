@@ -8,6 +8,7 @@ describe("leadFormSchema", () => {
       name: "Maria Silva",
       email: "maria@example.com",
       phone: "11999999999",
+      cpf: "12345678909",
       priority: "alta",
       status: "Novo Lead",
       totalValue: 1000,
