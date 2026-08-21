@@ -2,7 +2,7 @@
 
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
-import { Box, Button, Stack, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
 import Link from "next/link";
 import { hasFeature, minimumPlanForFeature } from "@/lib/billing/access";
 import { planLabel } from "@/lib/billing/plan-catalog";
@@ -98,10 +98,20 @@ export function PermissionDenied({ label }: { label?: string }) {
 /** Guard de rota: upsell se o plano não tem a feature; mensagem de role se só falta permission. */
 export function FeatureRouteGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { data: user } = useSession();
+  const { data: user, isPending, isFetching } = useSession();
   const route = matchAppRoute(pathname);
 
-  if (!user) return children;
+  // Shell já montou; gates esperam sessão com loading leve só na área de conteúdo.
+  if (!user) {
+    if (isPending || isFetching) {
+      return (
+        <Box flex={1} display="flex" justifyContent="center" alignItems="center" py={8}>
+          <CircularProgress size={28} />
+        </Box>
+      );
+    }
+    return null;
+  }
 
   if (isPlatformPath(pathname)) {
     if (!user.isPlatformAdmin) {
