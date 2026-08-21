@@ -15,6 +15,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   Divider,
   Grid2 as Grid,
   IconButton,
@@ -35,6 +36,7 @@ import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { ScheduleFromLeadDialog } from "@/modules/calendar/components/ScheduleFromLeadDialog";
 import { UpcomingLeadEvents } from "@/modules/calendar/components/UpcomingLeadEvents";
 import { useCanAccess } from "@/modules/auth/hooks";
+import { useAfterFirstPaint } from "@/lib/hooks/useAfterFirstPaint";
 import {
   useAddTimelineEntry,
   useDeleteLead,
@@ -126,7 +128,9 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const canSchedule = useCanAccess("agenda", "agenda:criar");
   const canViewContracts = useCanAccess("contracts", "contratos:visualizar");
   const canCreateContract = useCanAccess("contracts", "contratos:criar");
-  const contracts = useLeadContracts(lead.id, canViewContracts);
+  // Agenda/contratos só com feature e depois do lead principal pintar.
+  const secondaryReady = useAfterFirstPaint(lead.id);
+  const contracts = useLeadContracts(lead.id, canViewContracts && secondaryReady);
 
   function startEdit(
     section: SectionKey,
@@ -849,6 +853,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
               <UpcomingLeadEvents
                 leadId={lead.id}
                 canCreate={canSchedule}
+                enabled={secondaryReady}
                 onSchedule={() => setScheduleOpen(true)}
               />
             ) : null}
@@ -984,30 +989,37 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                   <Typography variant="h6" sx={{ mb: 1 }}>
                     Contratos vinculados
                   </Typography>
-                  <Stack spacing={1} mb={1.5}>
-                    {(contracts.data || []).map((c) => (
-                      <Button
-                        key={c.id}
-                        component={Link}
-                        href={`/contracts/${c.id}`}
-                        size="small"
-                        sx={{ justifyContent: "flex-start" }}
-                      >
-                        {c.templateName} — {c.status}
-                      </Button>
-                    ))}
-                    {!contracts.data?.length ? (
-                      <Typography variant="body2" color="text.secondary">
-                        Nenhum contrato
-                      </Typography>
-                    ) : null}
-                  </Stack>
+                  {!secondaryReady || contracts.isLoading ? (
+                    <Box display="flex" justifyContent="center" py={2}>
+                      <CircularProgress size={24} />
+                    </Box>
+                  ) : (
+                    <Stack spacing={1} mb={1.5}>
+                      {(contracts.data || []).map((c) => (
+                        <Button
+                          key={c.id}
+                          component={Link}
+                          href={`/contracts/${c.id}`}
+                          size="small"
+                          sx={{ justifyContent: "flex-start" }}
+                        >
+                          {c.templateName} — {c.status}
+                        </Button>
+                      ))}
+                      {!contracts.data?.length ? (
+                        <Typography variant="body2" color="text.secondary">
+                          Nenhum contrato
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  )}
                   {canCreateContract ? (
                     <Button
                       component={Link}
                       href={`/contracts/new?leadId=${lead.id}`}
                       size="small"
                       variant="contained"
+                      sx={{ mt: !secondaryReady || contracts.isLoading ? 1 : 0 }}
                     >
                       Gerar contrato
                     </Button>

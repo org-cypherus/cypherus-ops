@@ -21,13 +21,17 @@ type Props = {
   leadId: string;
   onSchedule?: () => void;
   canCreate?: boolean;
+  /** Quando false, não dispara GET da agenda (feature off ou ainda acima da dobra). */
+  enabled?: boolean;
 };
 
-export function UpcomingLeadEvents({ leadId, onSchedule, canCreate }: Props) {
-  const { data, isLoading } = useLeadCalendarEvents(leadId, true);
+export function UpcomingLeadEvents({ leadId, onSchedule, canCreate, enabled = true }: Props) {
+  const { data, isLoading } = useLeadCalendarEvents(leadId, enabled);
   const upcoming = (data || [])
     .filter((event) => event.status === "agendado")
     .slice(0, 5);
+
+  const waiting = !enabled || isLoading;
 
   return (
     <Card variant="outlined">
@@ -45,7 +49,7 @@ export function UpcomingLeadEvents({ leadId, onSchedule, canCreate }: Props) {
           ) : null}
         </Stack>
 
-        {isLoading ? (
+        {waiting ? (
           <Box display="flex" justifyContent="center" py={2}>
             <CircularProgress size={24} />
           </Box>
