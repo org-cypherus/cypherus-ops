@@ -36,7 +36,7 @@ import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { getApiError } from "@/lib/api/client";
-import { ROLE_NAMES, type RoleName } from "@/lib/auth/permissions";
+import { ROLE_NAMES } from "@/lib/auth/permissions";
 import { canAddActiveUser, nextPlanForMoreUsers, usersLimitLabel } from "@/lib/billing/limits";
 import { planLabel } from "@/lib/billing/plan-catalog";
 import { queryKeys } from "@/lib/query/keys";

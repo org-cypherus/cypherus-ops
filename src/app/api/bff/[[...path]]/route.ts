@@ -19,6 +19,7 @@ import {
   readCrmTokens,
   setAuthCookies,
 } from "@/lib/server/gateway";
+import { isNullBodyStatus } from "@/lib/server/null-body-status";
 
 export const dynamic = "force-dynamic";
 
@@ -275,6 +276,13 @@ async function proxy(request: NextRequest, path: string, requestId: string) {
     if (ids.traceId && !responseHeaders.has("x-trace-id")) {
       responseHeaders.set("x-trace-id", ids.traceId);
     }
+  }
+  // Fetch/NextResponse forbid any body on 204/205/304 — even an empty ArrayBuffer throws
+  // TypeError, which the catch below turns into 502 while the CRM already applied the write
+  // (e.g. DELETE attachment → CRM 204, UI “falha ao excluir”).
+  if (isNullBodyStatus(upstream.status)) {
+    responseHeaders.delete("content-type");
+    return new NextResponse(null, { status: upstream.status, headers: responseHeaders });
   }
   return new NextResponse(buffer, { status: upstream.status, headers: responseHeaders });
 }

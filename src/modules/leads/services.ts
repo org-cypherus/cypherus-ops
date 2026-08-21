@@ -252,10 +252,24 @@ export async function distributeLeads(payload: {
   return { ok: true, affected: ids.length };
 }
 
-export async function addLeadAttachment(leadId: string, file: File) {
+export async function addLeadAttachment(
+  leadId: string,
+  file: File,
+  onProgress?: (percent: number) => void,
+) {
   const form = new FormData();
   form.append("file", file);
-  await api.post(companyPath(`/leads/${leadId}/attachments`), form);
+  await api.post(companyPath(`/leads/${leadId}/attachments`), form, {
+    onUploadProgress: (event: { loaded: number; total?: number }) => {
+      if (!onProgress) return;
+      if (!event.total) {
+        onProgress(0);
+        return;
+      }
+      onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    },
+  });
+  onProgress?.(100);
   return fetchLead(leadId);
 }
 

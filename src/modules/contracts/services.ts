@@ -1,6 +1,6 @@
 import { api, type Paginated } from "@/lib/api/client";
 import { companyPath } from "@/lib/auth/session";
-import { downloadApiFile } from "@/lib/utils/download";
+import { downloadApiFile, fetchApiBlob } from "@/lib/utils/download";
 import { fetchLeadNameMap } from "@/modules/leads/services";
 
 export type Contract = {
@@ -178,15 +178,31 @@ export async function downloadContractVersion(id: string, version: number, fallb
   );
 }
 
+export async function fetchContractVersionBlob(id: string, version: number) {
+  if (!version || version < 1) {
+    throw new Error("Este contrato ainda não tem PDF gerado.");
+  }
+  return fetchApiBlob(companyPath(`/contracts/${id}/versions/${version}/content`));
+}
+
 export async function downloadSignedContract(id: string, fallbackName = "contrato-assinado.pdf") {
   return downloadApiFile(companyPath(`/contracts/${id}/signed/content`), fallbackName);
 }
 
-export async function signContract(id: string, file: File) {
+export async function fetchSignedContractBlob(id: string) {
+  return fetchApiBlob(companyPath(`/contracts/${id}/signed/content`));
+}
+
+export async function signContract(id: string, file: Blob, fileName = "contrato-assinado.pdf") {
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", file instanceof File ? file : new File([file], fileName, { type: file.type || "application/pdf" }));
   const { data } = await api.post<CrmContract>(companyPath(`/contracts/${id}/sign`), form);
   return toUiContract(data);
+}
+
+export async function signContractWithGeneratedVersion(id: string, version: number) {
+  const blob = await fetchContractVersionBlob(id, version);
+  return signContract(id, blob, `contrato-v${version}.pdf`);
 }
 
 export async function updateContract(id: string, payload: Partial<Contract>) {

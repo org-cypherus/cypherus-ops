@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { primaryQueryForPath } from "./route-metrics";
+import { formatLoadMs, primaryQueryForPath, resourcesElapsedMs } from "./route-metrics";
 
 describe("primaryQueryForPath", () => {
   it("maps leads hub to kanban or list", () => {
@@ -24,5 +24,18 @@ describe("primaryQueryForPath", () => {
 
   it("returns null for unknown routes", () => {
     expect(primaryQueryForPath("/admin/users")).toBeNull();
+  });
+});
+
+describe("formatLoadMs", () => {
+  it("formats ms and seconds", () => {
+    expect(formatLoadMs(420)).toBe("420 ms");
+    expect(formatLoadMs(1500)).toBe("1.50 s");
+  });
+});
+
+describe("resourcesElapsedMs", () => {
+  it("returns null when there are no matching resources", () => {
+    expect(resourcesElapsedMs(performance.now() + 10_000)).toBeNull();
   });
 });

@@ -77,7 +77,7 @@ function Column({
         minWidth: 260,
         width: 260,
         flex: "0 0 260px",
-        height: "100%",
+        alignSelf: "flex-start",
         display: "flex",
         flexDirection: "column",
         bgcolor: isOver ? "action.hover" : "background.paper",
@@ -85,16 +85,15 @@ function Column({
         border: 1,
         borderColor: "divider",
         p: 1.25,
-        minHeight: 0,
       }}
     >
-      <Stack spacing={0.25} mb={1.5} px={0.5} flexShrink={0}>
+      <Stack spacing={0.25} mb={1.5} px={0.5}>
         <Typography variant="subtitle2">{status}</Typography>
         <Typography variant="caption" color="text.secondary">
           {count} leads · {formatCurrency(potentialValue)}
         </Typography>
       </Stack>
-      <Box flex={1} minHeight={0} overflow="auto" pr={0.25}>
+      <Box pr={0.25}>
         {leads.map((lead) => (
           <LeadCard key={lead.id} lead={lead} />
         ))}
@@ -137,11 +136,12 @@ export function KanbanBoard({ board }: { board: KanbanBoardType }) {
       <Box
         display="flex"
         gap={1.5}
-        overflow="auto"
-        alignItems="stretch"
-        height="100%"
-        minHeight={0}
+        alignItems="flex-start"
         pb={0.5}
+        sx={{
+          overflowX: "auto",
+          overflowY: "visible",
+        }}
       >
         {board.columns.map((column) => (
           <Column key={column.status} {...column} />

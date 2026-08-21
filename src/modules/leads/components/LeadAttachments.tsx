@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  LinearProgress,
   Stack,
   Tooltip,
   Typography,
@@ -30,6 +31,13 @@ import { formatDate, formatFileSize } from "@/lib/utils/format";
 import { useAddAttachment, useRemoveAttachment } from "../hooks";
 import { downloadLeadAttachment, fetchLeadAttachmentBlob } from "../services";
 import type { Attachment, Lead } from "../types";
+
+type UploadProgress = {
+  fileName: string;
+  fileIndex: number;
+  fileCount: number;
+  percent: number;
+};
 
 const ACCEPT =
   ".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.txt,application/pdf,image/jpeg,image/png,image/webp,image/gif";
@@ -172,6 +180,7 @@ export function LeadAttachments({ lead }: { lead: Lead }) {
   const { enqueueSnackbar } = useSnackbar();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Attachment | null>(null);
   const [preview, setPreview] = useState<Attachment | null>(null);
   // Conteúdo só sob demanda: um GET .../content ao abrir o dialog, não N no mount.
@@ -179,13 +188,33 @@ export function LeadAttachments({ lead }: { lead: Lead }) {
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
+    const list = Array.from(files);
     try {
-      for (const file of Array.from(files)) {
-        await addAttachment.mutateAsync(file);
+      for (let index = 0; index < list.length; index += 1) {
+        const file = list[index]!;
+        setUploadProgress({
+          fileName: file.name,
+          fileIndex: index + 1,
+          fileCount: list.length,
+          percent: 0,
+        });
+        await addAttachment.mutateAsync({
+          file,
+          onProgress: (percent) => {
+            setUploadProgress({
+              fileName: file.name,
+              fileIndex: index + 1,
+              fileCount: list.length,
+              percent,
+            });
+          },
+        });
       }
       enqueueSnackbar("Anexo(s) enviado(s)", { variant: "success" });
     } catch (error) {
       enqueueSnackbar(getApiError(error).message || "Falha ao enviar anexo", { variant: "error" });
+    } finally {
+      setUploadProgress(null);
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
@@ -226,6 +255,26 @@ export function LeadAttachments({ lead }: { lead: Lead }) {
           <Typography variant="caption" color="text.secondary" display="block">
             PDF, imagens, Word, Excel ou texto · máx. 20 MB
           </Typography>
+          {uploadProgress ? (
+            <Box mt={1.5} textAlign="left">
+              <Stack direction="row" justifyContent="space-between" alignItems="baseline" mb={0.75} gap={1}>
+                <Typography variant="caption" color="text.secondary" noWrap title={uploadProgress.fileName}>
+                  {uploadProgress.fileCount > 1
+                    ? `${uploadProgress.fileIndex}/${uploadProgress.fileCount} · ${uploadProgress.fileName}`
+                    : uploadProgress.fileName}
+                </Typography>
+                <Typography variant="caption" fontWeight={700} color="primary.main">
+                  {uploadProgress.percent}%
+                </Typography>
+              </Stack>
+              <LinearProgress
+                variant="determinate"
+                value={uploadProgress.percent}
+                aria-label={`Upload ${uploadProgress.percent}%`}
+                sx={{ height: 8, borderRadius: 1 }}
+              />
+            </Box>
+          ) : null}
           <Button
             size="small"
             sx={{ mt: 1 }}

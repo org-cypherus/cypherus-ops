@@ -5,6 +5,10 @@ import {
   Button,
   Card,
   CardContent,
+  CircularProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Stack,
   Step,
@@ -16,7 +20,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
 import { formatCurrency } from "@/lib/utils/format";
@@ -24,9 +28,10 @@ import { fetchLeads } from "@/modules/leads/services";
 import {
   createContract,
   downloadContractVersion,
+  fetchContractVersionBlob,
   fetchTemplates,
   generateContractPdf,
-  signContract,
+  signContractWithGeneratedVersion,
 } from "@/modules/contracts/services";
 
 const steps = [
@@ -45,8 +50,7 @@ export default function ContractWizardPage() {
   const [value, setValue] = useState(10000);
   const [contractId, setContractId] = useState<string | null>(null);
   const [generatedVersion, setGeneratedVersion] = useState(0);
-  const [signedFile, setSignedFile] = useState<File | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const router = useRouter();
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
@@ -67,6 +71,24 @@ export default function ContractWizardPage() {
     queryKey: queryKeys.contracts.templates,
     queryFn: fetchTemplates,
   });
+
+  const previewEnabled = previewOpen && Boolean(contractId) && generatedVersion >= 1;
+  const previewQuery = useQuery({
+    queryKey: queryKeys.contracts.version(contractId ?? "none", generatedVersion),
+    queryFn: () => fetchContractVersionBlob(contractId!, generatedVersion),
+    enabled: previewEnabled,
+    staleTime: 5 * 60_000,
+  });
+  const previewUrl = useMemo(() => {
+    if (!previewQuery.data) return null;
+    return URL.createObjectURL(previewQuery.data);
+  }, [previewQuery.data]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   const create = useMutation({
     mutationFn: async () => {
@@ -89,13 +111,16 @@ export default function ContractWizardPage() {
       if (!contractId || generatedVersion < 1) throw new Error("PDF ainda não gerado.");
       return downloadContractVersion(contractId, generatedVersion);
     },
+    onError: (error) => {
+      enqueueSnackbar(getApiError(error).message || "Não foi possível baixar o PDF", { variant: "error" });
+    },
   });
 
   const send = useMutation({
     mutationFn: async () => {
       if (!contractId) throw new Error("Contrato não gerado");
-      if (!signedFile) throw new Error("Envie o PDF assinado.");
-      return signContract(contractId, signedFile);
+      if (generatedVersion < 1) throw new Error("PDF ainda não gerado.");
+      return signContractWithGeneratedVersion(contractId, generatedVersion);
     },
     onSuccess: () => {
       enqueueSnackbar("Contrato assinado com sucesso", { variant: "success" });
@@ -212,15 +237,22 @@ export default function ContractWizardPage() {
               >
                 <Typography variant="subtitle2">Documento no CRM</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  O PDF foi gerado e versionado no saas-crm. Baixe para revisar e assinar
-                  fora da plataforma.
+                  O PDF foi gerado e versionado no saas-crm. Visualize no navegador ou baixe para
+                  revisar e assinar fora da plataforma.
                 </Typography>
               </Box>
-              <Stack direction="row" spacing={1}>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                 <Button onClick={() => setActiveStep(2)}>Voltar</Button>
                 <Button
                   variant="outlined"
-                  disabled={downloadPdf.isPending}
+                  disabled={generatedVersion < 1}
+                  onClick={() => setPreviewOpen(true)}
+                >
+                  Visualizar PDF
+                </Button>
+                <Button
+                  variant="outlined"
+                  disabled={downloadPdf.isPending || generatedVersion < 1}
                   onClick={() => downloadPdf.mutate()}
                 >
                   Baixar PDF
@@ -235,40 +267,104 @@ export default function ContractWizardPage() {
           {activeStep === 4 && (
             <Stack spacing={2}>
               <Typography>
-                Envie o PDF assinado. O CRM exige o arquivo no campo <strong>file</strong>.
+                Confirme a assinatura com o PDF gerado na etapa anterior
+                {generatedVersion >= 1 ? ` (versão ${generatedVersion})` : ""}.
               </Typography>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Button variant="outlined" onClick={() => fileRef.current?.click()}>
-                  Selecionar PDF assinado
-                </Button>
-                <Typography variant="body2" color="text.secondary">
-                  {signedFile?.name || "Nenhum arquivo selecionado"}
+              <Box
+                border={1}
+                borderColor="divider"
+                borderRadius={2}
+                p={3}
+                bgcolor="background.default"
+              >
+                <Typography variant="subtitle2">Documento a assinar</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  O mesmo arquivo gerado no CRM será enviado como assinatura — sem precisar fazer
+                  upload de outro PDF.
                 </Typography>
-                <input
-                  ref={fileRef}
-                  hidden
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={(e) => {
-                    setSignedFile(e.target.files?.[0] ?? null);
-                    e.target.value = "";
-                  }}
-                />
-              </Stack>
+                <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={generatedVersion < 1}
+                    onClick={() => setPreviewOpen(true)}
+                  >
+                    Visualizar PDF
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={downloadPdf.isPending || generatedVersion < 1}
+                    onClick={() => downloadPdf.mutate()}
+                  >
+                    Baixar PDF
+                  </Button>
+                </Stack>
+              </Box>
               <Stack direction="row" spacing={1}>
                 <Button onClick={() => setActiveStep(3)}>Voltar</Button>
                 <Button
                   variant="contained"
-                  disabled={send.isPending || !signedFile}
+                  disabled={send.isPending || !contractId || generatedVersion < 1}
                   onClick={() => send.mutate()}
                 >
-                  Confirmar assinatura
+                  {send.isPending ? "Assinando…" : "Confirmar assinatura"}
                 </Button>
               </Stack>
             </Stack>
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        fullWidth
+        maxWidth="lg"
+      >
+        <DialogTitle sx={{ pr: 2 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
+            <Typography variant="h6" noWrap>
+              Contrato {contractId}
+              {generatedVersion >= 1 ? ` · v${generatedVersion}` : ""}
+            </Typography>
+            <Stack direction="row" spacing={0.5}>
+              <Button
+                size="small"
+                disabled={downloadPdf.isPending || generatedVersion < 1}
+                onClick={() => downloadPdf.mutate()}
+              >
+                Baixar
+              </Button>
+              <Button size="small" onClick={() => setPreviewOpen(false)}>
+                Fechar
+              </Button>
+            </Stack>
+          </Stack>
+        </DialogTitle>
+        <DialogContent sx={{ minHeight: 360 }}>
+          {previewQuery.isPending ? (
+            <Stack alignItems="center" justifyContent="center" py={8}>
+              <CircularProgress />
+            </Stack>
+          ) : previewQuery.isError ? (
+            <Typography variant="body2" color="error">
+              {getApiError(previewQuery.error).message || "Não foi possível carregar o PDF."}
+            </Typography>
+          ) : previewUrl ? (
+            <Box
+              component="iframe"
+              title={`PDF do contrato ${contractId}`}
+              src={previewUrl}
+              sx={{ width: "100%", height: "75vh", border: 0, bgcolor: "background.paper" }}
+            />
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Preview indisponível.
+            </Typography>
+          )}
+        </DialogContent>
+      </Dialog>
     </Stack>
   );
 }

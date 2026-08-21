@@ -1,12 +1,12 @@
 import type { Query } from "@tanstack/react-query";
 
 export type PrimaryQueryTarget = {
-  /** Rótulo curto na topbar / console */
+  /** Rótulo curto na UI / console */
   label: string;
   match: (queryKey: readonly unknown[]) => boolean;
 };
 
-/** Query principal da rota — o que o paint da topbar sozinho não captura. */
+/** Query principal da rota — o que o paint sozinho não captura. */
 export function primaryQueryForPath(pathname: string): PrimaryQueryTarget | null {
   if (pathname === "/leads") {
     return {
@@ -94,21 +94,42 @@ export function formatLoadMs(ms: number) {
   return `${(ms / 1000).toFixed(2)} s`;
 }
 
+/** Último responseEnd de resources iniciados após t0 (Performance API). */
+export function resourcesElapsedMs(t0: number): number | null {
+  if (typeof performance === "undefined" || typeof performance.getEntriesByType !== "function") {
+    return null;
+  }
+  const entries = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
+  let maxEnd = 0;
+  for (const entry of entries) {
+    if (entry.startTime < t0) continue;
+    const end = entry.responseEnd || entry.startTime + entry.duration;
+    if (end > maxEnd) maxEnd = end;
+  }
+  if (maxEnd <= 0) return null;
+  return Math.round(maxEnd - t0);
+}
+
 export type RouteLoadSnapshot = {
   pathname: string;
   paintMs: number | null;
   sessionMs: number | null;
   primaryMs: number | null;
   primaryLabel: string | null;
+  /** Tempo até sessão + query principal + fila de fetch/resources quieta. */
+  totalMs: number | null;
+  /** Último resource (rede) observado após a navegação. */
+  resourcesMs: number | null;
 };
 
 export function reportRouteLoad(snapshot: RouteLoadSnapshot) {
-  const { pathname, paintMs, sessionMs, primaryMs, primaryLabel } = snapshot;
-  if (paintMs == null && sessionMs == null && primaryMs == null) return;
+  const { pathname, paintMs, sessionMs, primaryMs, primaryLabel, totalMs, resourcesMs } = snapshot;
+  if (paintMs == null && sessionMs == null && primaryMs == null && totalMs == null) return;
 
   if (process.env.NODE_ENV === "development") {
-    // eslint-disable-next-line no-console -- métrica local de diagnóstico
     console.info("[perf]", pathname, {
+      total_ms: totalMs,
+      resources_ms: resourcesMs,
       paint_ms: paintMs,
       session_ms: sessionMs,
       primary_ms: primaryMs,

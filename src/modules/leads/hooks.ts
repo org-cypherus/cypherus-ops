@@ -214,7 +214,13 @@ export function useDistributeLeads() {
 export function useAddAttachment(leadId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) => addLeadAttachment(leadId, file),
+    mutationFn: ({
+      file,
+      onProgress,
+    }: {
+      file: File;
+      onProgress?: (percent: number) => void;
+    }) => addLeadAttachment(leadId, file, onProgress),
     onSuccess: (lead) => {
       writeLeadDetailCaches(queryClient, lead);
     },

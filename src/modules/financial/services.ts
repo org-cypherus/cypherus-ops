@@ -19,6 +19,8 @@ export type Commission = {
   userName: string;
   amount: number;
   status: string;
+  period?: string;
+  paymentId?: string;
 };
 
 export type CommissionRule = {
@@ -44,6 +46,15 @@ type CrmCommission = {
   id: string;
   beneficiary_user_id: string;
   amount: number | string;
+  status?: string | null;
+  period?: string | null;
+  payment_id?: string | null;
+};
+
+const COMMISSION_STATUS: Record<string, string> = {
+  CALCULATED: "Calculada",
+  PENDING: "A pagar",
+  PAID: "Pago",
 };
 
 type CrmRule = {
@@ -89,7 +100,11 @@ export async function fetchCommissions(): Promise<Commission[]> {
     id: item.id,
     userName: names[item.beneficiary_user_id] || "",
     amount: Number(item.amount),
-    status: "Calculada",
+    status: item.status
+      ? COMMISSION_STATUS[item.status] ?? item.status
+      : "Calculada",
+    period: item.period ?? undefined,
+    paymentId: item.payment_id ?? undefined,
   }));
 }
 

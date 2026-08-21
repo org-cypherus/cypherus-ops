@@ -2,51 +2,20 @@
 
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
+import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import {
   AppBar,
   Avatar,
   Box,
+  Button,
   IconButton,
   Toolbar,
   Typography,
 } from "@mui/material";
 import { useLogout, useSession } from "@/modules/auth/hooks";
-import { formatLoadMs } from "@/lib/perf/route-metrics";
-import { useRouteLoadMetrics } from "@/lib/perf/useRouteLoadMetrics";
 import { useUIStore } from "@/store/ui";
 import { DRAWER_WIDTH, TOPBAR_HEIGHT } from "./Sidebar";
-
-function MetricsCaption() {
-  const { paintMs, sessionMs, primaryMs, primaryLabel } = useRouteLoadMetrics();
-  const parts: string[] = [];
-  if (paintMs != null) parts.push(`paint ${formatLoadMs(paintMs)}`);
-  if (sessionMs != null) parts.push(`sess ${formatLoadMs(sessionMs)}`);
-  if (primaryMs != null) {
-    parts.push(`${primaryLabel ?? "data"} ${formatLoadMs(primaryMs)}`);
-  }
-
-  if (!parts.length) return null;
-
-  return (
-    <Typography
-      variant="caption"
-      color="text.secondary"
-      title="paint = frame pós-rota · sess = useSession ready · data = query principal"
-      sx={{
-        display: { xs: "none", md: "block" },
-        fontVariantNumeric: "tabular-nums",
-        whiteSpace: "nowrap",
-        userSelect: "none",
-        maxWidth: 360,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-      }}
-    >
-      {parts.join(" · ")}
-    </Typography>
-  );
-}
 
 export function Topbar() {
   const { data: user } = useSession();
@@ -71,7 +40,7 @@ export function Topbar() {
     >
       <Toolbar
         sx={{
-          gap: { xs: 1, sm: 2 },
+          gap: { xs: 1, sm: 1.5 },
           minHeight: `${TOPBAR_HEIGHT}px !important`,
           height: TOPBAR_HEIGHT,
           px: { xs: 1.5, lg: 3 },
@@ -88,31 +57,46 @@ export function Topbar() {
 
         <Box sx={{ flex: 1 }} />
 
-        <MetricsCaption />
-
         <IconButton onClick={toggleMode} aria-label="Alternar tema">
           {mode === "light" ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
         </IconButton>
-        <Box
-          display="flex"
-          alignItems="center"
-          gap={1.25}
-          sx={{ cursor: "pointer" }}
-          onClick={() => logout.mutate()}
-          title="Sair"
-        >
-          <Avatar sx={{ width: 36, height: 36, bgcolor: "primary.main" }}>
+
+        <Box display="flex" alignItems="center" gap={1} minWidth={0}>
+          <Avatar sx={{ width: 36, height: 36, bgcolor: "primary.main", flexShrink: 0 }}>
             {user?.name?.charAt(0) || "U"}
           </Avatar>
-          <Box display={{ xs: "none", md: "block" }}>
-            <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+          <Box minWidth={0} display={{ xs: "none", sm: "block" }}>
+            <Typography
+              variant="body2"
+              noWrap
+              sx={{ fontWeight: 600, lineHeight: 1.2, maxWidth: 160 }}
+              title={user?.name || "Usuário"}
+            >
               {user?.name || "Usuário"}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" noWrap display="block">
               {user?.isPlatformAdmin ? "Plataforma" : user?.role || "—"}
             </Typography>
           </Box>
         </Box>
+
+        <Button
+          color="inherit"
+          size="small"
+          startIcon={<LogoutOutlinedIcon />}
+          onClick={() => logout.mutate()}
+          disabled={logout.isPending}
+          aria-label="Sair"
+          sx={{
+            flexShrink: 0,
+            textTransform: "none",
+            fontWeight: 600,
+            color: "text.secondary",
+            "&:hover": { color: "text.primary", bgcolor: "action.hover" },
+          }}
+        >
+          Sair
+        </Button>
       </Toolbar>
     </AppBar>
   );

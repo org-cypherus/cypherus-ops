@@ -16,6 +16,8 @@ import {
   MenuItem,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -31,7 +33,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSnackbar } from "notistack";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
@@ -40,6 +42,9 @@ import { queryKeys } from "@/lib/query/keys";
 import { formatCommissionRuleLabel } from "@/lib/utils/commission";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { useFeature } from "@/modules/auth/hooks";
+import { FinancialCashPanel } from "@/modules/financial/components/FinancialCashPanel";
+import { FinancialCommissionsPanel } from "@/modules/financial/components/FinancialCommissionsPanel";
+import { filterCommissions } from "@/modules/financial/commission-metrics";
 import {
   confirmPayment as confirmPaymentRequest,
   deleteCommissionRule,
@@ -59,6 +64,27 @@ type RuleForm = {
   active: boolean;
 };
 
+const PAYMENT_STATUSES = ["Pendente", "Recebido", "Atrasado"] as const;
+
+function dayKey(value?: string) {
+  return value?.slice(0, 10) || "";
+}
+
+function filterPayments(
+  payments: Payment[],
+  filters: { lead: string; status: string; from: string; to: string },
+) {
+  const leadQ = filters.lead.trim().toLowerCase();
+  return payments.filter((payment) => {
+    if (leadQ && !payment.leadName.toLowerCase().includes(leadQ)) return false;
+    if (filters.status && payment.status !== filters.status) return false;
+    const due = dayKey(payment.dueDate);
+    if (filters.from && due && due < filters.from) return false;
+    if (filters.to && due && due > filters.to) return false;
+    return true;
+  });
+}
+
 export default function FinancialPage() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -75,11 +101,25 @@ export default function FinancialPage() {
     active: false,
   });
   const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
+  const [leadFilter, setLeadFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [fromFilter, setFromFilter] = useState("");
+  const [toFilter, setToFilter] = useState("");
+  const [beneficiaryFilter, setBeneficiaryFilter] = useState("");
+  const [commissionStatusFilter, setCommissionStatusFilter] = useState("");
+  const [tab, setTab] = useState<"operacional" | "caixa" | "comissoes">("operacional");
 
   useEffect(() => {
     const paymentId = searchParams.get("paymentId");
-    if (paymentId) setSelectedId(paymentId);
-  }, [searchParams]);
+    const view = searchParams.get("view");
+    if (paymentId) {
+      setSelectedId(paymentId);
+      setTab("operacional");
+      return;
+    }
+    if (view === "caixa") setTab("caixa");
+    if (view === "comissoes" && commissionsEnabled) setTab("comissoes");
+  }, [searchParams, commissionsEnabled]);
 
   const payments = useQuery({
     queryKey: queryKeys.payments.list(),
@@ -97,7 +137,33 @@ export default function FinancialPage() {
     queryFn: fetchCommissionRules,
     enabled: commissionsEnabled,
   });
-  const selected = payments.data?.find((p) => p.id === selectedId) || null;
+
+  const filteredPayments = useMemo(
+    () =>
+      filterPayments(payments.data || [], {
+        lead: leadFilter,
+        status: statusFilter,
+        from: fromFilter,
+        to: toFilter,
+      }),
+    [payments.data, leadFilter, statusFilter, fromFilter, toFilter],
+  );
+
+  const filteredCommissions = useMemo(
+    () =>
+      filterCommissions(commissions.data || [], {
+        beneficiary: beneficiaryFilter,
+        status: commissionStatusFilter,
+      }),
+    [commissions.data, beneficiaryFilter, commissionStatusFilter],
+  );
+
+  const commissionStatuses = useMemo(() => {
+    const set = new Set((commissions.data || []).map((item) => item.status).filter(Boolean));
+    return Array.from(set).sort();
+  }, [commissions.data]);
+
+  const selected = filteredPayments.find((p) => p.id === selectedId) || null;
 
   const confirmPayment = useMutation({
     mutationFn: (id: string) => confirmPaymentRequest(id),
@@ -134,13 +200,19 @@ export default function FinancialPage() {
     },
   });
 
-  const received = (payments.data || [])
+  const received = filteredPayments
     .filter((p) => p.status === "Recebido")
     .reduce((s, p) => s + p.amount, 0);
-  const pending = (payments.data || [])
+  const pending = filteredPayments
     .filter((p) => p.status !== "Recebido")
     .reduce((s, p) => s + p.amount, 0);
   const commissionsTotal = (commissions.data || []).reduce((s, c) => s + c.amount, 0);
+  const hasActivePaymentFilters = Boolean(leadFilter.trim() || statusFilter || fromFilter || toFilter);
+  const hasActiveCommissionFilters = Boolean(beneficiaryFilter.trim() || commissionStatusFilter);
+
+  useEffect(() => {
+    if (!commissionsEnabled && tab === "comissoes") setTab("operacional");
+  }, [commissionsEnabled, tab]);
 
   if (payments.isLoading) {
     return (
@@ -163,6 +235,124 @@ export default function FinancialPage() {
         </Typography>
       </Box>
 
+      <Tabs
+        value={tab}
+        onChange={(_, value: "operacional" | "caixa" | "comissoes") => setTab(value)}
+        sx={{ borderBottom: 1, borderColor: "divider" }}
+      >
+        <Tab value="operacional" label="Operacional" />
+        <Tab value="caixa" label="Caixa e inadimplência" />
+        {commissionsEnabled ? <Tab value="comissoes" label="Comissões operacionais" /> : null}
+      </Tabs>
+
+      {tab === "comissoes" ? (
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1} flexWrap="wrap" useFlexGap>
+          <TextField
+            size="small"
+            label="Beneficiário"
+            placeholder="Buscar beneficiário..."
+            value={beneficiaryFilter}
+            onChange={(e) => setBeneficiaryFilter(e.target.value)}
+            sx={{ minWidth: 200, flex: 1 }}
+          />
+          <TextField
+            select
+            size="small"
+            label="Status"
+            value={commissionStatusFilter}
+            onChange={(e) => setCommissionStatusFilter(e.target.value)}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="">Todos</MenuItem>
+            {commissionStatuses.map((status) => (
+              <MenuItem key={status} value={status}>
+                {status}
+              </MenuItem>
+            ))}
+          </TextField>
+          {hasActiveCommissionFilters ? (
+            <Button
+              size="small"
+              onClick={() => {
+                setBeneficiaryFilter("");
+                setCommissionStatusFilter("");
+              }}
+            >
+              Limpar filtros
+            </Button>
+          ) : null}
+        </Stack>
+      ) : (
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1} flexWrap="wrap" useFlexGap>
+          <TextField
+            size="small"
+            label="Lead"
+            placeholder="Buscar lead..."
+            value={leadFilter}
+            onChange={(e) => setLeadFilter(e.target.value)}
+            sx={{ minWidth: 200, flex: 1 }}
+          />
+          <TextField
+            select
+            size="small"
+            label="Status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="">Todos</MenuItem>
+            {PAYMENT_STATUSES.map((status) => (
+              <MenuItem key={status} value={status}>
+                {status}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            size="small"
+            type="date"
+            label="Vencimento de"
+            InputLabelProps={{ shrink: true }}
+            value={fromFilter}
+            onChange={(e) => setFromFilter(e.target.value)}
+          />
+          <TextField
+            size="small"
+            type="date"
+            label="Vencimento até"
+            InputLabelProps={{ shrink: true }}
+            value={toFilter}
+            onChange={(e) => setToFilter(e.target.value)}
+          />
+          {hasActivePaymentFilters ? (
+            <Button
+              size="small"
+              onClick={() => {
+                setLeadFilter("");
+                setStatusFilter("");
+                setFromFilter("");
+                setToFilter("");
+              }}
+            >
+              Limpar filtros
+            </Button>
+          ) : null}
+        </Stack>
+      )}
+
+      {tab === "caixa" ? (
+        <FinancialCashPanel payments={filteredPayments} />
+      ) : tab === "comissoes" ? (
+        commissions.isLoading ? (
+          <Box py={6} display="flex" justifyContent="center">
+            <CircularProgress />
+          </Box>
+        ) : commissions.isError ? (
+          <ErrorState onRetry={() => commissions.refetch()} />
+        ) : (
+          <FinancialCommissionsPanel commissions={filteredCommissions} />
+        )
+      ) : (
+        <>
       <Grid container spacing={2}>
         {[
           { label: "Receita recebida", value: formatCurrency(received) },
@@ -189,9 +379,13 @@ export default function FinancialPage() {
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: commissionsEnabled ? 8 : 12 }}>
           <TableContainer component={Paper} variant="outlined">
-            <Typography variant="h6" sx={{ p: 2 }}>
-              Pagamentos
-            </Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2, pb: 1 }}>
+              <Typography variant="h6">Pagamentos</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {filteredPayments.length}
+                {hasActivePaymentFilters ? ` de ${(payments.data || []).length}` : ""} registro(s)
+              </Typography>
+            </Stack>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -202,22 +396,32 @@ export default function FinancialPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {(payments.data || []).map((payment) => (
-                  <TableRow
-                    key={payment.id}
-                    hover
-                    selected={selectedId === payment.id}
-                    sx={{ cursor: "pointer" }}
-                    onClick={() => setSelectedId(payment.id)}
-                  >
-                    <TableCell>{payment.leadName}</TableCell>
-                    <TableCell align="right">{formatCurrency(payment.amount)}</TableCell>
-                    <TableCell>{formatDate(payment.dueDate)}</TableCell>
-                    <TableCell>
-                      <StatusBadge label={payment.status} />
+                {filteredPayments.length ? (
+                  filteredPayments.map((payment) => (
+                    <TableRow
+                      key={payment.id}
+                      hover
+                      selected={selectedId === payment.id}
+                      sx={{ cursor: "pointer" }}
+                      onClick={() => setSelectedId(payment.id)}
+                    >
+                      <TableCell>{payment.leadName}</TableCell>
+                      <TableCell align="right">{formatCurrency(payment.amount)}</TableCell>
+                      <TableCell>{formatDate(payment.dueDate)}</TableCell>
+                      <TableCell>
+                        <StatusBadge label={payment.status} />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <Typography variant="body2" color="text.secondary" py={2} textAlign="center">
+                        Nenhum pagamento encontrado com os filtros atuais.
+                      </Typography>
                     </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           </TableContainer>
@@ -313,6 +517,8 @@ export default function FinancialPage() {
           </Stack>
         </Grid>
       </Grid>
+        </>
+      )}
 
       <Drawer anchor="right" open={Boolean(selected)} onClose={() => setSelectedId(null)}>
         <Box width={360} p={2}>

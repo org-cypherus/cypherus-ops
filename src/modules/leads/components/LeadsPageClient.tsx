@@ -32,14 +32,22 @@ import { formatCurrency, formatDate } from "@/lib/utils/format";
 import Link from "next/link";
 import { useSession } from "@/modules/auth/hooks";
 import { Role } from "@/lib/auth/permissions";
+import { applyColumnVisibility } from "@/modules/leads/column-visibility";
+import {
+  CustomizeColumnsButton,
+  CustomizeColumnsDialog,
+} from "@/modules/leads/components/CustomizeColumnsDialog";
 import { CreateLeadDialog } from "@/modules/leads/components/CreateLeadDialog";
 import { DistributeLeadsDialog } from "@/modules/leads/components/DistributeLeadsDialog";
 import { ImportLeadsDialog } from "@/modules/leads/components/ImportLeadsDialog";
 import { KanbanBoard } from "@/modules/leads/components/KanbanBoard";
 import { useDistributeLeads, useKanban, useLeads } from "@/modules/leads/hooks";
 import { filterKanbanBoard } from "@/modules/leads/services";
-import type { Lead } from "@/modules/leads/types";
+import type { Lead, PipelineStage } from "@/modules/leads/types";
 import { useUserDirectory } from "@/modules/users/hooks";
+import { usePipelinePrefsStore } from "@/store/pipeline-prefs";
+
+const NO_HIDDEN_STAGES: PipelineStage[] = [];
 
 function leadsToCsv(leads: Lead[]) {
   const header = "nome,email,telefone,cpf,origem,status,responsavel,valor,prioridade,tags";
@@ -79,17 +87,29 @@ export function LeadsPageClient() {
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [distributeOpen, setDistributeOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [bulkTags, setBulkTags] = useState("");
   const distribute = useDistributeLeads();
+  const companyId = session?.companyId || "";
+  const hiddenStages = usePipelinePrefsStore(
+    (s) => s.hiddenStagesByCompany[companyId] ?? NO_HIDDEN_STAGES,
+  );
+  const setHiddenStages = usePipelinePrefsStore((s) => s.setHiddenStages);
 
   const kanban = useKanban(view === "kanban");
   const leads = useLeads({ ...filters, pageSize: 100 }, view === "table");
   const users = useUserDirectory(!isComercial);
 
-  const filteredKanban = useMemo(
-    () => (kanban.data ? filterKanbanBoard(kanban.data, filters) : undefined),
-    [kanban.data, filters],
+  const filteredKanban = useMemo(() => {
+    if (!kanban.data) return undefined;
+    const filtered = filterKanbanBoard(kanban.data, filters);
+    return applyColumnVisibility(filtered, hiddenStages);
+  }, [kanban.data, filters, hiddenStages]);
+
+  const availableStages = useMemo(
+    () => (kanban.data?.columns.map((column) => column.status) ?? []) as PipelineStage[],
+    [kanban.data],
   );
 
   const allLeads = useMemo(() => {
@@ -120,7 +140,7 @@ export function LeadsPageClient() {
   }
 
   return (
-    <Stack spacing={2.5} sx={{ flex: 1, minHeight: 0, height: "100%" }}>
+    <Stack spacing={2.5} sx={{ flex: 1, minHeight: 0 }}>
       <Stack
         direction={{ xs: "column", md: "row" }}
         justifyContent="space-between"
@@ -151,6 +171,9 @@ export function LeadsPageClient() {
             <ToggleButton value="kanban">Kanban</ToggleButton>
             <ToggleButton value="table">Tabela</ToggleButton>
           </ToggleButtonGroup>
+          {view === "kanban" ? (
+            <CustomizeColumnsButton onClick={() => setColumnsOpen(true)} />
+          ) : null}
           {!isComercial ? (
             <PermissionGate permission="crm:editar">
               <Button variant="outlined" onClick={() => setDistributeOpen(true)}>
@@ -313,7 +336,7 @@ export function LeadsPageClient() {
         </Paper>
       ) : null}
 
-      <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <Box sx={{ display: "flex", flexDirection: "column" }}>
         {view === "kanban" ? (
           kanban.isLoading ? (
             <KanbanSkeleton />
@@ -334,71 +357,80 @@ export function LeadsPageClient() {
         ) : !allLeads.length ? (
           <EmptyState title="Nenhum lead encontrado" />
         ) : (
-          <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={selected.length > 0 && !allSelected}
+                      onChange={(e) => setSelected(e.target.checked ? allLeads.map((l) => l.id) : [])}
+                    />
+                  </TableCell>
+                  <TableCell>Nome</TableCell>
+                  <TableCell>Documento</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Responsável</TableCell>
+                  <TableCell>Origem</TableCell>
+                  <TableCell align="right">Valor</TableCell>
+                  <TableCell>Criação</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {allLeads.map((lead) => (
+                  <TableRow key={lead.id} hover selected={selected.includes(lead.id)}>
                     <TableCell padding="checkbox">
                       <Checkbox
-                        checked={allSelected}
-                        indeterminate={selected.length > 0 && !allSelected}
-                        onChange={(e) => setSelected(e.target.checked ? allLeads.map((l) => l.id) : [])}
+                        checked={selected.includes(lead.id)}
+                        onChange={(e) =>
+                          setSelected((prev) =>
+                            e.target.checked ? [...prev, lead.id] : prev.filter((id) => id !== lead.id),
+                          )
+                        }
                       />
                     </TableCell>
-                    <TableCell>Nome</TableCell>
-                    <TableCell>Documento</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Responsável</TableCell>
-                    <TableCell>Origem</TableCell>
-                    <TableCell align="right">Valor</TableCell>
-                    <TableCell>Criação</TableCell>
+                    <TableCell>
+                      <Typography
+                        component={Link}
+                        href={`/leads/${lead.id}`}
+                        variant="body2"
+                        color="primary"
+                        sx={{ textDecoration: "none", fontWeight: 600 }}
+                      >
+                        {lead.name}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{lead.cpf}</TableCell>
+                    <TableCell>
+                      <StatusBadge label={lead.status} />
+                    </TableCell>
+                    <TableCell>{lead.ownerName}</TableCell>
+                    <TableCell>{lead.origin}</TableCell>
+                    <TableCell align="right">{formatCurrency(lead.process.totalValue)}</TableCell>
+                    <TableCell>{formatDate(lead.createdAt)}</TableCell>
                   </TableRow>
-                </TableHead>
-                <TableBody>
-                  {allLeads.map((lead) => (
-                    <TableRow key={lead.id} hover selected={selected.includes(lead.id)}>
-                      <TableCell padding="checkbox">
-                        <Checkbox
-                          checked={selected.includes(lead.id)}
-                          onChange={(e) =>
-                            setSelected((prev) =>
-                              e.target.checked ? [...prev, lead.id] : prev.filter((id) => id !== lead.id),
-                            )
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography
-                          component={Link}
-                          href={`/leads/${lead.id}`}
-                          variant="body2"
-                          color="primary"
-                          sx={{ textDecoration: "none", fontWeight: 600 }}
-                        >
-                          {lead.name}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{lead.cpf}</TableCell>
-                      <TableCell>
-                        <StatusBadge label={lead.status} />
-                      </TableCell>
-                      <TableCell>{lead.ownerName}</TableCell>
-                      <TableCell>{lead.origin}</TableCell>
-                      <TableCell align="right">{formatCurrency(lead.process.totalValue)}</TableCell>
-                      <TableCell>{formatDate(lead.createdAt)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
       </Box>
 
       <CreateLeadDialog open={createOpen} onClose={() => setCreateOpen(false)} />
       <ImportLeadsDialog open={importOpen} onClose={() => setImportOpen(false)} />
       <DistributeLeadsDialog open={distributeOpen} onClose={() => setDistributeOpen(false)} leadIds={selected} />
+      <CustomizeColumnsDialog
+        open={columnsOpen}
+        onClose={() => setColumnsOpen(false)}
+        stages={availableStages}
+        hiddenStages={hiddenStages}
+        onSave={(hidden) => {
+          if (!companyId) return;
+          setHiddenStages(companyId, hidden);
+          enqueueSnackbar("Colunas do kanban atualizadas", { variant: "success" });
+        }}
+      />
     </Stack>
   );
 }

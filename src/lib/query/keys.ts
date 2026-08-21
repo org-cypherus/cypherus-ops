@@ -14,6 +14,8 @@ export const queryKeys = {
     list: (params?: Record<string, unknown>) => ["contracts", "list", params] as const,
     detail: (id: string) => ["contracts", "detail", id] as const,
     templates: ["contracts", "templates"] as const,
+    version: (id: string, version: number) => ["contracts", "version", id, version] as const,
+    signed: (id: string) => ["contracts", "signed", id] as const,
   },
   legalKanban: ["legal", "kanban"] as const,
   calendar: {

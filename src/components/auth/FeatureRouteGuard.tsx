@@ -105,7 +105,7 @@ export function FeatureRouteGuard({ children }: { children: ReactNode }) {
   if (!user) {
     if (isPending || isFetching) {
       return (
-        <Box flex={1} display="flex" justifyContent="center" alignItems="center" py={8}>
+        <Box flex={1} minHeight={0} display="flex" justifyContent="center" alignItems="center" py={8}>
           <CircularProgress size={28} />
         </Box>
       );
@@ -113,22 +113,21 @@ export function FeatureRouteGuard({ children }: { children: ReactNode }) {
     return null;
   }
 
+  let content: ReactNode = children;
+
   if (isPlatformPath(pathname)) {
-    if (!user.isPlatformAdmin) {
-      return <PermissionDenied label="a visão de plataforma" />;
+    content = user.isPlatformAdmin ? children : <PermissionDenied label="a visão de plataforma" />;
+  } else if (route) {
+    if (route.feature && !hasFeature(user.features, route.feature)) {
+      content = <PlanUpsell feature={route.feature} label={route.label} />;
+    } else if (!user.permissions.includes(route.permission)) {
+      content = <PermissionDenied label={route.label} />;
     }
-    return children;
   }
 
-  if (!route) return children;
-
-  if (route.feature && !hasFeature(user.features, route.feature)) {
-    return <PlanUpsell feature={route.feature} label={route.label} />;
-  }
-
-  if (!user.permissions.includes(route.permission)) {
-    return <PermissionDenied label={route.label} />;
-  }
-
-  return children;
+  return (
+    <Box flex={1} minHeight={0} display="flex" flexDirection="column">
+      {content}
+    </Box>
+  );
 }

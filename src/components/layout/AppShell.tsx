@@ -12,7 +12,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <AuthGuard>
       <SessionWarmPrefetch />
-      <Box display="flex" minHeight="100vh" bgcolor="background.default">
+      <Box
+        display="flex"
+        height="100dvh"
+        overflow="hidden"
+        bgcolor="background.default"
+      >
         <Sidebar />
         <Topbar />
         <Box
@@ -21,12 +26,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           minWidth={0}
           display="flex"
           flexDirection="column"
-          minHeight="100vh"
+          height="100%"
+          overflow="hidden"
         >
           <Toolbar
             sx={{
               minHeight: `${TOPBAR_HEIGHT}px !important`,
               height: TOPBAR_HEIGHT,
+              flexShrink: 0,
             }}
           />
           <Box
@@ -34,6 +41,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             minHeight={0}
             display="flex"
             flexDirection="column"
+            overflow="auto"
             p={{ xs: 2, md: 3 }}
           >
             <FeatureRouteGuard>{children}</FeatureRouteGuard>

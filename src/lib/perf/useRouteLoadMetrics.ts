@@ -8,40 +8,49 @@ import {
   primaryQueryForPath,
   queryMatchesPrimary,
   reportRouteLoad,
+  resourcesElapsedMs,
   type RouteLoadSnapshot,
 } from "./route-metrics";
 
 let navSeq = 0;
+const QUIET_MS = 200;
 
 type NavSample = {
   id: number;
   pathname: string;
   t0: number;
   startMark: string;
-  targetLabel: string | null;
+  hasPrimaryTarget: boolean;
   reported: boolean;
 };
 
+function emptySnapshot(pathname: string, primaryLabel: string | null = null): RouteLoadSnapshot {
+  return {
+    pathname,
+    paintMs: null,
+    sessionMs: null,
+    primaryMs: null,
+    primaryLabel,
+    totalMs: null,
+    resourcesMs: null,
+  };
+}
+
 /**
- * Tempo desde a troca de rota até:
- * - paint (double rAF)
- * - useSession success (hydrate real, não placeholder)
- * - query principal da página (kanban / lead / contracts / …)
- *
- * Emite `performance.measure` (`cypher:paint|session|primary`) e `console.info("[perf]", …)` em dev.
+ * Tempo desde a troca de rota até paint, sessão, query principal e
+ * total (fila RQ quieta + resources de rede da navegação).
  */
 export function useRouteLoadMetrics(): RouteLoadSnapshot {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const session = useSession();
   const navRef = useRef<NavSample | null>(null);
-  const [snapshot, setSnapshot] = useState<RouteLoadSnapshot>({
-    pathname,
-    paintMs: null,
-    sessionMs: null,
-    primaryMs: null,
-    primaryLabel: null,
-  });
+  const snapshotRef = useRef<RouteLoadSnapshot>(emptySnapshot(pathname));
+  const [snapshot, setSnapshot] = useState<RouteLoadSnapshot>(() => emptySnapshot(pathname));
+
+  useEffect(() => {
+    snapshotRef.current = snapshot;
+  }, [snapshot]);
 
   useEffect(() => {
     const id = ++navSeq;
@@ -53,43 +62,69 @@ export function useRouteLoadMetrics(): RouteLoadSnapshot {
       pathname,
       t0,
       startMark,
-      targetLabel: target?.label ?? null,
+      hasPrimaryTarget: Boolean(target),
       reported: false,
     };
     navRef.current = sample;
 
     performance.mark(startMark);
-    setSnapshot({
-      pathname,
-      paintMs: null,
-      sessionMs: null,
-      primaryMs: null,
-      primaryLabel: target?.label ?? null,
-    });
+    const initial = emptySnapshot(pathname, target?.label ?? null);
+    snapshotRef.current = initial;
+    setSnapshot(initial);
 
     let cancelled = false;
     let paintFrame = 0;
     let paintFrame2 = 0;
+    let quietTimer: ReturnType<typeof setTimeout> | undefined;
+    let unsubPrimary: (() => void) | undefined;
 
-    function maybeReport(current: RouteLoadSnapshot) {
-      const nav = navRef.current;
-      if (!nav || nav.id !== id || nav.reported) return;
-      const sessionDone = current.sessionMs != null;
-      const primaryDone = !target || current.primaryMs != null;
-      const paintDone = current.paintMs != null;
-      if (!(sessionDone && primaryDone && paintDone)) return;
-      nav.reported = true;
-      reportRouteLoad(current);
+    function commit(partial: Partial<RouteLoadSnapshot>) {
+      if (cancelled || navRef.current?.id !== id) return;
+      const next = { ...snapshotRef.current, ...partial };
+      snapshotRef.current = next;
+      setSnapshot(next);
+      return next;
     }
 
-    function patch(partial: Partial<RouteLoadSnapshot>) {
-      setSnapshot((prev) => {
-        if (prev.pathname !== pathname) return prev;
-        const next = { ...prev, ...partial };
-        maybeReport(next);
-        return next;
-      });
+    function sealTotal() {
+      if (cancelled || navRef.current?.id !== id) return;
+      const current = snapshotRef.current;
+      if (current.totalMs != null) return;
+      if (current.sessionMs == null) return;
+      if (sample.hasPrimaryTarget && current.primaryMs == null) return;
+      if (queryClient.isFetching() > 0) return;
+
+      const resourcesMs = resourcesElapsedMs(t0);
+      const wall = Math.round(performance.now() - t0);
+      const totalMs = Math.max(
+        wall,
+        resourcesMs ?? 0,
+        current.sessionMs,
+        current.primaryMs ?? 0,
+        current.paintMs ?? 0,
+      );
+      const totalMark = `cypher:nav-${id}:total`;
+      performance.mark(totalMark);
+      try {
+        performance.measure("cypher:total", startMark, totalMark);
+      } catch {
+        /* ignore */
+      }
+      const next = commit({ totalMs, resourcesMs });
+      if (next && !sample.reported) {
+        sample.reported = true;
+        reportRouteLoad(next);
+      }
     }
+
+    function scheduleSeal() {
+      if (quietTimer) clearTimeout(quietTimer);
+      quietTimer = setTimeout(sealTotal, QUIET_MS);
+    }
+
+    const unsubCache = queryClient.getQueryCache().subscribe(() => {
+      scheduleSeal();
+    });
 
     paintFrame = requestAnimationFrame(() => {
       paintFrame2 = requestAnimationFrame(() => {
@@ -102,17 +137,15 @@ export function useRouteLoadMetrics(): RouteLoadSnapshot {
         } catch {
           /* ignore */
         }
-        patch({ paintMs });
+        commit({ paintMs });
+        scheduleSeal();
       });
     });
 
-    let unsubscribe: (() => void) | undefined;
     if (target) {
       const cache = queryClient.getQueryCache();
-      const ready = cache
-        .getAll()
-        .some((q) => queryMatchesPrimary(q, target) && q.state.status === "success");
-      if (ready) {
+      const markPrimary = () => {
+        if (snapshotRef.current.primaryMs != null) return;
         const primaryMs = Math.round(performance.now() - t0);
         const primaryMark = `cypher:nav-${id}:primary`;
         performance.mark(primaryMark);
@@ -121,24 +154,23 @@ export function useRouteLoadMetrics(): RouteLoadSnapshot {
         } catch {
           /* ignore */
         }
-        patch({ primaryMs, primaryLabel: target.label });
+        commit({ primaryMs, primaryLabel: target.label });
+        scheduleSeal();
+      };
+
+      if (
+        cache.getAll().some((q) => queryMatchesPrimary(q, target) && q.state.status === "success")
+      ) {
+        markPrimary();
       } else {
-        unsubscribe = cache.subscribe((event) => {
+        unsubPrimary = cache.subscribe((event) => {
           if (cancelled || navRef.current?.id !== id || !event?.query) return;
           if (
             queryMatchesPrimary(event.query, target) &&
             event.query.state.status === "success"
           ) {
-            const primaryMs = Math.round(performance.now() - t0);
-            const primaryMark = `cypher:nav-${id}:primary`;
-            performance.mark(primaryMark);
-            try {
-              performance.measure("cypher:primary", startMark, primaryMark);
-            } catch {
-              /* ignore */
-            }
-            patch({ primaryMs, primaryLabel: target.label });
-            unsubscribe?.();
+            markPrimary();
+            unsubPrimary?.();
           }
         });
       }
@@ -148,7 +180,9 @@ export function useRouteLoadMetrics(): RouteLoadSnapshot {
       cancelled = true;
       cancelAnimationFrame(paintFrame);
       cancelAnimationFrame(paintFrame2);
-      unsubscribe?.();
+      if (quietTimer) clearTimeout(quietTimer);
+      unsubPrimary?.();
+      unsubCache();
     };
   }, [pathname, queryClient]);
 
@@ -156,29 +190,46 @@ export function useRouteLoadMetrics(): RouteLoadSnapshot {
     const nav = navRef.current;
     if (!nav || nav.pathname !== pathname) return;
     if (!session.isSuccess || session.isPlaceholderData) return;
+    if (snapshotRef.current.sessionMs != null) return;
 
-    setSnapshot((prev) => {
-      if (prev.pathname !== pathname || prev.sessionMs != null) return prev;
-      const sessionMs = Math.round(performance.now() - nav.t0);
-      const sessionMark = `cypher:nav-${nav.id}:session`;
-      performance.mark(sessionMark);
-      try {
-        performance.measure("cypher:session", nav.startMark, sessionMark);
-      } catch {
-        /* ignore */
-      }
-      const next = { ...prev, sessionMs };
-      if (
-        !nav.reported &&
-        next.paintMs != null &&
-        (!nav.targetLabel || next.primaryMs != null)
-      ) {
+    const sessionMs = Math.round(performance.now() - nav.t0);
+    const sessionMark = `cypher:nav-${nav.id}:session`;
+    performance.mark(sessionMark);
+    try {
+      performance.measure("cypher:session", nav.startMark, sessionMark);
+    } catch {
+      /* ignore */
+    }
+    const next = { ...snapshotRef.current, sessionMs };
+    snapshotRef.current = next;
+    setSnapshot(next);
+
+    const timer = setTimeout(() => {
+      if (navRef.current?.id !== nav.id) return;
+      const current = snapshotRef.current;
+      if (current.totalMs != null) return;
+      if (nav.hasPrimaryTarget && current.primaryMs == null) return;
+      if (queryClient.isFetching() > 0) return;
+      const resourcesMs = resourcesElapsedMs(nav.t0);
+      const wall = Math.round(performance.now() - nav.t0);
+      const totalMs = Math.max(
+        wall,
+        resourcesMs ?? 0,
+        current.sessionMs ?? 0,
+        current.primaryMs ?? 0,
+        current.paintMs ?? 0,
+      );
+      const sealed = { ...current, totalMs, resourcesMs };
+      snapshotRef.current = sealed;
+      setSnapshot(sealed);
+      if (!nav.reported) {
         nav.reported = true;
-        reportRouteLoad(next);
+        reportRouteLoad(sealed);
       }
-      return next;
-    });
-  }, [pathname, session.isSuccess, session.isPlaceholderData, session.dataUpdatedAt]);
+    }, QUIET_MS);
+
+    return () => clearTimeout(timer);
+  }, [pathname, queryClient, session.isSuccess, session.isPlaceholderData, session.dataUpdatedAt]);
 
   return snapshot;
 }

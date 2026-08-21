@@ -30,6 +30,7 @@ import { Role } from "@/lib/auth/permissions";
 import { prefetchNavHref } from "@/lib/query/prefetch-routes";
 import { useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
+import { SidebarPerfFooter } from "./SidebarPerfFooter";
 
 export const DRAWER_WIDTH = 248;
 export const TOPBAR_HEIGHT = 64;
@@ -55,6 +56,9 @@ const paperSx = {
   color: "text.primary",
   borderRight: "1px solid",
   borderColor: "divider",
+  display: "flex",
+  flexDirection: "column" as const,
+  height: "100%",
 };
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
@@ -85,8 +89,8 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
     : tenantItems;
 
   return (
-    <>
-      <Toolbar sx={{ px: 2.5 }}>
+    <Box display="flex" flexDirection="column" height="100%" minHeight={0}>
+      <Toolbar sx={{ px: 2.5, flexShrink: 0 }}>
         <Box>
           <Typography
             variant="h6"
@@ -99,7 +103,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           </Typography>
         </Box>
       </Toolbar>
-      <List sx={{ px: 1.5, pt: 1 }}>
+      <List sx={{ px: 1.5, pt: 1, flex: 1, overflowY: "auto", minHeight: 0 }}>
         {visibleItems.map((item) => {
           const selected =
             pathname === item.href ||
@@ -147,7 +151,8 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           );
         })}
       </List>
-    </>
+      <SidebarPerfFooter />
+    </Box>
   );
 }
 
