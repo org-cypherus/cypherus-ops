@@ -2,6 +2,7 @@ import { api, type Paginated } from "@/lib/api/client";
 import { companyPath } from "@/lib/auth/session";
 import { getQueryClient, PIPELINE_STALE_TIME_MS } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
+import { downloadApiFile, fetchApiBlob } from "@/lib/utils/download";
 import { fetchOwnerMap } from "@/modules/users/directory";
 import type { Attachment, KanbanBoard, Lead, LegalStage, PipelineStage } from "./types";
 import {
@@ -108,22 +109,41 @@ export async function fetchLead(id: string) {
     api.get<Array<{ type: string; payload?: Record<string, unknown>; created_at: string; actor_user_id?: string | null }>>(
       companyPath(`/leads/${id}/events`),
     ).catch(() => ({ data: [] })),
-    api.get<Array<{ id: string; filename: string; content_type?: string; size_bytes?: number; created_at: string }>>(
-      companyPath(`/leads/${id}/attachments`),
-    ).catch(() => ({ data: [] })),
+    api.get<Array<{
+      id: string;
+      filename: string;
+      mime_type?: string;
+      content_type?: string;
+      size_bytes?: number;
+      created_at: string;
+    }>>(companyPath(`/leads/${id}/attachments`)).catch(() => ({ data: [] })),
   ]);
   const owners = await fetchOwnerMap();
   return toUiLead(lead, owners[lead.owner_user_id], {
     events: events.data,
-    attachments: attachments.data.map((item) => ({
-      id: item.id,
-      name: item.filename,
-      type: item.content_type || "application/octet-stream",
-      size: item.size_bytes || 0,
-      url: companyPath(`/leads/${id}/attachments/${item.id}/content`),
-      createdAt: item.created_at,
-    })),
+    attachments: attachments.data.map((item) => mapLeadAttachment(id, item)),
   });
+}
+
+export function mapLeadAttachment(
+  leadId: string,
+  item: {
+    id: string;
+    filename: string;
+    mime_type?: string;
+    content_type?: string;
+    size_bytes?: number;
+    created_at: string;
+  },
+): Attachment {
+  return {
+    id: item.id,
+    name: item.filename,
+    type: item.mime_type || item.content_type || "application/octet-stream",
+    size: item.size_bytes || 0,
+    url: companyPath(`/leads/${leadId}/attachments/${item.id}/content`),
+    createdAt: item.created_at,
+  };
 }
 
 export async function createLead(payload: Partial<Lead> & { name: string; email: string }) {
@@ -232,21 +252,22 @@ export async function distributeLeads(payload: {
   return { ok: true, affected: ids.length };
 }
 
-export async function addLeadAttachment(
-  leadId: string,
-  attachment: Omit<Attachment, "id" | "createdAt"> & { id?: string; file?: File },
-) {
+export async function addLeadAttachment(leadId: string, file: File) {
   const form = new FormData();
-  if (attachment.file) {
-    form.append("file", attachment.file);
-  } else if (attachment.url?.startsWith("data:")) {
-    const blob = await (await fetch(attachment.url)).blob();
-    form.append("file", blob, attachment.name);
-  } else {
-    throw new Error("Envie um arquivo para anexar ao lead.");
-  }
+  form.append("file", file);
   await api.post(companyPath(`/leads/${leadId}/attachments`), form);
   return fetchLead(leadId);
+}
+
+export async function downloadLeadAttachment(leadId: string, attachmentId: string, fileName: string) {
+  return downloadApiFile(
+    companyPath(`/leads/${leadId}/attachments/${attachmentId}/content`),
+    fileName,
+  );
+}
+
+export async function fetchLeadAttachmentBlob(leadId: string, attachmentId: string) {
+  return fetchApiBlob(companyPath(`/leads/${leadId}/attachments/${attachmentId}/content`));
 }
 
 export async function removeLeadAttachment(leadId: string, attachmentId: string) {

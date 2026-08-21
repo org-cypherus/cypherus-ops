@@ -1,6 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { API_CLIENT_TIMEOUT_MS, BFF_BASE_PATH, isMockMode } from "@/lib/api/config";
-import { parseApiError, type ParsedApiError } from "@/lib/api/errors";
+import { firstNonEmpty, parseApiError, readHeader, type ParsedApiError } from "@/lib/api/errors";
 import { clearAccessToken, getAccessToken, hasSession, setAccessToken } from "@/lib/auth/session";
 
 export type ApiError = ParsedApiError;
@@ -58,6 +58,19 @@ async function refreshSession() {
   }
 }
 
+function parseAxiosError(error: AxiosError): ParsedApiError {
+  const parsed = parseApiError(error.response?.status || 0, error.response?.data, error.response?.headers);
+  const sentRequestId =
+    readHeader(error.config?.headers, "X-Request-ID") ?? readHeader(error.config?.headers, "x-request-id");
+  parsed.requestId = firstNonEmpty(parsed.requestId, sentRequestId);
+  parsed.method = error.config?.method?.toUpperCase();
+  parsed.path = error.config?.url;
+  if (!error.response && error.message) {
+    parsed.message = error.message;
+  }
+  return parsed;
+}
+
 function isPublicAuthPage() {
   if (typeof window === "undefined") return false;
   const path = window.location.pathname;
@@ -67,7 +80,7 @@ function isPublicAuthPage() {
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const parsed = parseApiError(error.response?.status || 0, error.response?.data);
+    const parsed = parseAxiosError(error);
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     const skipRefresh = isPublicAuthPage() || Boolean(original?.url?.includes("/v1/auth/"));
     if (parsed.status === 401 && original && !original._retry && !skipRefresh) {
@@ -89,7 +102,7 @@ export function getApiError(error: unknown): ParsedApiError {
     return (error as { apiError: ParsedApiError }).apiError;
   }
   if (axios.isAxiosError(error)) {
-    return parseApiError(error.response?.status || 0, error.response?.data);
+    return parseAxiosError(error);
   }
   if (error instanceof Error) {
     return parseApiError(0, { error: { code: "UNKNOWN", message: error.message } });

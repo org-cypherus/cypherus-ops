@@ -20,7 +20,7 @@ import {
   updateLead,
   type LeadFilters,
 } from "./services";
-import type { Attachment, KanbanBoard, Lead, LegalStage, PipelineStage } from "./types";
+import type { KanbanBoard, Lead, LegalStage, PipelineStage } from "./types";
 
 function invalidateLeadQueries(queryClient: ReturnType<typeof useQueryClient>, id?: string) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.kanban });
@@ -175,8 +175,7 @@ export function useDistributeLeads() {
 export function useAddAttachment(leadId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (attachment: Omit<Attachment, "id" | "createdAt">) =>
-      addLeadAttachment(leadId, attachment),
+    mutationFn: (file: File) => addLeadAttachment(leadId, file),
     onSuccess: (lead) => syncLeadDetail(queryClient, lead),
   });
 }
@@ -185,7 +184,10 @@ export function useRemoveAttachment(leadId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (attachmentId: string) => removeLeadAttachment(leadId, attachmentId),
-    onSuccess: (lead) => syncLeadDetail(queryClient, lead),
+    onSuccess: (lead, attachmentId) => {
+      queryClient.removeQueries({ queryKey: queryKeys.leads.attachment(leadId, attachmentId) });
+      syncLeadDetail(queryClient, lead);
+    },
   });
 }
 

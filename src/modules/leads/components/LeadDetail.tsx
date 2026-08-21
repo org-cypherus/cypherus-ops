@@ -27,25 +27,23 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSnackbar } from "notistack";
-import { useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
-import { downloadDataUrl, fileToDataUrl } from "@/lib/utils/download";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { ScheduleFromLeadDialog } from "@/modules/calendar/components/ScheduleFromLeadDialog";
 import { UpcomingLeadEvents } from "@/modules/calendar/components/UpcomingLeadEvents";
 import { useCanAccess } from "@/modules/auth/hooks";
 import {
-  useAddAttachment,
   useAddTimelineEntry,
   useDeleteLead,
   useLeadContracts,
-  useRemoveAttachment,
   useUpdateLead,
 } from "../hooks";
 import type { Lead, TimelineContactType } from "../types";
 import { PIPELINE_STAGES, TIMELINE_CONTACT_TYPES } from "../types";
+import { LeadAttachments } from "./LeadAttachments";
 
 const CONTACT_META: Record<
   TimelineContactType,
@@ -113,17 +111,13 @@ type SectionKey =
 export function LeadDetail({ lead }: { lead: Lead }) {
   const updateLead = useUpdateLead(lead.id);
   const deleteLead = useDeleteLead();
-  const addAttachment = useAddAttachment(lead.id);
-  const removeAttachment = useRemoveAttachment(lead.id);
   const addTimeline = useAddTimelineEntry(lead.id);
   const { enqueueSnackbar } = useSnackbar();
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [editing, setEditing] = useState<SectionKey>(null);
   const [draft, setDraft] = useState<Record<string, string | number>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [contactType, setContactType] =
     useState<TimelineContactType>("WhatsApp");
@@ -163,21 +157,6 @@ export function LeadDetail({ lead }: { lead: Lead }) {
         },
       },
     );
-  }
-
-  async function handleFiles(files: FileList | null) {
-    if (!files?.length) return;
-    for (const file of Array.from(files)) {
-      const dataUrl = await fileToDataUrl(file);
-      await addAttachment.mutateAsync({
-        name: file.name,
-        type: file.type || "application/octet-stream",
-        size: file.size,
-        url: dataUrl,
-      });
-    }
-    enqueueSnackbar("Anexo(s) enviado(s)", { variant: "success" });
-    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   return (
@@ -997,79 +976,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
               </CardContent>
             </Card>
 
-            <Card variant="outlined">
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 2 }}>
-                  Anexos
-                </Typography>
-                <Box
-                  border="1px dashed"
-                  borderColor={dragOver ? "primary.main" : "divider"}
-                  borderRadius={2}
-                  p={2}
-                  textAlign="center"
-                  mb={2}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragOver(true);
-                  }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setDragOver(false);
-                    void handleFiles(e.dataTransfer.files);
-                  }}
-                >
-                  <Typography variant="body2" color="text.secondary">
-                    Arraste arquivos ou clique para enviar
-                  </Typography>
-                  <Button
-                    size="small"
-                    sx={{ mt: 1 }}
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={addAttachment.isPending}
-                  >
-                    Selecionar
-                  </Button>
-                  <input
-                    ref={fileInputRef}
-                    hidden
-                    type="file"
-                    multiple
-                    onChange={(e) => void handleFiles(e.target.files)}
-                  />
-                </Box>
-                {lead.attachments.map((file) => (
-                  <Stack
-                    key={file.id}
-                    direction="row"
-                    justifyContent="space-between"
-                    alignItems="center"
-                    mb={0.5}
-                  >
-                    <Button
-                      size="small"
-                      onClick={() => downloadDataUrl(file.name, file.url)}
-                    >
-                      {file.name}
-                    </Button>
-                    <IconButton
-                      size="small"
-                      onClick={() =>
-                        removeAttachment.mutate(file.id, {
-                          onSuccess: () =>
-                            enqueueSnackbar("Anexo removido", {
-                              variant: "info",
-                            }),
-                        })
-                      }
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-                ))}
-              </CardContent>
-            </Card>
+            <LeadAttachments lead={lead} />
 
             {canViewContracts ? (
               <Card variant="outlined">

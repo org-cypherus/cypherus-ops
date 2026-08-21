@@ -1,5 +1,7 @@
 import { api, type Paginated } from "@/lib/api/client";
 import { companyPath } from "@/lib/auth/session";
+import { downloadApiFile } from "@/lib/utils/download";
+import { fetchLeadNameMap } from "@/modules/leads/services";
 
 export type Contract = {
   id: string;
@@ -13,6 +15,7 @@ export type Contract = {
   signedAt?: string;
   pdfId?: string;
   signedPdfId?: string;
+  currentVersion: number;
 };
 
 export type ContractTemplate = {
@@ -21,13 +24,6 @@ export type ContractTemplate = {
   description: string;
   placeholders: string[];
   body: string;
-};
-
-export type StoredFile = {
-  id: string;
-  name: string;
-  mime: string;
-  dataUrl: string;
 };
 
 type CrmContract = {
@@ -80,10 +76,9 @@ function toUiContract(item: CrmContract, leadName?: string, templateName?: strin
     signedAt: item.signed_at ?? undefined,
     pdfId: latest?.attachment_id,
     signedPdfId: item.signed_attachment_id ?? undefined,
+    currentVersion: item.current_version ?? latest?.version ?? 0,
   };
 }
-
-import { fetchLeadNameMap } from "@/modules/leads/services";
 
 async function leadNameMap() {
   return fetchLeadNameMap().catch(() => ({} as Record<string, string>));
@@ -173,37 +168,23 @@ export async function generateContractPdf(id: string) {
   return toUiContract(data);
 }
 
-export async function fetchFile(id: string) {
-  const response = await api.get<ArrayBuffer>(companyPath(`/attachments/${id}/content`), {
-    responseType: "arraybuffer",
-  });
-  const blob = new Blob([response.data]);
-  const dataUrl = await new Promise<string>((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.readAsDataURL(blob);
-  });
-  return {
-    id,
-    name: "arquivo",
-    mime: String(response.headers["content-type"] || "application/pdf"),
-    dataUrl,
-  } satisfies StoredFile;
+export async function downloadContractVersion(id: string, version: number, fallbackName?: string) {
+  if (!version || version < 1) {
+    throw new Error("Este contrato ainda não tem PDF gerado.");
+  }
+  return downloadApiFile(
+    companyPath(`/contracts/${id}/versions/${version}/content`),
+    fallbackName ?? `contrato-v${version}.pdf`,
+  );
 }
 
-export async function signContract(
-  id: string,
-  payload?: { signedDataUrl?: string; fileName?: string; file?: File },
-) {
+export async function downloadSignedContract(id: string, fallbackName = "contrato-assinado.pdf") {
+  return downloadApiFile(companyPath(`/contracts/${id}/signed/content`), fallbackName);
+}
+
+export async function signContract(id: string, file: File) {
   const form = new FormData();
-  if (payload?.file) {
-    form.append("file", payload.file);
-  } else if (payload?.signedDataUrl) {
-    const blob = await (await fetch(payload.signedDataUrl)).blob();
-    form.append("file", blob, payload.fileName || "assinado.pdf");
-  } else {
-    throw new Error("Envie o PDF assinado para concluir a assinatura.");
-  }
+  form.append("file", file);
   const { data } = await api.post<CrmContract>(companyPath(`/contracts/${id}/sign`), form);
   return toUiContract(data);
 }
@@ -212,6 +193,9 @@ export async function updateContract(id: string, payload: Partial<Contract>) {
   if (payload.status === "Arquivado") {
     const { data } = await api.post<CrmContract>(companyPath(`/contracts/${id}/archive`));
     return toUiContract(data);
+  }
+  if (payload.status === "Enviado") {
+    return generateContractPdf(id);
   }
   const { data } = await api.patch<CrmContract>(companyPath(`/contracts/${id}`), {
     title: payload.templateName,

@@ -4,6 +4,8 @@ export const queryKeys = {
     all: ["leads"] as const,
     list: (params?: Record<string, unknown>) => ["leads", "list", params] as const,
     detail: (id: string) => ["leads", "detail", id] as const,
+    attachment: (leadId: string, attachmentId: string) =>
+      ["leads", "detail", leadId, "attachment", attachmentId] as const,
   },
   kanban: ["kanban"] as const,
   defaultPipeline: ["pipelines", "default"] as const,
