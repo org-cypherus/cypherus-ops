@@ -22,10 +22,12 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { canAccess } from "@/lib/billing/access";
 import { APP_NAV_ROUTES } from "@/lib/billing/routes";
 import { PLATFORM_NAV_ROUTES, isPlatformPath } from "@/lib/platform/routes";
 import { Role } from "@/lib/auth/permissions";
+import { prefetchNavHref } from "@/lib/query/prefetch-routes";
 import { useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
 
@@ -57,6 +59,7 @@ const paperSx = {
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const { data: user } = useSession();
   const platformMode = Boolean(user?.isPlatformAdmin);
   const adminUsesAdminDash =
@@ -117,6 +120,12 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
               href={item.href}
               selected={selected}
               onClick={onNavigate}
+              onMouseEnter={() => {
+                void prefetchNavHref(queryClient, item.href);
+              }}
+              onFocus={() => {
+                void prefetchNavHref(queryClient, item.href);
+              }}
               sx={{
                 mb: 0.5,
                 borderRadius: 2,

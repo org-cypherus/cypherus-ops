@@ -4,12 +4,14 @@ import { Box, Toolbar } from "@mui/material";
 import type { ReactNode } from "react";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { FeatureRouteGuard } from "@/components/auth/FeatureRouteGuard";
+import { SessionWarmPrefetch } from "@/components/query/SessionWarmPrefetch";
 import { Sidebar, TOPBAR_HEIGHT } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <AuthGuard>
+      <SessionWarmPrefetch />
       <Box display="flex" minHeight="100vh" bgcolor="background.default">
         <Sidebar />
         <Topbar />
