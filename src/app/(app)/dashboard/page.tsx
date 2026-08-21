@@ -9,15 +9,24 @@ import {
   CircularProgress,
   Grid2 as Grid,
   MenuItem,
+  Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { Role } from "@/lib/auth/permissions";
 import { planLabel } from "@/lib/billing/plan-catalog";
@@ -38,6 +47,8 @@ function periodTo() {
   return new Date().toISOString().slice(0, 10);
 }
 
+type FunnelMetric = "count" | "value";
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const canAdminDash = useCanAccess("dashboard_advanced", "admin:visualizar");
@@ -49,6 +60,9 @@ export default function DashboardPage() {
   const from = periodFrom(period);
   const { moneyVisible, formatMoney, moneyAxisFormatter } = useMoneyVisibility();
   const isAdmin = session?.role === Role.Administrador;
+  const [funnelMetric, setFunnelMetric] = useState<FunnelMetric>(
+    searchParams.get("funnel") === "value" ? "value" : "count",
+  );
 
   useEffect(() => {
     if (isAdmin && canAdminDash) {
@@ -61,6 +75,14 @@ export default function DashboardPage() {
     queryFn: () => fetchCommercialDashboard(from!, periodTo()),
     enabled: !(isAdmin && canAdminDash),
   });
+
+  const funnelRows = useMemo(() => {
+    if (!data) return [];
+    return data.funnel.map((slice) => ({
+      ...slice,
+      avgTicket: slice.count > 0 ? slice.potentialValue / slice.count : 0,
+    }));
+  }, [data]);
 
   if (isAdmin && canAdminDash) {
     return (
@@ -91,12 +113,19 @@ export default function DashboardPage() {
 
   const advancedKpis = [
     ...basicKpis,
-    { label: "Valor vendido", value: formatMoney(data.soldValue), money: true },
+    { label: "Valor potencial (funil)", value: formatMoney(data.soldValue), money: true },
     { label: "Meta", value: formatMoney(data.goal), money: true },
     { label: "Comissão", value: formatMoney(data.commission), money: true },
   ];
 
   const kpis = advanced ? advancedKpis : basicKpis;
+  const showValueFunnel = funnelMetric === "value";
+  // On basic plan there is no money toggle — always show amounts when metric is value.
+  const funnelSeriesData = funnelRows.map((slice) => {
+    if (!showValueFunnel) return slice.count;
+    if (!advanced || moneyVisible) return slice.potentialValue;
+    return 0;
+  });
 
   return (
     <Stack spacing={2.5}>
@@ -185,14 +214,65 @@ export default function DashboardPage() {
         <Grid size={{ xs: 12, md: advanced ? 6 : 12 }}>
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Funil
-              </Typography>
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                justifyContent="space-between"
+                alignItems={{ sm: "center" }}
+                gap={1}
+                mb={2}
+              >
+                <Typography variant="h6">Funil</Typography>
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  value={funnelMetric}
+                  onChange={(_, value: FunnelMetric | null) => {
+                    if (value) setFunnelMetric(value);
+                  }}
+                >
+                  <ToggleButton value="count">Contagem</ToggleButton>
+                  <ToggleButton value="value">Valor potencial</ToggleButton>
+                </ToggleButtonGroup>
+              </Stack>
               <BarChart
                 height={280}
-                xAxis={[{ data: data.funnel.map((f) => f.stage), scaleType: "band" }]}
-                series={[{ data: data.funnel.map((f) => f.value), label: "Leads" }]}
+                xAxis={[{ data: funnelRows.map((f) => f.stage), scaleType: "band" }]}
+                yAxis={
+                  showValueFunnel
+                    ? [{ valueFormatter: moneyAxisFormatter }]
+                    : [{ valueFormatter: (v) => String(v ?? 0) }]
+                }
+                series={[
+                  {
+                    data: funnelSeriesData,
+                    label: showValueFunnel ? "Valor potencial" : "Leads",
+                    valueFormatter: (v) =>
+                      showValueFunnel ? formatMoney(Number(v ?? 0)) : String(v ?? 0),
+                  },
+                ]}
               />
+              <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Estágio</TableCell>
+                      <TableCell align="right">Leads</TableCell>
+                      <TableCell align="right">Valor potencial</TableCell>
+                      <TableCell align="right">Ticket médio</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {funnelRows.map((slice) => (
+                      <TableRow key={slice.stage}>
+                        <TableCell>{slice.stage}</TableCell>
+                        <TableCell align="right">{slice.count}</TableCell>
+                        <TableCell align="right">{formatMoney(slice.potentialValue)}</TableCell>
+                        <TableCell align="right">{formatMoney(slice.avgTicket)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </CardContent>
           </Card>
         </Grid>

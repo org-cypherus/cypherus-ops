@@ -39,6 +39,32 @@ type UploadProgress = {
   percent: number;
 };
 
+/** Duração visual da barra até 100% (independente da velocidade real do upload). */
+const UPLOAD_BAR_DURATION_MS = 5_000;
+
+function runUploadBarAnimation(
+  onTick: (percent: number) => void,
+  isCancelled: () => boolean,
+): Promise<void> {
+  return new Promise((resolve) => {
+    const started = performance.now();
+    const tick = (now: number) => {
+      if (isCancelled()) {
+        resolve();
+        return;
+      }
+      const percent = Math.min(100, Math.round(((now - started) / UPLOAD_BAR_DURATION_MS) * 100));
+      onTick(percent);
+      if (percent >= 100) {
+        resolve();
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
 const ACCEPT =
   ".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.txt,application/pdf,image/jpeg,image/png,image/webp,image/gif";
 
@@ -189,29 +215,41 @@ export function LeadAttachments({ lead }: { lead: Lead }) {
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
     const list = Array.from(files);
+    let cancelled = false;
     try {
       for (let index = 0; index < list.length; index += 1) {
         const file = list[index]!;
+        cancelled = false;
         setUploadProgress({
           fileName: file.name,
           fileIndex: index + 1,
           fileCount: list.length,
           percent: 0,
         });
-        await addAttachment.mutateAsync({
-          file,
-          onProgress: (percent) => {
-            setUploadProgress({
-              fileName: file.name,
-              fileIndex: index + 1,
-              fileCount: list.length,
-              percent,
-            });
-          },
-        });
+
+        const updateBar = (percent: number) => {
+          setUploadProgress({
+            fileName: file.name,
+            fileIndex: index + 1,
+            fileCount: list.length,
+            percent,
+          });
+        };
+
+        try {
+          await Promise.all([
+            addAttachment.mutateAsync({ file }),
+            runUploadBarAnimation(updateBar, () => cancelled),
+          ]);
+          updateBar(100);
+        } catch (error) {
+          cancelled = true;
+          throw error;
+        }
       }
       enqueueSnackbar("Anexo(s) enviado(s)", { variant: "success" });
     } catch (error) {
+      cancelled = true;
       enqueueSnackbar(getApiError(error).message || "Falha ao enviar anexo", { variant: "error" });
     } finally {
       setUploadProgress(null);

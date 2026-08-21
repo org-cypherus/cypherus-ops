@@ -2,6 +2,12 @@ import { api } from "@/lib/api/client";
 import { companyPath } from "@/lib/auth/session";
 import { uiStageToApiStatus } from "@/modules/leads/adapters";
 
+export type CommercialFunnelSlice = {
+  stage: string;
+  count: number;
+  potentialValue: number;
+};
+
 export type CommercialDashboard = {
   activeLeads: number;
   closedLeads: number;
@@ -10,7 +16,7 @@ export type CommercialDashboard = {
   goal: number;
   commission: number;
   avgCloseDays: number;
-  funnel: Array<{ stage: string; value: number }>;
+  funnel: CommercialFunnelSlice[];
   goalSeries: Array<{ month: string; goal: number; actual: number }>;
 };
 
@@ -67,7 +73,8 @@ export async function fetchCommercialDashboard(from: string, to?: string) {
     avgCloseDays: 0,
     funnel: data.funnel.map((slice) => ({
       stage: slice.name,
-      value: slice.lead_count,
+      count: slice.lead_count,
+      potentialValue: num(slice.potential_value),
     })),
     goalSeries: [] as CommercialDashboard["goalSeries"],
   } satisfies CommercialDashboard;
