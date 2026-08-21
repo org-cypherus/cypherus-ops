@@ -11,7 +11,7 @@ import {
   hasSession,
   setCachedSessionUser,
 } from "@/lib/auth/session";
-import { SESSION_STALE_TIME_MS } from "@/lib/query/client";
+import { SESSION_STALE_TIME_MS, getQueryClient } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
 import { fetchMe, loginRequest, logoutRequest } from "./services";
 import type { LoginFormValues } from "./schemas";
@@ -22,7 +22,10 @@ export function useSession() {
   return useQuery({
     queryKey: queryKeys.me,
     queryFn: async () => {
-      const user = await fetchMe();
+      const user = await fetchMe((partial) => {
+        setCachedSessionUser(partial);
+        getQueryClient().setQueryData(queryKeys.me, partial);
+      });
       setCachedSessionUser(user);
       return user;
     },
