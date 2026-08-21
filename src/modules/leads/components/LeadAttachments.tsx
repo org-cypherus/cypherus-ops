@@ -87,14 +87,12 @@ function useAttachmentObjectUrl(leadId: string, file: Attachment | null, enabled
 }
 
 function AttachmentPreviewCard({
-  leadId,
   file,
   deleting,
   onOpen,
   onDownload,
   onDelete,
 }: {
-  leadId: string;
   file: Attachment;
   deleting: boolean;
   onOpen: () => void;
@@ -102,7 +100,6 @@ function AttachmentPreviewCard({
   onDelete: () => void;
 }) {
   const previewable = canInlinePreview(file);
-  const { objectUrl, isPending, isError } = useAttachmentObjectUrl(leadId, file, previewable);
 
   return (
     <Box
@@ -120,40 +117,22 @@ function AttachmentPreviewCard({
           position: "relative",
           height: 148,
           bgcolor: "action.hover",
-          cursor: previewable && objectUrl ? "zoom-in" : "default",
+          cursor: previewable ? "zoom-in" : "default",
         }}
         onClick={() => {
-          if (previewable && objectUrl) onOpen();
+          if (previewable) onOpen();
         }}
+        role={previewable ? "button" : undefined}
+        aria-label={previewable ? `Abrir preview de ${file.name}` : undefined}
       >
-        {previewable && isPending ? (
-          <Stack height="100%" alignItems="center" justifyContent="center">
-            <CircularProgress size={28} />
-          </Stack>
-        ) : isImage(file) && objectUrl ? (
-          <Box
-            component="img"
-            src={objectUrl}
-            alt={file.name}
-            sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-          />
-        ) : isPdf(file) && objectUrl ? (
-          <Box
-            component="iframe"
-            title={file.name}
-            src={objectUrl}
-            sx={{ width: "100%", height: "100%", border: 0, pointerEvents: "none" }}
-          />
-        ) : (
-          <Stack height="100%" alignItems="center" justifyContent="center" spacing={0.5} px={1}>
-            <FileKindIcon file={file} />
-            {isError && previewable ? (
-              <Typography variant="caption" color="error">
-                Sem preview
-              </Typography>
-            ) : null}
-          </Stack>
-        )}
+        <Stack height="100%" alignItems="center" justifyContent="center" spacing={0.5} px={1}>
+          <FileKindIcon file={file} />
+          {previewable ? (
+            <Typography variant="caption" color="text.secondary">
+              Abrir preview
+            </Typography>
+          ) : null}
+        </Stack>
       </Box>
       <Stack spacing={0.5} p={1.25}>
         <Tooltip title={file.name}>
@@ -195,7 +174,8 @@ export function LeadAttachments({ lead }: { lead: Lead }) {
   const [dragOver, setDragOver] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Attachment | null>(null);
   const [preview, setPreview] = useState<Attachment | null>(null);
-  const previewUrl = useAttachmentObjectUrl(lead.id, preview);
+  // Conteúdo só sob demanda: um GET .../content ao abrir o dialog, não N no mount.
+  const previewUrl = useAttachmentObjectUrl(lead.id, preview, Boolean(preview));
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -289,7 +269,6 @@ export function LeadAttachments({ lead }: { lead: Lead }) {
                 }}
               >
                 <AttachmentPreviewCard
-                  leadId={lead.id}
                   file={file}
                   deleting={removeAttachment.isPending && pendingDelete?.id === file.id}
                   onOpen={() => setPreview(file)}
@@ -358,6 +337,10 @@ export function LeadAttachments({ lead }: { lead: Lead }) {
             <Stack alignItems="center" justifyContent="center" py={8}>
               <CircularProgress />
             </Stack>
+          ) : previewUrl.isError ? (
+            <Typography variant="body2" color="error">
+              Não foi possível carregar o preview.
+            </Typography>
           ) : preview && isImage(preview) && previewUrl.objectUrl ? (
             <Box
               component="img"
