@@ -12,8 +12,41 @@ import {
   Typography,
 } from "@mui/material";
 import { useLogout, useSession } from "@/modules/auth/hooks";
+import { formatLoadMs } from "@/lib/perf/route-metrics";
+import { useRouteLoadMetrics } from "@/lib/perf/useRouteLoadMetrics";
 import { useUIStore } from "@/store/ui";
 import { DRAWER_WIDTH, TOPBAR_HEIGHT } from "./Sidebar";
+
+function MetricsCaption() {
+  const { paintMs, sessionMs, primaryMs, primaryLabel } = useRouteLoadMetrics();
+  const parts: string[] = [];
+  if (paintMs != null) parts.push(`paint ${formatLoadMs(paintMs)}`);
+  if (sessionMs != null) parts.push(`sess ${formatLoadMs(sessionMs)}`);
+  if (primaryMs != null) {
+    parts.push(`${primaryLabel ?? "data"} ${formatLoadMs(primaryMs)}`);
+  }
+
+  if (!parts.length) return null;
+
+  return (
+    <Typography
+      variant="caption"
+      color="text.secondary"
+      title="paint = frame pós-rota · sess = useSession ready · data = query principal"
+      sx={{
+        display: { xs: "none", md: "block" },
+        fontVariantNumeric: "tabular-nums",
+        whiteSpace: "nowrap",
+        userSelect: "none",
+        maxWidth: 360,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+      }}
+    >
+      {parts.join(" · ")}
+    </Typography>
+  );
+}
 
 export function Topbar() {
   const { data: user } = useSession();
@@ -54,6 +87,8 @@ export function Topbar() {
         </IconButton>
 
         <Box sx={{ flex: 1 }} />
+
+        <MetricsCaption />
 
         <IconButton onClick={toggleMode} aria-label="Alternar tema">
           {mode === "light" ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
