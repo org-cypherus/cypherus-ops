@@ -3,7 +3,6 @@
 import {
   Box,
   Button,
-  CircularProgress,
   Paper,
   Stack,
   Table,
@@ -19,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { ContractsPageSkeleton, TableSkeleton } from "@/components/feedback/PageSkeletons";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { queryKeys } from "@/lib/query/keys";
@@ -55,9 +55,10 @@ export default function ContractsPage() {
       </Stack>
 
       {isLoading ? (
-        <Box py={8} display="flex" justifyContent="center">
-          <CircularProgress />
-        </Box>
+        <TableSkeleton
+          columns={5}
+          headers={["Lead", "Modelo", "Status", "Valor", "Criado em"]}
+        />
       ) : isError ? (
         <ErrorState onRetry={() => refetch()} />
       ) : (

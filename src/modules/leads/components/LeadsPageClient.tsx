@@ -4,7 +4,6 @@ import {
   Box,
   Button,
   Checkbox,
-  CircularProgress,
   MenuItem,
   Paper,
   Stack,
@@ -26,6 +25,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { KanbanSkeleton, TableSkeleton } from "@/components/feedback/PageSkeletons";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { downloadText } from "@/lib/utils/download";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
@@ -316,9 +316,7 @@ export function LeadsPageClient() {
       <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {view === "kanban" ? (
           kanban.isLoading ? (
-            <Box py={8} display="flex" justifyContent="center">
-              <CircularProgress />
-            </Box>
+            <KanbanSkeleton />
           ) : kanban.isError ? (
             <ErrorState onRetry={() => kanban.refetch()} />
           ) : !filteredKanban?.columns.some((c) => c.count > 0) ? (
@@ -327,9 +325,10 @@ export function LeadsPageClient() {
             <KanbanBoard board={filteredKanban} />
           )
         ) : leads.isLoading ? (
-          <Box py={8} display="flex" justifyContent="center">
-            <CircularProgress />
-          </Box>
+          <TableSkeleton
+            columns={8}
+            headers={["", "Nome", "Documento", "Status", "Responsável", "Origem", "Valor", "Criação"]}
+          />
         ) : leads.isError ? (
           <ErrorState onRetry={() => leads.refetch()} />
         ) : !allLeads.length ? (

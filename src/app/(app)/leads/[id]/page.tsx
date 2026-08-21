@@ -1,9 +1,10 @@
 "use client";
 
-import { Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
+import { Button, Stack, Typography } from "@mui/material";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { LeadDetailSkeleton } from "@/components/feedback/PageSkeletons";
 import { LeadDetail } from "@/modules/leads/components/LeadDetail";
 import { useLead } from "@/modules/leads/hooks";
 
@@ -13,15 +14,7 @@ export default function LeadDetailPage() {
   const backHref = "/leads";
   const backLabel = "← Voltar ao pipeline";
 
-  if (isLoading) {
-    return (
-      <Box py={8} display="flex" justifyContent="center">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (isError || !data) {
+  if (isError || (!isLoading && !data)) {
     return <ErrorState onRetry={() => refetch()} />;
   }
 
@@ -31,7 +24,7 @@ export default function LeadDetailPage() {
         {backLabel}
       </Button>
       <Typography variant="h4">Detalhe do Lead</Typography>
-      <LeadDetail lead={data} />
+      {isLoading || !data ? <LeadDetailSkeleton /> : <LeadDetail lead={data} />}
     </Stack>
   );
 }
