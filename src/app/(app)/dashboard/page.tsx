@@ -34,18 +34,7 @@ import { queryKeys } from "@/lib/query/keys";
 import { formatPercent } from "@/lib/utils/format";
 import { useCanAccess, useFeature, useSession } from "@/modules/auth/hooks";
 import { MoneyVisibilityToggle, useMoneyVisibility } from "@/modules/dashboard/MoneyVisibility";
-import { fetchCommercialDashboard } from "@/modules/dashboard/services";
-
-function periodFrom(value: string) {
-  const days = Number(value) || 30;
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
-}
-
-function periodTo() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { fetchCommercialDashboard, periodRange } from "@/modules/dashboard/services";
 
 type FunnelMetric = "count" | "value";
 
@@ -57,7 +46,7 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const period = searchParams.get("period") || "30";
-  const from = periodFrom(period);
+  const { from, to } = periodRange(Number(period) || 30);
   const { moneyVisible, formatMoney, moneyAxisFormatter } = useMoneyVisibility();
   const isAdmin = session?.role === Role.Administrador;
   const [funnelMetric, setFunnelMetric] = useState<FunnelMetric>(
@@ -71,8 +60,8 @@ export default function DashboardPage() {
   }, [isAdmin, canAdminDash, period, router]);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.dashboard.me({ period }),
-    queryFn: () => fetchCommercialDashboard(from!, periodTo()),
+    queryKey: queryKeys.dashboard.me({ period, from, to }),
+    queryFn: () => fetchCommercialDashboard(from, to),
     enabled: !(isAdmin && canAdminDash),
   });
 

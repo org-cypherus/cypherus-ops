@@ -4,20 +4,18 @@ import { Role } from "@/lib/auth/permissions";
 import { queryKeys } from "@/lib/query/keys";
 import { fetchUsers } from "@/modules/admin/services";
 import { fetchContracts } from "@/modules/contracts/services";
-import { fetchAdminDashboard, fetchCommercialDashboard } from "@/modules/dashboard/services";
+import { fetchAdminDashboard, fetchCommercialDashboard, periodRange } from "@/modules/dashboard/services";
 import { fetchPayments } from "@/modules/financial/services";
 import { fetchKanban } from "@/modules/leads/services";
 import { fetchCompaniesOverview } from "@/modules/platform/services";
 import { fetchUserDirectory } from "@/modules/users/directory";
 
 function periodBounds(days = 30) {
-  const to = new Date();
-  const from = new Date();
-  from.setDate(from.getDate() - days);
+  const { from, to } = periodRange(days);
   return {
     period: String(days),
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
+    from,
+    to,
   };
 }
 

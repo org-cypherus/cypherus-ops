@@ -391,7 +391,7 @@ export const handlers = [
     HttpResponse.json({
       leads_in_period: mockLeads.length,
       converted_count: 1,
-      conversion_rate: 0.1,
+      conversion_rate: 10,
       funnel: buildKanban().columns.map((column) => ({
         name: column.status,
         lead_count: column.count,
@@ -403,12 +403,17 @@ export const handlers = [
 
   http.get(`${API}/v1/companies/:companyId/dashboard/admin`, () =>
     HttpResponse.json({
+      from: "2026-07-22",
+      to: "2026-08-21",
       leads_received: mockLeads.length,
       leads_by_origin: [{ source: "Google", lead_count: mockLeads.length }],
       contracts_signed: 1,
       contracts_pending: 0,
+      overdue_count: 0,
+      overdue_amount: 0,
       revenue: 0,
       ticket_average: 0,
+      active_users: 1,
     }),
   ),
 

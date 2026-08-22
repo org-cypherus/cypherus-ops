@@ -7,18 +7,10 @@ import {
   CircularProgress,
   Grid2 as Grid,
   MenuItem,
-  Paper,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
-import { BarChart } from "@mui/x-charts/BarChart";
 import { PieChart } from "@mui/x-charts/PieChart";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -26,29 +18,18 @@ import { ErrorState } from "@/components/feedback/ErrorState";
 import { queryKeys } from "@/lib/query/keys";
 import { formatPercent } from "@/lib/utils/format";
 import { MoneyVisibilityToggle, useMoneyVisibility } from "@/modules/dashboard/MoneyVisibility";
-import { fetchAdminDashboard } from "@/modules/dashboard/services";
-
-function periodFrom(value: string) {
-  const days = Number(value) || 30;
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().slice(0, 10);
-}
-
-function periodTo() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { fetchAdminDashboard, periodRange } from "@/modules/dashboard/services";
 
 export default function AdminDashboardPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const period = searchParams.get("period") || "30";
-  const from = periodFrom(period);
-  const { moneyVisible, formatMoney, moneyAxisFormatter } = useMoneyVisibility();
+  const { from, to } = periodRange(Number(period) || 30);
+  const { formatMoney } = useMoneyVisibility();
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.dashboard.admin({ period }),
-    queryFn: () => fetchAdminDashboard(from, periodTo()),
+    queryKey: queryKeys.dashboard.admin({ period, from, to }),
+    queryFn: () => fetchAdminDashboard(from, to),
   });
 
   if (isLoading) {
@@ -65,13 +46,21 @@ export default function AdminDashboardPage() {
 
   const kpis = [
     { label: "Leads recebidos", value: String(data.leadsReceived) },
-    { label: "Conversão geral", value: formatPercent(data.conversion) },
-    { label: "Receita", value: formatMoney(data.revenue) },
+    {
+      label: "Conversão (assinados / leads)",
+      value: formatPercent(data.conversion),
+    },
+    { label: "Receita (pagamentos confirmados)", value: formatMoney(data.revenue) },
     { label: "Ticket médio", value: formatMoney(data.avgTicket) },
-    { label: "Tempo médio", value: `${data.avgCloseDays} dias` },
     { label: "Contratos assinados", value: String(data.signedContracts) },
     { label: "Contratos pendentes", value: String(data.pendingContracts) },
+    { label: "Inadimplência (qtd)", value: String(data.overdueCount) },
+    { label: "Inadimplência (R$)", value: formatMoney(data.overdueAmount) },
+    { label: "Usuários ativos", value: String(data.activeUsers) },
   ];
+
+  const periodLabel =
+    data.from && data.to ? `${data.from} → ${data.to}` : `${from} → ${to}`;
 
   return (
     <Stack spacing={2.5}>
@@ -79,7 +68,7 @@ export default function AdminDashboardPage() {
         <Box>
           <Typography variant="h4">Dashboard Administrativo</Typography>
           <Typography variant="body2" color="text.secondary">
-            Visão macro da operação
+            Totais da empresa no CRM · período {periodLabel}
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} alignItems="center">
@@ -102,7 +91,7 @@ export default function AdminDashboardPage() {
 
       <Grid container spacing={2}>
         {kpis.map((kpi) => (
-          <Grid key={kpi.label} size={{ xs: 12, sm: 6, md: 3 }}>
+          <Grid key={kpi.label} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
             <Card variant="outlined">
               <CardContent>
                 <Typography variant="body2" color="text.secondary">
@@ -119,23 +108,15 @@ export default function AdminDashboardPage() {
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 8 }}>
-          <Card variant="outlined">
+          <Card variant="outlined" sx={{ height: "100%" }}>
             <CardContent>
-              <Typography variant="h6" sx={{ mb: 2 }}>
+              <Typography variant="h6" sx={{ mb: 1 }}>
                 Receita mensal
               </Typography>
-              <BarChart
-                height={300}
-                xAxis={[{ data: data.monthlyRevenue.map((m) => m.month), scaleType: "band" }]}
-                yAxis={[{ valueFormatter: moneyAxisFormatter }]}
-                series={[
-                  {
-                    data: data.monthlyRevenue.map((m) => (moneyVisible ? m.value : 0)),
-                    label: "Receita",
-                    valueFormatter: (v) => formatMoney(Number(v ?? 0)),
-                  },
-                ]}
-              />
+              <Typography variant="body2" color="text.secondary">
+                O endpoint <code>GET /dashboard/admin</code> do CRM não devolve série mensal — só o
+                total de receita de pagamentos CONFIRMADOS no período ({formatMoney(data.revenue)}).
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -145,46 +126,41 @@ export default function AdminDashboardPage() {
               <Typography variant="h6" sx={{ mb: 2 }}>
                 Leads por origem
               </Typography>
-              <PieChart
-                height={300}
-                series={[
-                  {
-                    data: data.leadsByOrigin.map((item, index) => ({
-                      id: index,
-                      value: item.value,
-                      label: item.origin,
-                    })),
-                  },
-                ]}
-              />
+              {data.leadsByOrigin.length ? (
+                <PieChart
+                  height={300}
+                  series={[
+                    {
+                      data: data.leadsByOrigin.map((item, index) => ({
+                        id: index,
+                        value: item.value,
+                        label: item.origin,
+                      })),
+                    },
+                  ]}
+                />
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Nenhuma origem no período.
+                </Typography>
+              )}
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      <TableContainer component={Paper} variant="outlined">
-        <Typography variant="h6" sx={{ p: 2 }}>
-          Top performers
-        </Typography>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Consultor</TableCell>
-              <TableCell>Conversão</TableCell>
-              <TableCell align="right">Receita</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {data.topPerformers.map((row) => (
-              <TableRow key={row.name}>
-                <TableCell>{row.name}</TableCell>
-                <TableCell>{formatPercent(row.conversion)}</TableCell>
-                <TableCell align="right">{formatMoney(row.revenue)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <Card variant="outlined">
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Top performers
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Ranking por consultor não vem no dashboard admin. Use o dashboard comercial (
+            <code>GET /dashboard/me</code> → <code>performance[]</code>) para conversão e valor
+            potencial por responsável.
+          </Typography>
+        </CardContent>
+      </Card>
     </Stack>
   );
 }
