@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { formatCurrency, formatDate, formatDateTime, formatFileSize, formatPercent } from "./format";
+import { formatCompactCurrency, formatCurrency, formatDate, formatDateTime, formatFileSize, formatPercent } from "./format";
 
 describe("format utils", () => {
   it("formats BRL currency", () => {
     expect(formatCurrency(1500)).toContain("1.500");
+  });
+
+  it("formats compact currency for chart axes", () => {
+    expect(formatCompactCurrency(1500)).toMatch(/mil/i);
+    expect(formatCompactCurrency(2_500_000)).toMatch(/mi/i);
+    expect(formatCompactCurrency(80)).toMatch(/80/);
   });
 
   it("formats percent values", () => {

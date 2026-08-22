@@ -34,6 +34,7 @@ import { queryKeys } from "@/lib/query/keys";
 import { formatPercent } from "@/lib/utils/format";
 import { useCanAccess, useFeature, useSession } from "@/modules/auth/hooks";
 import { MoneyVisibilityToggle, useMoneyVisibility } from "@/modules/dashboard/MoneyVisibility";
+import { ChartShell, useChartMargins, useIsCompactChart } from "@/modules/dashboard/ChartShell";
 import { fetchCommercialDashboard, periodRange } from "@/modules/dashboard/services";
 
 type FunnelMetric = "count" | "value";
@@ -48,10 +49,13 @@ export default function DashboardPage() {
   const period = searchParams.get("period") || "30";
   const { from, to } = periodRange(Number(period) || 30);
   const { moneyVisible, formatMoney, moneyAxisFormatter } = useMoneyVisibility();
+  const isCompact = useIsCompactChart();
   const isAdmin = session?.role === Role.Administrador;
   const [funnelMetric, setFunnelMetric] = useState<FunnelMetric>(
     searchParams.get("funnel") === "value" ? "value" : "count",
   );
+  const funnelMargins = useChartMargins(funnelMetric === "value" ? "money" : "count");
+  const moneyMargins = useChartMargins("money");
 
   useEffect(() => {
     if (isAdmin && canAdminDash) {
@@ -59,7 +63,7 @@ export default function DashboardPage() {
     }
   }, [isAdmin, canAdminDash, period, router]);
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.dashboard.me({ period, from, to }),
     queryFn: () => fetchCommercialDashboard(from, to),
     enabled: !(isAdmin && canAdminDash),
@@ -90,7 +94,7 @@ export default function DashboardPage() {
   }
 
   if (isError || !data) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState error={error} resourceLabel="o dashboard" onRetry={() => refetch()} />;
   }
 
   const basicKpis = [
@@ -117,10 +121,10 @@ export default function DashboardPage() {
   });
 
   return (
-    <Stack spacing={2.5}>
-      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={2}>
-        <Box>
-          <Typography variant="h4">
+    <Stack spacing={{ xs: 2, md: 2.5 }} sx={{ width: "100%", minWidth: 0 }}>
+      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={2}>
+        <Box minWidth={0}>
+          <Typography variant="h4" sx={{ fontSize: { xs: "1.5rem", sm: "2rem" } }}>
             {advanced ? "Dashboard Comercial" : "Dashboard"}
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -129,7 +133,7 @@ export default function DashboardPage() {
               : "Visão básica do pipeline — amplie no Profissional"}
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
           {advanced ? <MoneyVisibilityToggle /> : null}
           <TextField
             select
@@ -137,7 +141,7 @@ export default function DashboardPage() {
             label="Período"
             value={period}
             onChange={(e) => router.push(`/dashboard?period=${e.target.value}`)}
-            sx={{ minWidth: 140 }}
+            sx={{ minWidth: { xs: 120, sm: 140 } }}
           >
             <MenuItem value="7">7 dias</MenuItem>
             <MenuItem value="30">30 dias</MenuItem>
@@ -145,7 +149,7 @@ export default function DashboardPage() {
             <MenuItem value="365">12 meses</MenuItem>
           </TextField>
           {canAdminDash && !isAdmin ? (
-            <Button component={Link} href="/dashboard/admin" variant="outlined">
+            <Button component={Link} href="/dashboard/admin" variant="outlined" size="small">
               Ver visão administrativa
             </Button>
           ) : null}
@@ -184,13 +188,16 @@ export default function DashboardPage() {
 
       <Grid container spacing={2}>
         {kpis.map((kpi) => (
-          <Grid key={kpi.label} size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card variant="outlined">
-              <CardContent>
-                <Typography variant="body2" color="text.secondary">
+          <Grid key={kpi.label} size={{ xs: 12, sm: 6, md: 3 }} sx={{ minWidth: 0 }}>
+            <Card variant="outlined" sx={{ height: "100%", minWidth: 0 }}>
+              <CardContent sx={{ py: 1.75, "&:last-child": { pb: 1.75 } }}>
+                <Typography variant="body2" color="text.secondary" noWrap title={kpi.label}>
                   {kpi.label}
                 </Typography>
-                <Typography variant="h6" sx={{ mt: 1 }}>
+                <Typography
+                  variant="h6"
+                  sx={{ mt: 0.75, fontSize: { xs: "1.05rem", md: "1.15rem" }, wordBreak: "break-word" }}
+                >
                   {kpi.value}
                 </Typography>
               </CardContent>
@@ -199,10 +206,10 @@ export default function DashboardPage() {
         ))}
       </Grid>
 
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: advanced ? 6 : 12 }}>
-          <Card variant="outlined">
-            <CardContent>
+      <Grid container spacing={2} alignItems="stretch">
+        <Grid size={{ xs: 12, md: advanced ? 6 : 12 }} sx={{ minWidth: 0 }}>
+          <Card variant="outlined" sx={{ height: "100%", minWidth: 0 }}>
+            <CardContent sx={{ minWidth: 0 }}>
               <Stack
                 direction={{ xs: "column", sm: "row" }}
                 justifyContent="space-between"
@@ -223,25 +230,48 @@ export default function DashboardPage() {
                   <ToggleButton value="value">Valor potencial</ToggleButton>
                 </ToggleButtonGroup>
               </Stack>
-              <BarChart
-                height={280}
-                xAxis={[{ data: funnelRows.map((f) => f.stage), scaleType: "band" }]}
-                yAxis={
-                  showValueFunnel
-                    ? [{ valueFormatter: moneyAxisFormatter }]
-                    : [{ valueFormatter: (v) => String(v ?? 0) }]
-                }
-                series={[
-                  {
-                    data: funnelSeriesData,
-                    label: showValueFunnel ? "Valor potencial" : "Leads",
-                    valueFormatter: (v) =>
-                      showValueFunnel ? formatMoney(Number(v ?? 0)) : String(v ?? 0),
-                  },
-                ]}
-              />
-              <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
-                <Table size="small">
+              <ChartShell height={280}>
+                <BarChart
+                  height={isCompact ? 238 : 280}
+                  margin={funnelMargins}
+                  grid={{ horizontal: true }}
+                  xAxis={[
+                    {
+                      data: funnelRows.map((f) => f.stage),
+                      scaleType: "band",
+                      tickLabelStyle: {
+                        fontSize: isCompact ? 10 : 12,
+                        angle: isCompact ? -30 : 0,
+                        textAnchor: isCompact ? "end" : "middle",
+                      },
+                    },
+                  ]}
+                  yAxis={[
+                    {
+                      width: showValueFunnel ? (isCompact ? 48 : 56) : 36,
+                      valueFormatter: showValueFunnel
+                        ? moneyAxisFormatter
+                        : (v) => String(v ?? 0),
+                      tickLabelStyle: { fontSize: isCompact ? 10 : 12 },
+                    },
+                  ]}
+                  series={[
+                    {
+                      data: funnelSeriesData,
+                      label: showValueFunnel ? "Valor potencial" : "Leads",
+                      valueFormatter: (v) =>
+                        showValueFunnel ? formatMoney(Number(v ?? 0)) : String(v ?? 0),
+                    },
+                  ]}
+                  slotProps={{ legend: { hidden: true } }}
+                />
+              </ChartShell>
+              <TableContainer
+                component={Paper}
+                variant="outlined"
+                sx={{ mt: 2, overflowX: "auto", WebkitOverflowScrolling: "touch" }}
+              >
+                <Table size="small" sx={{ minWidth: 360 }}>
                   <TableHead>
                     <TableRow>
                       <TableCell>Estágio</TableCell>
@@ -253,7 +283,7 @@ export default function DashboardPage() {
                   <TableBody>
                     {funnelRows.map((slice) => (
                       <TableRow key={slice.stage}>
-                        <TableCell>{slice.stage}</TableCell>
+                        <TableCell sx={{ wordBreak: "break-word" }}>{slice.stage}</TableCell>
                         <TableCell align="right">{slice.count}</TableCell>
                         <TableCell align="right">{formatMoney(slice.potentialValue)}</TableCell>
                         <TableCell align="right">{formatMoney(slice.avgTicket)}</TableCell>
@@ -266,33 +296,51 @@ export default function DashboardPage() {
           </Card>
         </Grid>
         {advanced ? (
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Card variant="outlined">
-              <CardContent>
+          <Grid size={{ xs: 12, md: 6 }} sx={{ minWidth: 0 }}>
+            <Card variant="outlined" sx={{ height: "100%", minWidth: 0 }}>
+              <CardContent sx={{ minWidth: 0 }}>
                 <Typography variant="h6" sx={{ mb: 2 }}>
                   Meta vs realizado
                 </Typography>
-                <BarChart
-                  height={280}
-                  xAxis={[{ data: data.goalSeries.map((g) => g.month), scaleType: "band" }]}
-                  yAxis={[
-                    {
-                      valueFormatter: moneyAxisFormatter,
-                    },
-                  ]}
-                  series={[
-                    {
-                      data: data.goalSeries.map((g) => (moneyVisible ? g.goal : 0)),
-                      label: "Meta",
-                      valueFormatter: (v) => formatMoney(Number(v ?? 0)),
-                    },
-                    {
-                      data: data.goalSeries.map((g) => (moneyVisible ? g.actual : 0)),
-                      label: "Realizado",
-                      valueFormatter: (v) => formatMoney(Number(v ?? 0)),
-                    },
-                  ]}
-                />
+                {data.goalSeries.length ? (
+                  <ChartShell height={280}>
+                    <BarChart
+                      height={isCompact ? 238 : 280}
+                      margin={moneyMargins}
+                      grid={{ horizontal: true }}
+                      xAxis={[
+                        {
+                          data: data.goalSeries.map((g) => g.month),
+                          scaleType: "band",
+                          tickLabelStyle: { fontSize: isCompact ? 10 : 12 },
+                        },
+                      ]}
+                      yAxis={[
+                        {
+                          width: isCompact ? 48 : 56,
+                          valueFormatter: moneyAxisFormatter,
+                          tickLabelStyle: { fontSize: isCompact ? 10 : 12 },
+                        },
+                      ]}
+                      series={[
+                        {
+                          data: data.goalSeries.map((g) => (moneyVisible ? g.goal : 0)),
+                          label: "Meta",
+                          valueFormatter: (v) => formatMoney(Number(v ?? 0)),
+                        },
+                        {
+                          data: data.goalSeries.map((g) => (moneyVisible ? g.actual : 0)),
+                          label: "Realizado",
+                          valueFormatter: (v) => formatMoney(Number(v ?? 0)),
+                        },
+                      ]}
+                    />
+                  </ChartShell>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    Série de meta ainda não disponível neste período.
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           </Grid>
