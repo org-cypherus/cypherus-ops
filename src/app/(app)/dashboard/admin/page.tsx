@@ -93,7 +93,7 @@ export default function AdminDashboardPage() {
   }, [data, from, to]);
 
   const hasRevenueBars = revenueSeries.some((item) => item.amount > 0);
-  const performance = data?.performance ?? [];
+  const performance = useMemo(() => data?.performance ?? [], [data?.performance]);
   const ownerLabels = useMemo(
     () =>
       Object.fromEntries(
@@ -226,7 +226,6 @@ export default function AdminDashboardPage() {
                       ]}
                       yAxis={[
                         {
-                          width: isCompact ? 48 : 56,
                           valueFormatter: moneyAxisFormatter,
                           tickLabelStyle: { fontSize: isCompact ? 10 : 12 },
                         },
@@ -304,12 +303,6 @@ export default function AdminDashboardPage() {
                         legend: {
                           direction: "row",
                           position: { vertical: "bottom", horizontal: "middle" },
-                          sx: {
-                            fontSize: 11,
-                            maxWidth: "100%",
-                            flexWrap: "wrap",
-                            justifyContent: "center",
-                          },
                         },
                       }}
                     />
@@ -367,7 +360,6 @@ export default function AdminDashboardPage() {
                     {
                       data: performance.map((row) => row.ownerUserId),
                       scaleType: "band",
-                      width: isCompact ? 68 : 96,
                       valueFormatter: (value) => ownerLabels[String(value ?? "")] ?? String(value ?? ""),
                       tickLabelStyle: { fontSize: isCompact ? 10 : 12 },
                     },

@@ -74,15 +74,18 @@ export function LeadsPageClient() {
     }
   }, [sessionReady, session, canViewCrm, router]);
 
-  const filters = {
-    q: searchParams.get("q") || undefined,
-    ownerId: isComercial ? session?.id : searchParams.get("ownerId") || undefined,
-    origin: searchParams.get("origin") || undefined,
-    priority: searchParams.get("priority") || undefined,
-    tag: searchParams.get("tag") || undefined,
-    from: searchParams.get("from") || undefined,
-    to: searchParams.get("to") || undefined,
-  };
+  const filters = useMemo(
+    () => ({
+      q: searchParams.get("q") || undefined,
+      ownerId: isComercial ? session?.id : searchParams.get("ownerId") || undefined,
+      origin: searchParams.get("origin") || undefined,
+      priority: searchParams.get("priority") || undefined,
+      tag: searchParams.get("tag") || undefined,
+      from: searchParams.get("from") || undefined,
+      to: searchParams.get("to") || undefined,
+    }),
+    [searchParams, isComercial, session?.id],
+  );
 
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);

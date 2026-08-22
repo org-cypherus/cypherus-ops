@@ -78,7 +78,7 @@ export function CalendarPageClient() {
     canView,
   );
 
-  const events = eventsQuery.data?.data || [];
+  const events = useMemo(() => eventsQuery.data?.data || [], [eventsQuery.data?.data]);
 
   useEffect(() => {
     if (isMobile) setView("day");

@@ -248,7 +248,6 @@ export default function DashboardPage() {
                   ]}
                   yAxis={[
                     {
-                      width: showValueFunnel ? (isCompact ? 48 : 56) : 36,
                       valueFormatter: showValueFunnel
                         ? moneyAxisFormatter
                         : (v) => String(v ?? 0),
@@ -317,7 +316,6 @@ export default function DashboardPage() {
                       ]}
                       yAxis={[
                         {
-                          width: isCompact ? 48 : 56,
                           valueFormatter: moneyAxisFormatter,
                           tickLabelStyle: { fontSize: isCompact ? 10 : 12 },
                         },
