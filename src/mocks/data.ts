@@ -85,6 +85,7 @@ export type AppUser = {
   /** Senha mock (padrão: último sobrenome + ano atual) */
   password: string;
   mustChangePassword: boolean;
+  createdAt?: string;
 };
 
 export type MockCompany = CompanySummary & {

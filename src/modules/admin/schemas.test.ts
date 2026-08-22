@@ -14,6 +14,18 @@ describe("adminUserFormSchema", () => {
     expect(parsed.success).toBe(true);
   });
 
+  it("requires phone and team on create and edit", () => {
+    const parsed = adminUserFormSchema.safeParse({
+      name: "Ana Souza",
+      email: "ana@cypherops.com",
+      phone: "",
+      role: "Comercial",
+      team: "",
+      status: "Ativo",
+    });
+    expect(parsed.success).toBe(false);
+  });
+
   it("rejects incomplete name, bad email and short phone", () => {
     const parsed = adminUserFormSchema.safeParse({
       name: "Ana",

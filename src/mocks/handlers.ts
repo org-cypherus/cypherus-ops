@@ -55,8 +55,8 @@ function toCrmUser(user: (typeof mockUsers)[number]) {
     timezone: "America/Sao_Paulo",
     mfa_enabled: false,
     last_login_at: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: user.createdAt || "2026-01-15T12:00:00.000Z",
+    updated_at: user.createdAt || "2026-01-15T12:00:00.000Z",
   };
 }
 
@@ -332,6 +332,42 @@ export const handlers = [
     return HttpResponse.json([role]);
   }),
 
+  http.get(`${API}/v1/companies/:companyId/users/:userId/permissions`, ({ params }) => {
+    const user = mockUsers.find((item) => item.id === params.userId);
+    const permissions = ROLE_PERMISSIONS[(user?.role as RoleName) ?? "Comercial"] ?? [];
+    return HttpResponse.json(
+      permissions
+        .map((permission) => UI_TO_API_PERMISSION[permission])
+        .filter(Boolean)
+        .map((permission) => ({
+          permission,
+          granted: true,
+          scope: "COMPANY",
+          source: "ROLE",
+        })),
+    );
+  }),
+
+  http.get(`${API}/v1/companies/:companyId/users/:userId/overrides`, () => HttpResponse.json([])),
+
+  http.put(`${API}/v1/companies/:companyId/users/:userId/overrides`, async ({ params, request }) => {
+    const body = (await request.json()) as {
+      permission_key?: string;
+      effect?: "ALLOW" | "DENY";
+      scope?: string | null;
+      reason?: string | null;
+    };
+    return HttpResponse.json({
+      user_id: params.userId,
+      permission_key: body.permission_key ?? "leads.view",
+      effect: body.effect ?? "ALLOW",
+      scope: body.scope ?? "COMPANY",
+      reason: body.reason ?? null,
+      expires_at: null,
+      created_at: new Date().toISOString(),
+    });
+  }),
+
   http.get(`${API}/v1/companies/:companyId/roles`, () => HttpResponse.json(ROLES)),
 
   http.get(`${API}/v1/companies/:companyId/roles/:roleId/permissions`, ({ params }) => {
@@ -457,7 +493,22 @@ export const handlers = [
         lead_count: column.count,
         potential_value: column.potentialValue,
       })),
-      performance: [],
+      performance: [
+        {
+          owner_user_id: mockUsers[0]?.id ?? "u1",
+          lead_count: 5,
+          converted_count: 2,
+          conversion_rate: 40,
+          potential_value: 12000,
+        },
+        {
+          owner_user_id: mockUsers[1]?.id ?? "u2",
+          lead_count: 3,
+          converted_count: 1,
+          conversion_rate: 33.33,
+          potential_value: 4500,
+        },
+      ],
     }),
   ),
 
@@ -471,9 +522,29 @@ export const handlers = [
       contracts_pending: 0,
       overdue_count: 0,
       overdue_amount: 0,
-      revenue: 0,
-      ticket_average: 0,
+      revenue: 2000,
+      revenue_by_month: [
+        { month: "2026-07", amount: 500, count: 1 },
+        { month: "2026-08", amount: 1500, count: 2 },
+      ],
+      ticket_average: 1000,
       active_users: 1,
+      performance: [
+        {
+          owner_user_id: mockUsers[0]?.id ?? "u1",
+          lead_count: 5,
+          converted_count: 2,
+          conversion_rate: 40,
+          potential_value: 12000,
+        },
+        {
+          owner_user_id: mockUsers[1]?.id ?? "u2",
+          lead_count: 3,
+          converted_count: 1,
+          conversion_rate: 33.33,
+          potential_value: 4500,
+        },
+      ],
     }),
   ),
 
@@ -553,15 +624,25 @@ export const handlers = [
     );
   }),
 
-  http.post(`${API}/v1/auth/invitations/accept`, () =>
-    HttpResponse.json({
-      access_token: "mock-access",
-      refresh_token: "mock-refresh",
-      token_type: "bearer",
-      expires_in: 3600,
-      user: mePayload().user,
-    }),
-  ),
+  http.post(`${API}/v1/auth/invitations/accept`, async ({ request }) => {
+    const body = (await request.json()) as { token?: string; password?: string };
+    if (!body.token?.trim()) {
+      return crmError(401, "AUTHENTICATION_FAILED", "Token de convite inválido ou expirado.");
+    }
+    if (!body.password || body.password.length < 8) {
+      return crmError(422, "VALIDATION_ERROR", "A senha deve ter no mínimo 8 caracteres.");
+    }
+    return HttpResponse.json(
+      {
+        access_token: "mock-access",
+        refresh_token: "mock-refresh",
+        token_type: "bearer",
+        expires_in: 3600,
+        user: mePayload().user,
+      },
+      { status: 201 },
+    );
+  }),
 
   http.get(`${API}/v1/health/live`, () => HttpResponse.json({ status: "ok", service: "saas-crm" })),
 ];

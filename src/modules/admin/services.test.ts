@@ -17,4 +17,19 @@ describe("mapCrmUserToAppUser", () => {
       role: "Administrador",
     });
   });
+
+  it("maps created_at to createdAt", () => {
+    const mapped = mapCrmUserToAppUser(
+      {
+        id: "u2",
+        name: "Bruno Lima",
+        email: "bruno@acme.com",
+        status: "ACTIVE",
+        created_at: "2026-03-10T15:30:00.000Z",
+      },
+      "SALES",
+    );
+    expect(mapped.createdAt).toBe("2026-03-10T15:30:00.000Z");
+    expect(mapped.role).toBe("Comercial");
+  });
 });

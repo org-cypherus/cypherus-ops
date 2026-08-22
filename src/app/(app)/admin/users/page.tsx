@@ -9,6 +9,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   MenuItem,
   Paper,
@@ -23,6 +24,8 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
@@ -36,31 +39,63 @@ import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { getApiError } from "@/lib/api/client";
-import { ROLE_NAMES } from "@/lib/auth/permissions";
+import { mapApiPermissions } from "@/lib/auth/mappers";
+import { Role, ROLE_NAMES, ROLE_PERMISSIONS, type Permission } from "@/lib/auth/permissions";
+import { hasFeature } from "@/lib/billing/access";
 import { canAddActiveUser, nextPlanForMoreUsers, usersLimitLabel } from "@/lib/billing/limits";
 import { planLabel } from "@/lib/billing/plan-catalog";
 import { queryKeys } from "@/lib/query/keys";
 import { formatPhone } from "@/lib/utils/phone";
 import { defaultPasswordFromName } from "@/lib/utils/password";
+import { formatDate } from "@/lib/utils/format";
+import { UserPermissionsEditor } from "@/modules/admin/components/UserPermissionsEditor";
+import { editablePermissions } from "@/modules/admin/permission-modules";
 import {
   adminUserFormSchema,
   emptyAdminUserForm,
   type AdminUserFormValues,
 } from "@/modules/admin/schemas";
-import { createUser, deactivateUser, fetchUsers, updateUser, type AppUser } from "@/modules/admin/services";
+import {
+  createUser,
+  deactivateUser,
+  fetchUser,
+  fetchUserEffectivePermissions,
+  fetchUsers,
+  syncUserPermissionOverrides,
+  updateUser,
+  type AppUser,
+} from "@/modules/admin/services";
 import { useSession } from "@/modules/auth/hooks";
 
+type SavePayload = {
+  values: AdminUserFormValues;
+  permissions: Permission[];
+  syncPermissions: boolean;
+};
+
 export default function UsersPage() {
+  const theme = useTheme();
+  const fullScreenDialog = useMediaQuery(theme.breakpoints.down("sm"), { noSsr: true });
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const session = useSession();
   const meId = session.data?.id;
   const features = session.data?.features;
+  const planCode = session.data?.subscription.planCode;
+  const isAdmin = session.data?.role === Role.Administrador;
+  const hasAdvancedPermissions =
+    hasFeature(features, "advanced_permissions") ||
+    planCode === "PROFESSIONAL" ||
+    planCode === "ENTERPRISE";
+  const canEditOverrides = isAdmin && hasAdvancedPermissions;
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AppUser | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
   const [createdEmail, setCreatedEmail] = useState<string | null>(null);
+  const [draftPermissions, setDraftPermissions] = useState<Permission[]>([]);
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
+  const [roleAdjusted, setRoleAdjusted] = useState(false);
 
   const {
     control,
@@ -80,48 +115,86 @@ export default function UsersPage() {
     ? defaultPasswordFromName(watchedName)
     : "Sobrenome" + new Date().getFullYear();
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.users,
     queryFn: fetchUsers,
   });
 
+  const editDetailQuery = useQuery({
+    queryKey: queryKeys.userDetail(editing?.id ?? ""),
+    queryFn: () => fetchUser(editing!.id),
+    enabled: Boolean(open && editing?.id),
+  });
+
+  const permissionsQuery = useQuery({
+    queryKey: queryKeys.userPermissions(editing?.id ?? ""),
+    queryFn: () => fetchUserEffectivePermissions(editing!.id),
+    enabled: Boolean(open && editing && isAdmin),
+  });
+
   const activeCount = data?.filter((u) => u.status === "Ativo").length ?? 0;
   const atUserLimit = !canAddActiveUser(features, activeCount);
-  const upgradePlan = nextPlanForMoreUsers(session.data?.subscription.planCode);
+  const upgradePlan = nextPlanForMoreUsers(planCode);
   const limitHint = usersLimitLabel(features, activeCount);
+  const showPermissions = Boolean(editing && isAdmin && !createdPassword);
+  const canSubmit = isValid && !editDetailQuery.isLoading;
 
   useEffect(() => {
     if (!open) return;
-    if (editing) {
-      reset({
-        name: editing.name,
-        email: editing.email,
-        phone: formatPhone(editing.phone),
-        role: editing.role,
-        team: editing.team,
-        status: editing.status,
-      });
-    } else {
+    if (!editing) {
       reset(emptyAdminUserForm);
+      setDraftPermissions([]);
+      setPermissionsDirty(false);
+      setRoleAdjusted(false);
+      return;
     }
-  }, [open, editing, reset]);
+    const source = editDetailQuery.data ?? editing;
+    reset({
+      name: source.name,
+      email: source.email,
+      phone: formatPhone(source.phone || ""),
+      role: source.role,
+      team: source.team || "",
+      status: source.status,
+    });
+    setPermissionsDirty(false);
+    setRoleAdjusted(false);
+  }, [open, editing, editDetailQuery.data, reset]);
+
+  useEffect(() => {
+    if (!editing || !permissionsQuery.data || permissionsDirty || roleAdjusted) return;
+    const fromApi = mapApiPermissions(permissionsQuery.data).filter((item) =>
+      editablePermissions().includes(item),
+    );
+    setDraftPermissions(fromApi);
+  }, [editing, permissionsQuery.data, permissionsDirty, roleAdjusted]);
 
   const save = useMutation({
-    mutationFn: async (values: AdminUserFormValues) => {
+    mutationFn: async ({ values, permissions, syncPermissions }: SavePayload) => {
       if (editing) {
         const user = await updateUser(editing.id, values);
+        if (syncPermissions) {
+          await syncUserPermissionOverrides(editing.id, permissions);
+        }
         return { user, invitationToken: undefined as string | undefined };
       }
-      const user = await createUser(values);
-      return { user, invitationToken: user.invitationToken };
+      const created = await createUser(values);
+      return { user: created, invitationToken: created.invitationToken };
     },
-    onSuccess: ({ invitationToken }, values) => {
+    onSuccess: ({ invitationToken }, { values, syncPermissions }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
       if (editing) {
-        enqueueSnackbar("Usuário atualizado", { variant: "success" });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.userDetail(editing.id) });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.userPermissions(editing.id) });
+        enqueueSnackbar(
+          syncPermissions ? "Usuário e permissões atualizados" : "Usuário atualizado",
+          { variant: "success" },
+        );
         setOpen(false);
         setEditing(null);
         reset(emptyAdminUserForm);
+        setPermissionsDirty(false);
+        setRoleAdjusted(false);
       } else {
         setCreatedEmail(values.email);
         setCreatedPassword(invitationToken || defaultPasswordFromName(values.name));
@@ -133,23 +206,36 @@ export default function UsersPage() {
     },
   });
 
+  function submitForm(values: AdminUserFormValues) {
+    save.mutate({
+      values,
+      permissions: draftPermissions,
+      syncPermissions: Boolean(editing && canEditOverrides && permissionsDirty),
+    });
+  }
   const toggleStatus = useMutation({
     mutationFn: async (user: AppUser) => {
       if (user.status === "Ativo") await deactivateUser(user.id);
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.users });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.userDirectory });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      await refetch();
       enqueueSnackbar("Status atualizado", { variant: "success" });
     },
     onError: (err: unknown) => {
-      enqueueSnackbar(getApiError(err).message || "Não foi possível alterar o status", { variant: "error" });
+      enqueueSnackbar(getApiError(err).message || "Não foi possível alterar o status", {
+        variant: "error",
+      });
     },
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => deactivateUser(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.users });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.userDirectory });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      await refetch();
       enqueueSnackbar("Usuário desativado", { variant: "success" });
       setDeleteId(null);
     },
@@ -164,6 +250,23 @@ export default function UsersPage() {
     setOpen(false);
     setEditing(null);
     reset(emptyAdminUserForm);
+    setDraftPermissions([]);
+    setPermissionsDirty(false);
+    setRoleAdjusted(false);
+  }
+
+  function handlePermissionsChange(next: Permission[]) {
+    setDraftPermissions(next);
+    setPermissionsDirty(true);
+  }
+
+  function handleRoleChange(role: AdminUserFormValues["role"], onChange: (value: string) => void) {
+    onChange(role);
+    if (!editing || permissionsDirty) return;
+    setRoleAdjusted(true);
+    setDraftPermissions(
+      ROLE_PERMISSIONS[role].filter((item) => editablePermissions().includes(item)),
+    );
   }
 
   return (
@@ -219,17 +322,21 @@ export default function UsersPage() {
           <CircularProgress />
         </Box>
       ) : isError ? (
-        <ErrorState onRetry={() => refetch()} />
+        <ErrorState
+          error={error}
+          resourceLabel="a lista de usuários da empresa"
+          onRetry={() => refetch()}
+        />
       ) : (
-        <TableContainer component={Paper} variant="outlined">
+        <TableContainer component={Paper} variant="outlined" sx={{ overflowX: "auto" }}>
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Nome</TableCell>
                 <TableCell>E-mail</TableCell>
-                <TableCell>Telefone</TableCell>
+                <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>Telefone</TableCell>
                 <TableCell>Cargo</TableCell>
-                <TableCell>Time</TableCell>
+                <TableCell sx={{ whiteSpace: "nowrap" }}>Criado em</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Ações</TableCell>
               </TableRow>
@@ -249,9 +356,11 @@ export default function UsersPage() {
                       ) : null}
                     </TableCell>
                     <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.phone}</TableCell>
+                    <TableCell sx={{ display: { xs: "none", md: "table-cell" } }}>
+                      {user.phone || "—"}
+                    </TableCell>
                     <TableCell>{user.role}</TableCell>
-                    <TableCell>{user.team}</TableCell>
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>{formatDate(user.createdAt)}</TableCell>
                     <TableCell>
                       <Stack direction="row" spacing={1} alignItems="center">
                         <StatusBadge label={user.status} />
@@ -299,16 +408,21 @@ export default function UsersPage() {
         </TableContainer>
       )}
 
-      <Dialog open={open} onClose={closeDialog} fullWidth maxWidth="sm">
+      <Dialog
+        open={open}
+        onClose={closeDialog}
+        fullWidth
+        maxWidth={showPermissions ? "md" : "sm"}
+        fullScreen={fullScreenDialog}
+        scroll="paper"
+      >
         <DialogTitle>
           {createdPassword ? "Usuário criado" : editing ? "Editar usuário" : "Novo usuário"}
         </DialogTitle>
-        <DialogContent>
+        <DialogContent dividers={showPermissions}>
           {createdPassword ? (
             <Stack spacing={2} mt={1}>
-              <Alert severity="success">
-                Conta criada. Envie estas credenciais ao colaborador:
-              </Alert>
+              <Alert severity="success">Conta criada. Envie estas credenciais ao colaborador:</Alert>
               <Typography variant="body2">
                 E-mail: <strong>{createdEmail}</strong>
               </Typography>
@@ -316,30 +430,38 @@ export default function UsersPage() {
                 Token de convite: <strong>{createdPassword}</strong>
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Padrão: último sobrenome + ano atual. No primeiro acesso o usuário será solicitado a
-                alterar a senha.
+                Envie o token ao colaborador. No login, use <strong>Primeiro acesso</strong> para
+                validar o convite e definir a senha.
               </Typography>
             </Stack>
+          ) : editDetailQuery.isLoading && editing ? (
+            <Box py={6} display="flex" justifyContent="center">
+              <CircularProgress size={28} />
+            </Box>
           ) : (
             <Stack
               component="form"
               id="admin-user-form"
               spacing={2}
               mt={1}
-              onSubmit={handleSubmit((values) => save.mutate(values))}
+              onSubmit={handleSubmit(submitForm)}
               noValidate
             >
               <TextField
+                id="admin-user-name"
                 label="Nome"
                 fullWidth
+                required
                 {...register("name")}
                 error={Boolean(errors.name)}
                 helperText={errors.name?.message}
               />
               <TextField
+                id="admin-user-email"
                 label="E-mail"
                 type="email"
                 fullWidth
+                required
                 autoComplete="email"
                 {...register("email")}
                 error={Boolean(errors.email)}
@@ -350,59 +472,85 @@ export default function UsersPage() {
                 control={control}
                 render={({ field }) => (
                   <TextField
+                    id="admin-user-phone"
                     label="Telefone"
                     fullWidth
+                    required
                     inputMode="tel"
                     placeholder="(11) 98888-0000"
                     value={field.value}
                     onChange={(e) => field.onChange(formatPhone(e.target.value))}
                     onBlur={field.onBlur}
+                    inputRef={field.ref}
                     error={Boolean(errors.phone)}
                     helperText={errors.phone?.message}
                   />
                 )}
               />
-              <Controller
-                name="role"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    select
-                    label="Cargo"
-                    fullWidth
-                    value={field.value}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    error={Boolean(errors.role)}
-                    helperText={errors.role?.message}
-                  >
-                    {ROLE_NAMES.map((role) => (
-                      <MenuItem key={role} value={role}>
-                        {role}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                )}
-              />
-              <TextField
-                label="Time"
-                fullWidth
-                {...register("team")}
-                error={Boolean(errors.team)}
-                helperText={errors.team?.message}
-              />
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+                <Controller
+                  name="role"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      id="admin-user-role"
+                      select
+                      label="Cargo"
+                      fullWidth
+                      required
+                      value={field.value}
+                      onChange={(e) =>
+                        handleRoleChange(
+                          e.target.value as AdminUserFormValues["role"],
+                          field.onChange,
+                        )
+                      }
+                      onBlur={field.onBlur}
+                      inputRef={field.ref}
+                      error={Boolean(errors.role)}
+                      helperText={errors.role?.message}
+                    >
+                      {ROLE_NAMES.map((role) => (
+                        <MenuItem key={role} value={role}>
+                          {role}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  )}
+                />
+                <TextField
+                  id="admin-user-team"
+                  label="Time"
+                  fullWidth
+                  required
+                  {...register("team")}
+                  error={Boolean(errors.team)}
+                  helperText={errors.team?.message}
+                />
+              </Stack>
+              {editing ? (
+                <Typography variant="body2" color="text.secondary">
+                  Criado em:{" "}
+                  <strong>
+                    {formatDate(editDetailQuery.data?.createdAt ?? editing.createdAt)}
+                  </strong>
+                </Typography>
+              ) : null}
               {editing && editing.id !== meId ? (
                 <Controller
                   name="status"
                   control={control}
                   render={({ field }) => (
                     <TextField
+                      id="admin-user-status"
                       select
                       label="Status"
                       fullWidth
+                      required
                       value={field.value}
                       onChange={field.onChange}
                       onBlur={field.onBlur}
+                      inputRef={field.ref}
                       error={Boolean(errors.status)}
                       helperText={errors.status?.message}
                     >
@@ -417,10 +565,23 @@ export default function UsersPage() {
                   Senha inicial prevista: <strong>{previewPassword}</strong>
                 </Alert>
               ) : null}
+
+              {showPermissions ? (
+                <>
+                  <Divider sx={{ my: 0.5 }} />
+                  <UserPermissionsEditor
+                    selected={draftPermissions}
+                    onChange={handlePermissionsChange}
+                    loading={permissionsQuery.isLoading}
+                    disabled={save.isPending || !canEditOverrides}
+                    planBlocked={!hasAdvancedPermissions}
+                  />
+                </>
+              ) : null}
             </Stack>
           )}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 1.5 }}>
           {createdPassword ? (
             <Button variant="contained" onClick={closeDialog}>
               Fechar
@@ -430,11 +591,15 @@ export default function UsersPage() {
               <Button onClick={closeDialog}>Cancelar</Button>
               <Button
                 type="submit"
-                form="admin-user-form"
+                form={editDetailQuery.isLoading && editing ? undefined : "admin-user-form"}
                 variant="contained"
-                disabled={!isValid || save.isPending}
+                disabled={!canSubmit || save.isPending || (Boolean(editing) && editDetailQuery.isLoading)}
               >
-                Salvar
+                {save.isPending
+                  ? "Salvando…"
+                  : permissionsDirty && canEditOverrides
+                    ? "Salvar usuário e permissões"
+                    : "Salvar"}
               </Button>
             </>
           )}

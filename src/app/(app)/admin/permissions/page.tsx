@@ -23,15 +23,12 @@ import { ErrorState } from "@/components/feedback/ErrorState";
 import { mapApiPermissions, UI_TO_API_PERMISSION } from "@/lib/auth/mappers";
 import type { Permission } from "@/lib/auth/permissions";
 import { queryKeys } from "@/lib/query/keys";
+import {
+  PERMISSION_ACTIONS,
+  PERMISSION_MODULES,
+  permissionFromModule,
+} from "@/modules/admin/permission-modules";
 import { fetchRoleCatalog, fetchRolePermissions, replaceRolePermissions } from "@/modules/admin/services";
-
-const modules = [
-  { key: "crm", label: "CRM / Leads", actions: ["visualizar", "criar", "editar", "excluir"] },
-  { key: "contratos", label: "Contratos", actions: ["visualizar", "criar", "editar"] },
-  { key: "financeiro", label: "Financeiro", actions: ["visualizar", "editar"] },
-  { key: "dashboard", label: "Dashboard", actions: ["visualizar"] },
-  { key: "admin", label: "Administração", actions: ["visualizar", "editar"] },
-];
 
 export default function PermissionsPage() {
   const queryClient = useQueryClient();
@@ -103,14 +100,18 @@ export default function PermissionsPage() {
           <CircularProgress />
         </Box>
       ) : rolesQuery.isError || permissionsQuery.isError ? (
-        <ErrorState onRetry={() => permissionsQuery.refetch()} />
+        <ErrorState
+          error={rolesQuery.error || permissionsQuery.error}
+          resourceLabel="cargos e permissões"
+          onRetry={() => permissionsQuery.refetch()}
+        />
       ) : (
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Módulo</TableCell>
-                {["visualizar", "criar", "editar", "excluir"].map((action) => (
+                {PERMISSION_ACTIONS.map((action) => (
                   <TableCell key={action} align="center">
                     {action}
                   </TableCell>
@@ -118,11 +119,11 @@ export default function PermissionsPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {modules.map((mod) => (
+              {PERMISSION_MODULES.map((mod) => (
                 <TableRow key={mod.key}>
                   <TableCell>{mod.label}</TableCell>
-                  {["visualizar", "criar", "editar", "excluir"].map((action) => {
-                    const permission = `${mod.key}:${action}` as Permission;
+                  {PERMISSION_ACTIONS.map((action) => {
+                    const permission = permissionFromModule(mod.key, action);
                     const available = mod.actions.includes(action);
                     return (
                       <TableCell key={action} align="center">

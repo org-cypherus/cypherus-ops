@@ -10,6 +10,7 @@ const personNameSchema = z
   .refine((value) => /^[\p{L}\s'.-]+$/u.test(value), "Use apenas letras e espaços")
   .refine((value) => value.split(/\s+/).filter(Boolean).length >= 2, "Informe nome e sobrenome");
 
+/** Criação e edição: todos os campos obrigatórios. */
 export const adminUserFormSchema = z.object({
   name: personNameSchema,
   email: z
@@ -32,6 +33,9 @@ export const adminUserFormSchema = z.object({
     .max(80, "Time muito longo"),
   status: z.enum(["Ativo", "Inativo"]),
 });
+
+export const adminUserCreateSchema = adminUserFormSchema;
+export const adminUserEditSchema = adminUserFormSchema;
 
 export type AdminUserFormValues = z.infer<typeof adminUserFormSchema>;
 

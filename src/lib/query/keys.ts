@@ -37,6 +37,8 @@ export const queryKeys = {
   reports: (params?: Record<string, unknown>) => ["reports", params] as const,
   users: ["users"] as const,
   userDirectory: ["users", "directory"] as const,
+  userDetail: (userId: string) => ["users", "detail", userId] as const,
+  userPermissions: (userId: string) => ["users", userId, "permissions"] as const,
   leadNames: ["lead-names"] as const,
   plans: ["plans"] as const,
   roles: {
