@@ -346,8 +346,6 @@ export default function FinancialPage() {
           <Box py={6} display="flex" justifyContent="center">
             <CircularProgress />
           </Box>
-        ) : commissions.isError ? (
-          <ErrorState onRetry={() => commissions.refetch()} />
         ) : (
           <FinancialCommissionsPanel commissions={filteredCommissions} />
         )
@@ -434,14 +432,24 @@ export default function FinancialPage() {
                   <Typography variant="h6" sx={{ mb: 1 }}>
                     Comissões
                   </Typography>
-                  {(commissions.data || []).map((item) => (
-                    <Stack key={item.id} direction="row" justifyContent="space-between" mb={1}>
-                      <Typography variant="body2">{item.userName}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {formatCurrency(item.amount)}
-                      </Typography>
-                    </Stack>
-                  ))}
+                  {commissions.isLoading ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Carregando…
+                    </Typography>
+                  ) : (commissions.data || []).length ? (
+                    (commissions.data || []).map((item) => (
+                      <Stack key={item.id} direction="row" justifyContent="space-between" mb={1}>
+                        <Typography variant="body2">{item.userName}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {formatCurrency(item.amount)}
+                        </Typography>
+                      </Stack>
+                    ))
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      Nenhuma comissão encontrada.
+                    </Typography>
+                  )}
                 </CardContent>
               </Card>
             </FeatureGate>

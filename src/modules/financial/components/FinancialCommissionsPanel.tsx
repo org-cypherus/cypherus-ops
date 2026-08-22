@@ -46,6 +46,16 @@ export function FinancialCommissionsPanel({ commissions }: { commissions: Commis
         </Typography>
       </Box>
 
+      {!hasUsers ? (
+        <Card variant="outlined">
+          <CardContent>
+            <Typography variant="body2" color="text.secondary">
+              Nenhuma comissão encontrada.
+            </Typography>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
       <Grid container spacing={2}>
         {kpis.map((kpi) => (
           <Grid key={kpi.label} size={{ xs: 12, sm: 6, md: 2 }}>
@@ -70,34 +80,28 @@ export function FinancialCommissionsPanel({ commissions }: { commissions: Commis
               <Typography variant="h6" sx={{ mb: 2 }}>
                 Comissão por beneficiário
               </Typography>
-              {hasUsers ? (
-                <BarChart
-                  height={Math.max(280, chartUsers.length * 36)}
-                  layout="horizontal"
-                  yAxis={[
-                    {
-                      data: chartUsers.map((row) => row.userName),
-                      scaleType: "band",
-                    },
-                  ]}
-                  xAxis={[
-                    {
-                      valueFormatter: (v) => formatCurrency(Number(v ?? 0)),
-                    },
-                  ]}
-                  series={[
-                    {
-                      data: chartUsers.map((row) => row.amount),
-                      label: "Comissão",
-                      valueFormatter: (v) => formatCurrency(Number(v ?? 0)),
-                    },
-                  ]}
-                />
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Nenhuma comissão no filtro atual.
-                </Typography>
-              )}
+              <BarChart
+                height={Math.max(280, chartUsers.length * 36)}
+                layout="horizontal"
+                yAxis={[
+                  {
+                    data: chartUsers.map((row) => row.userName),
+                    scaleType: "band",
+                  },
+                ]}
+                xAxis={[
+                  {
+                    valueFormatter: (v) => formatCurrency(Number(v ?? 0)),
+                  },
+                ]}
+                series={[
+                  {
+                    data: chartUsers.map((row) => row.amount),
+                    label: "Comissão",
+                    valueFormatter: (v) => formatCurrency(Number(v ?? 0)),
+                  },
+                ]}
+              />
             </CardContent>
           </Card>
         </Grid>
@@ -142,32 +146,24 @@ export function FinancialCommissionsPanel({ commissions }: { commissions: Commis
                 </TableRow>
               </TableHead>
               <TableBody>
-                {metrics.topUsers.length ? (
-                  metrics.topUsers.map((row, index) => (
-                    <TableRow key={row.userName}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>{row.userName}</TableCell>
-                      <TableCell align="right">{row.count}</TableCell>
-                      <TableCell align="right">{formatCurrency(row.amount)}</TableCell>
-                      <TableCell align="right">
-                        {formatPercent(metrics.total ? (row.amount / metrics.total) * 100 : 0)}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5}>
-                      <Typography variant="body2" color="text.secondary" py={2} textAlign="center">
-                        Sem beneficiários para ranquear.
-                      </Typography>
+                {metrics.topUsers.map((row, index) => (
+                  <TableRow key={row.userName}>
+                    <TableCell>{index + 1}</TableCell>
+                    <TableCell>{row.userName}</TableCell>
+                    <TableCell align="right">{row.count}</TableCell>
+                    <TableCell align="right">{formatCurrency(row.amount)}</TableCell>
+                    <TableCell align="right">
+                      {formatPercent(metrics.total ? (row.amount / metrics.total) * 100 : 0)}
                     </TableCell>
                   </TableRow>
-                )}
+                ))}
               </TableBody>
             </Table>
           </TableContainer>
         </Grid>
       </Grid>
+        </>
+      )}
     </Stack>
   );
 }

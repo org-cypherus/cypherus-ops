@@ -1,4 +1,4 @@
-import { api } from "@/lib/api/client";
+import { api, getApiError } from "@/lib/api/client";
 import { companyPath } from "@/lib/auth/session";
 import { fetchLeadNameMap } from "@/modules/leads/services";
 import { fetchOwnerMap } from "@/modules/users/directory";
@@ -94,18 +94,27 @@ export async function confirmPayment(id: string) {
 }
 
 export async function fetchCommissions(): Promise<Commission[]> {
-  const { data } = await api.get<CrmCommission[]>(companyPath("/commissions"));
-  const names = await fetchOwnerMap().catch(() => ({} as Record<string, string>));
-  return data.map((item) => ({
-    id: item.id,
-    userName: names[item.beneficiary_user_id] || "",
-    amount: Number(item.amount),
-    status: item.status
-      ? COMMISSION_STATUS[item.status] ?? item.status
-      : "Calculada",
-    period: item.period ?? undefined,
-    paymentId: item.payment_id ?? undefined,
-  }));
+  try {
+    const { data } = await api.get<CrmCommission[] | null>(companyPath("/commissions"));
+    const list = Array.isArray(data) ? data : [];
+    if (!list.length) return [];
+    const names = await fetchOwnerMap().catch(() => ({} as Record<string, string>));
+    return list.map((item) => ({
+      id: item.id,
+      userName: names[item.beneficiary_user_id] || "",
+      amount: Number(item.amount),
+      status: item.status
+        ? COMMISSION_STATUS[item.status] ?? item.status
+        : "Calculada",
+      period: item.period ?? undefined,
+      paymentId: item.payment_id ?? undefined,
+    }));
+  } catch (error) {
+    const status = getApiError(error).status;
+    // Sem comissões (404/204) é estado vazio — não propaga erro para a UI.
+    if (status === 404 || status === 204) return [];
+    throw error;
+  }
 }
 
 export async function fetchCommissionRules(): Promise<CommissionRule[]> {
