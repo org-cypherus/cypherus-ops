@@ -259,8 +259,10 @@ export function useLegalKanban() {
 export function useMoveLegalLead() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ leadId, status }: { leadId: string; status: LegalStage }) =>
-      moveLegalLead(leadId, status),
+    mutationFn: async (_vars: { leadId: string; status: LegalStage }) => {
+      void _vars;
+      return moveLegalLead();
+    },
     onMutate: async ({ leadId, status }) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.legalKanban });
       const previous = queryClient.getQueryData<LegalBoard>(queryKeys.legalKanban);

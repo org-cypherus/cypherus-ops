@@ -3,6 +3,7 @@ import { companyPath } from "@/lib/auth/session";
 import { getQueryClient, PIPELINE_STALE_TIME_MS } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
 import { downloadApiFile, fetchApiBlob } from "@/lib/utils/download";
+import { mapWithConcurrency } from "@/lib/utils/concurrency";
 import { fetchOwnerMap } from "@/modules/users/directory";
 import type { Attachment, KanbanBoard, Lead, LegalStage, PipelineStage } from "./types";
 import {
@@ -277,6 +278,19 @@ export async function updateLead(id: string, payload: Partial<Lead>) {
   return toUiLead(data, owners[data.owner_user_id]);
 }
 
+export async function assignLeadOwner(leadId: string, ownerUserId: string) {
+  await api.patch(companyPath(`/leads/${leadId}/assign`), { owner_user_id: ownerUserId });
+}
+
+/** Reatribui vários leads (mapa leadId → novo owner). Atualiza `owner_user_id` no CRM. */
+export async function assignLeadsOwners(assignments: Record<string, string>) {
+  const entries = Object.entries(assignments).filter(([, ownerId]) => Boolean(ownerId));
+  await mapWithConcurrency(entries, 4, async ([leadId, ownerId]) => {
+    await assignLeadOwner(leadId, ownerId);
+  });
+  return { ok: true as const, affected: entries.length };
+}
+
 export async function distributeLeads(payload: {
   strategy: string;
   leadIds?: string[];
@@ -285,9 +299,7 @@ export async function distributeLeads(payload: {
 }) {
   const ids = payload.leadIds ?? [];
   if (payload.strategy === "manual" && payload.ownerId) {
-    await Promise.all(
-      ids.map((leadId) => api.patch(companyPath(`/leads/${leadId}/assign`), { owner_user_id: payload.ownerId })),
-    );
+    await Promise.all(ids.map((leadId) => assignLeadOwner(leadId, payload.ownerId!)));
     return { ok: true, affected: ids.length };
   }
   if (payload.strategy === "redistribute") {
@@ -401,6 +413,6 @@ export async function fetchLegalKanban(): Promise<LegalKanbanBoard> {
   return { columns: [] };
 }
 
-export async function moveLegalLead(_leadId?: string, _status?: LegalStage) {
+export async function moveLegalLead(): Promise<LegalKanbanBoard> {
   return fetchLegalKanban();
 }

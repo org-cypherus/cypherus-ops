@@ -212,7 +212,7 @@ export function toUiLead(
     campaign: lead.campaign || "",
     channel: lead.channel || "",
     ownerId: lead.owner_user_id,
-    ownerName: ownerName || "",
+    ownerName: ownerName?.trim() || "Sem responsável",
     createdAt: lead.created_at,
     updatedAt: lead.updated_at,
     pipelineStageId: lead.pipeline_stage_id ?? undefined,

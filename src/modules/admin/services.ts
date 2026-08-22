@@ -14,9 +14,10 @@ export type AppUser = {
   phone: string;
   role: RoleName;
   team: string;
-  status: "Ativo" | "Inativo";
+  status: "Ativo" | "Inativo" | "Convidado";
   createdAt?: string;
   mustChangePassword?: boolean;
+  isOwner?: boolean;
 };
 
 type CrmUser = {
@@ -69,6 +70,9 @@ async function roleIdFor(role: RoleName, roles: CrmRole[]) {
 
 export function mapCrmUserToAppUser(user: CrmUser, roleCode?: string): AppUser {
   const cached = getUserProfileExtras(user.id);
+  const statusRaw = String(user.status ?? "ACTIVE").toUpperCase();
+  const status: AppUser["status"] =
+    statusRaw === "ACTIVE" ? "Ativo" : statusRaw === "INVITED" ? "Convidado" : "Inativo";
   return {
     id: user.id,
     name: user.name,
@@ -76,8 +80,9 @@ export function mapCrmUserToAppUser(user: CrmUser, roleCode?: string): AppUser {
     phone: user.phone?.trim() || cached?.phone || "",
     role: mapRoleCode(roleCode, user.is_owner),
     team: user.job_title?.trim() || cached?.team || "",
-    status: user.status === "ACTIVE" ? "Ativo" : "Inativo",
+    status,
     createdAt: user.created_at ?? undefined,
+    isOwner: Boolean(user.is_owner),
   };
 }
 
