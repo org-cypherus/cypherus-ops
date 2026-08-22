@@ -40,7 +40,7 @@ type UploadProgress = {
 };
 
 /** Duração visual da barra até 100% (independente da velocidade real do upload). */
-const UPLOAD_BAR_DURATION_MS = 3_000;
+const UPLOAD_BAR_DURATION_MS = 2_000;
 
 function runUploadBarAnimation(
   onTick: (percent: number) => void,
