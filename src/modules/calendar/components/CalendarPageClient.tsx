@@ -19,6 +19,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ErrorState } from "@/components/feedback/ErrorState";
+import { AccessDeniedState } from "@/components/feedback/AccessDeniedState";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { Role } from "@/lib/auth/permissions";
 import { useCanAccess, useSession } from "@/modules/auth/hooks";
@@ -33,7 +34,7 @@ import { CalendarDayList, CalendarWeekView } from "./CalendarWeekView";
 export function CalendarPageClient() {
   const searchParams = useSearchParams();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"), { noSsr: true });
   const { data: session } = useSession();
   const canView = useCanAccess("agenda", "agenda:visualizar");
   const isComercial = session?.role === Role.Comercial;
@@ -43,7 +44,7 @@ export function CalendarPageClient() {
   const initialView = (searchParams.get("view") as CalendarView | null) || "week";
 
   const [anchor, setAnchor] = useState(() => dayjs(initialDate || undefined));
-  const [view, setView] = useState<CalendarView>(isMobile ? "day" : initialView);
+  const [view, setView] = useState<CalendarView>(initialView);
   const [assigneeId, setAssigneeId] = useState("");
   const [status, setStatus] = useState("agendado");
   const [drawerOpen, setDrawerOpen] = useState(Boolean(initialEventId));
@@ -78,6 +79,10 @@ export function CalendarPageClient() {
   );
 
   const events = eventsQuery.data?.data || [];
+
+  useEffect(() => {
+    if (isMobile) setView("day");
+  }, [isMobile]);
 
   useEffect(() => {
     if (!initialEventId || !events.length || selectedEvent) return;
@@ -116,12 +121,7 @@ export function CalendarPageClient() {
         : `${range.from.format("D MMM")} – ${range.to.format("D MMM YYYY")}`;
 
   if (!canView) {
-    return (
-      <ErrorState
-        title="Sem permissão"
-        description="Seu perfil não tem acesso à Agenda."
-      />
-    );
+    return <AccessDeniedState description="Seu perfil não tem acesso à Agenda. Peça ao administrador para liberar a permissão." />;
   }
 
   return (
@@ -222,6 +222,8 @@ export function CalendarPageClient() {
         </Box>
       ) : eventsQuery.isError ? (
         <ErrorState
+          error={eventsQuery.error}
+          resourceLabel="a agenda"
           title="Não foi possível carregar a agenda"
           onRetry={() => void eventsQuery.refetch()}
         />

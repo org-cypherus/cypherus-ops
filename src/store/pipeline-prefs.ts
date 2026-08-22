@@ -33,6 +33,7 @@ export const usePipelinePrefsStore = create<PipelinePrefsState>()(
     }),
     {
       name: "cypher-ops-pipeline-prefs",
+      skipHydration: true,
       partialize: (state) => ({ hiddenStagesByCompany: state.hiddenStagesByCompany }),
     },
   ),

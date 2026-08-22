@@ -38,6 +38,8 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "cypher-ops-ui",
+      // Evita rehydrate antes do React hidratar (mismatch #418: tema/valores do localStorage).
+      skipHydration: true,
       partialize: (state) => ({
         mode: state.mode,
         moneyVisible: state.moneyVisible,
