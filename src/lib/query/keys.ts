@@ -39,6 +39,9 @@ export const queryKeys = {
   userDirectory: ["users", "directory"] as const,
   userDetail: (userId: string) => ["users", "detail", userId] as const,
   userPermissions: (userId: string) => ["users", userId, "permissions"] as const,
+  teams: ["teams"] as const,
+  teamMembers: (teamId: string) => ["teams", teamId, "members"] as const,
+  orgTree: ["teams", "org-tree"] as const,
   leadNames: ["lead-names"] as const,
   plans: ["plans"] as const,
   roles: {
