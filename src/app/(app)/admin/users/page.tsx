@@ -15,6 +15,8 @@ import {
   Paper,
   Stack,
   Switch,
+  Tab,
+  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -35,7 +37,6 @@ import Link from "next/link";
 import { useSnackbar } from "notistack";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
-import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { getApiError } from "@/lib/api/client";
@@ -48,6 +49,9 @@ import { queryKeys } from "@/lib/query/keys";
 import { formatPhone } from "@/lib/utils/phone";
 import { defaultPasswordFromName } from "@/lib/utils/password";
 import { formatDate } from "@/lib/utils/format";
+import { OrphanLeadsPanel } from "@/modules/admin/components/OrphanLeadsPanel";
+import { ReassignLeadsOnDeleteDialog } from "@/modules/admin/components/ReassignLeadsOnDeleteDialog";
+import { UserOrgTree } from "@/modules/admin/components/UserOrgTree";
 import { UserPermissionsEditor } from "@/modules/admin/components/UserPermissionsEditor";
 import { editablePermissions } from "@/modules/admin/permission-modules";
 import {
@@ -57,7 +61,6 @@ import {
 } from "@/modules/admin/schemas";
 import {
   createUser,
-  deactivateUser,
   fetchUser,
   fetchUserEffectivePermissions,
   fetchUsers,
@@ -72,6 +75,8 @@ type SavePayload = {
   permissions: Permission[];
   syncPermissions: boolean;
 };
+
+type UsersTab = "list" | "tree";
 
 export default function UsersPage() {
   const theme = useTheme();
@@ -88,9 +93,10 @@ export default function UsersPage() {
     planCode === "PROFESSIONAL" ||
     planCode === "ENTERPRISE";
   const canEditOverrides = isAdmin && hasAdvancedPermissions;
+  const [tab, setTab] = useState<UsersTab>("list");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AppUser | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
   const [createdEmail, setCreatedEmail] = useState<string | null>(null);
   const [draftPermissions, setDraftPermissions] = useState<Permission[]>([]);
@@ -155,7 +161,7 @@ export default function UsersPage() {
       phone: formatPhone(source.phone || ""),
       role: source.role,
       team: source.team || "",
-      status: source.status,
+      status: source.status === "Inativo" ? "Inativo" : "Ativo",
     });
     setPermissionsDirty(false);
     setRoleAdjusted(false);
@@ -213,36 +219,14 @@ export default function UsersPage() {
       syncPermissions: Boolean(editing && canEditOverrides && permissionsDirty),
     });
   }
-  const toggleStatus = useMutation({
-    mutationFn: async (user: AppUser) => {
-      if (user.status === "Ativo") await deactivateUser(user.id);
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.userDirectory });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.users });
-      await refetch();
-      enqueueSnackbar("Status atualizado", { variant: "success" });
-    },
-    onError: (err: unknown) => {
-      enqueueSnackbar(getApiError(err).message || "Não foi possível alterar o status", {
-        variant: "error",
-      });
-    },
-  });
-
-  const remove = useMutation({
-    mutationFn: (id: string) => deactivateUser(id),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.userDirectory });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.users });
-      await refetch();
-      enqueueSnackbar("Usuário desativado", { variant: "success" });
-      setDeleteId(null);
-    },
-    onError: (err: unknown) => {
-      enqueueSnackbar(getApiError(err).message || "Não foi possível excluir", { variant: "error" });
-    },
-  });
+  async function afterUserDeactivated() {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.userDirectory });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.users });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.kanban });
+    await refetch();
+    setDeleteTarget(null);
+  }
 
   function closeDialog() {
     setCreatedPassword(null);
@@ -317,7 +301,30 @@ export default function UsersPage() {
         </Alert>
       ) : null}
 
-      {isLoading ? (
+      <Tabs
+        value={tab}
+        onChange={(_, value: UsersTab) => setTab(value)}
+        sx={{ borderBottom: 1, borderColor: "divider" }}
+      >
+        <Tab value="list" label="Lista" />
+        <Tab value="tree" label="Árvore" />
+      </Tabs>
+
+      {tab === "tree" ? (
+        isLoading ? (
+          <Box py={8} display="flex" justifyContent="center">
+            <CircularProgress />
+          </Box>
+        ) : isError ? (
+          <ErrorState
+            error={error}
+            resourceLabel="a lista de usuários da empresa"
+            onRetry={() => refetch()}
+          />
+        ) : (
+          <UserOrgTree users={(data || []).filter((user) => user.status !== "Inativo")} canManage={isAdmin} />
+        )
+      ) : isLoading ? (
         <Box py={8} display="flex" justifyContent="center">
           <CircularProgress />
         </Box>
@@ -328,7 +335,9 @@ export default function UsersPage() {
           onRetry={() => refetch()}
         />
       ) : (
-        <TableContainer component={Paper} variant="outlined" sx={{ overflowX: "auto" }}>
+        <Stack spacing={2.5}>
+          <OrphanLeadsPanel />
+          <TableContainer component={Paper} variant="outlined" sx={{ overflowX: "auto" }}>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -342,8 +351,11 @@ export default function UsersPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(data || []).map((user) => {
+              {(data || [])
+                .filter((user) => user.status !== "Inativo")
+                .map((user) => {
                 const isSelf = user.id === meId;
+                const canDeactivate = !isSelf && user.status === "Ativo" && !user.isOwner;
                 return (
                   <TableRow key={user.id} hover>
                     <TableCell>
@@ -352,6 +364,12 @@ export default function UsersPage() {
                         <Typography component="span" variant="caption" color="text.secondary">
                           {" "}
                           (você)
+                        </Typography>
+                      ) : null}
+                      {user.isOwner ? (
+                        <Typography component="span" variant="caption" color="primary.main">
+                          {" "}
+                          · owner
                         </Typography>
                       ) : null}
                     </TableCell>
@@ -364,13 +382,27 @@ export default function UsersPage() {
                     <TableCell>
                       <Stack direction="row" spacing={1} alignItems="center">
                         <StatusBadge label={user.status} />
-                        <Tooltip title={isSelf ? "Você não pode inativar o próprio cadastro" : ""}>
+                        <Tooltip
+                          title={
+                            isSelf
+                              ? "Você não pode inativar o próprio cadastro"
+                              : user.isOwner
+                                ? "O proprietário da empresa não pode ser desativado"
+                                : user.status !== "Ativo"
+                                  ? "Apenas usuários ativos podem ser desativados"
+                                  : "Desativar usuário"
+                          }
+                        >
                           <span>
                             <Switch
                               size="small"
                               checked={user.status === "Ativo"}
-                              disabled={isSelf || toggleStatus.isPending}
-                              onChange={() => toggleStatus.mutate(user)}
+                              disabled={!canDeactivate}
+                              onChange={() => {
+                                if (canDeactivate) {
+                                  setDeleteTarget({ id: user.id, name: user.name });
+                                }
+                              }}
                             />
                           </span>
                         </Tooltip>
@@ -388,17 +420,16 @@ export default function UsersPage() {
                       >
                         <EditOutlinedIcon fontSize="small" />
                       </IconButton>
-                      <Tooltip title={isSelf ? "Você não pode excluir a si mesmo" : "Excluir"}>
-                        <span>
+                      {canDeactivate ? (
+                        <Tooltip title="Desativar">
                           <IconButton
                             size="small"
-                            disabled={isSelf}
-                            onClick={() => setDeleteId(user.id)}
+                            onClick={() => setDeleteTarget({ id: user.id, name: user.name })}
                           >
                             <DeleteOutlineIcon fontSize="small" />
                           </IconButton>
-                        </span>
-                      </Tooltip>
+                        </Tooltip>
+                      ) : null}
                     </TableCell>
                   </TableRow>
                 );
@@ -406,6 +437,7 @@ export default function UsersPage() {
             </TableBody>
           </Table>
         </TableContainer>
+        </Stack>
       )}
 
       <Dialog
@@ -606,14 +638,12 @@ export default function UsersPage() {
         </DialogActions>
       </Dialog>
 
-      <ConfirmDialog
-        open={Boolean(deleteId)}
-        title="Excluir usuário"
-        description="Esta ação remove o usuário do sistema. Continuar?"
-        confirmLabel="Excluir"
-        loading={remove.isPending}
-        onClose={() => setDeleteId(null)}
-        onConfirm={() => deleteId && remove.mutate(deleteId)}
+      <ReassignLeadsOnDeleteDialog
+        open={Boolean(deleteTarget)}
+        userId={deleteTarget?.id ?? null}
+        userName={deleteTarget?.name}
+        onClose={() => setDeleteTarget(null)}
+        onCompleted={afterUserDeactivated}
       />
     </Stack>
   );
