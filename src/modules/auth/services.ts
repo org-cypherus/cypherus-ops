@@ -20,7 +20,7 @@ import {
 } from "@/lib/auth/session";
 import { getQueryClient, PLANS_STALE_TIME_MS } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
-import type { LoginFormValues, SignupFormValues } from "./schemas";
+import type { AcceptInvitationFormValues, LoginFormValues, SignupFormValues } from "./schemas";
 import { onlyDigits } from "@/lib/utils/document";
 
 type CrmUser = {
@@ -175,6 +175,19 @@ export async function loginRequest(values: LoginFormValues) {
   }>("/v1/auth/login", values);
   if (isMockMode() && data.access_token) setAccessToken(data.access_token);
   setCompanyId(data.user.company_id);
+  return fetchMe();
+}
+
+export async function acceptInvitationRequest(values: AcceptInvitationFormValues) {
+  const { data } = await api.post<{
+    access_token?: string;
+    user?: CrmUser;
+  }>("/v1/auth/invitations/accept", {
+    token: values.token,
+    password: values.password,
+  });
+  if (isMockMode() && data.access_token) setAccessToken(data.access_token);
+  if (data.user?.company_id) setCompanyId(data.user.company_id);
   return fetchMe();
 }
 

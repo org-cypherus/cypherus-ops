@@ -8,6 +8,27 @@ export const loginSchema = z.object({
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
 
+const passwordSchema = z
+  .string()
+  .min(8, "Mínimo de 8 caracteres")
+  .max(72, "Senha muito longa")
+  .refine((value) => /[A-Z]/.test(value), "Inclua ao menos uma letra maiúscula")
+  .refine((value) => /[a-z]/.test(value), "Inclua ao menos uma letra minúscula")
+  .refine((value) => /\d/.test(value), "Inclua ao menos um número");
+
+export const acceptInvitationSchema = z
+  .object({
+    token: z.string().trim().min(1, "Informe o token de convite"),
+    password: passwordSchema,
+    confirmPassword: z.string().min(1, "Confirme a senha"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "As senhas não coincidem",
+    path: ["confirmPassword"],
+  });
+
+export type AcceptInvitationFormValues = z.infer<typeof acceptInvitationSchema>;
+
 const personNameSchema = z
   .string()
   .trim()
@@ -29,14 +50,6 @@ const emailSchema = z
   .min(1, "Informe o e-mail")
   .email("E-mail inválido")
   .max(160, "E-mail muito longo");
-
-const passwordSchema = z
-  .string()
-  .min(8, "Mínimo de 8 caracteres")
-  .max(72, "Senha muito longa")
-  .refine((value) => /[A-Z]/.test(value), "Inclua ao menos uma letra maiúscula")
-  .refine((value) => /[a-z]/.test(value), "Inclua ao menos uma letra minúscula")
-  .refine((value) => /\d/.test(value), "Inclua ao menos um número");
 
 export const signupCompanySchema = z.object({
   companyName: companyNameSchema,

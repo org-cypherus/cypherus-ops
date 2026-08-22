@@ -13,8 +13,8 @@ import {
 } from "@/lib/auth/session";
 import { SESSION_STALE_TIME_MS, getQueryClient } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
-import { fetchMe, loginRequest, logoutRequest } from "./services";
-import type { LoginFormValues } from "./schemas";
+import { acceptInvitationRequest, fetchMe, loginRequest, logoutRequest } from "./services";
+import type { AcceptInvitationFormValues, LoginFormValues } from "./schemas";
 
 export { homePathForRole, homePathForSession } from "@/lib/auth/access";
 
@@ -69,6 +69,19 @@ export function useLogin() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (values: LoginFormValues) => loginRequest(values),
+    onSuccess: (user) => {
+      setCachedSessionUser(user);
+      queryClient.setQueryData(queryKeys.me, user);
+      router.replace(homePathForSession(user));
+    },
+  });
+}
+
+export function useAcceptInvitation() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (values: AcceptInvitationFormValues) => acceptInvitationRequest(values),
     onSuccess: (user) => {
       setCachedSessionUser(user);
       queryClient.setQueryData(queryKeys.me, user);
