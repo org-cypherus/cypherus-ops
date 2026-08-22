@@ -22,11 +22,12 @@ import {
   distributionStrategyOptions,
 } from "@/lib/billing/distribution";
 import { planLabel } from "@/lib/billing/plan-catalog";
+import { canSeeAppRoute, getAppRouteByHref } from "@/lib/billing/routes";
 import { queryKeys } from "@/lib/query/keys";
 import { companyPath } from "@/lib/auth/session";
 import { EnterpriseCapabilities } from "@/modules/admin/components/EnterpriseCapabilities";
 import { fetchDistributionRules } from "@/modules/financial/services";
-import { useCompanyPlan, useFeature } from "@/modules/auth/hooks";
+import { useCompanyPlan, useSession } from "@/modules/auth/hooks";
 
 const links = [
   {
@@ -38,13 +39,11 @@ const links = [
     href: "/admin/roles",
     title: "Perfis",
     description: "Administrador, Gestor, Comercial e Financeiro",
-    feature: "advanced_permissions" as const,
   },
   {
     href: "/admin/permissions",
     title: "Matriz de permissões",
     description: "Controle granular por módulo e ação",
-    feature: "advanced_permissions" as const,
   },
   {
     href: "/admin/enterprise",
@@ -56,9 +55,12 @@ const links = [
 export default function AdminPage() {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
+  const { data: session } = useSession();
   const { planCode } = useCompanyPlan();
-  const advancedPermissions = useFeature("advanced_permissions");
-  const visibleLinks = links.filter((item) => !item.feature || advancedPermissions.enabled);
+  const visibleLinks = links.filter((item) => {
+    const route = getAppRouteByHref(item.href);
+    return route ? canSeeAppRoute(session, route) : false;
+  });
   const strategyOptions = distributionStrategyOptions(planCode);
 
   const settings = useQuery({
