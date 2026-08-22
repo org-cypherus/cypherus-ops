@@ -86,7 +86,7 @@ export default function PlatformBillingPage() {
   }
 
   if (overview.isError) {
-    return <ErrorState onRetry={() => overview.refetch()} />;
+    return <ErrorState error={overview.error} onRetry={() => overview.refetch()} />;
   }
 
   return (

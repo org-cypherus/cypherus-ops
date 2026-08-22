@@ -10,12 +10,12 @@ import { useLead } from "@/modules/leads/hooks";
 
 export default function LeadDetailPage() {
   const params = useParams<{ id: string }>();
-  const { data, isLoading, isError, refetch } = useLead(params.id);
+  const { data, isLoading, isError, error, refetch } = useLead(params.id);
   const backHref = "/leads";
   const backLabel = "← Voltar ao pipeline";
 
   if (isError || (!isLoading && !data)) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState error={error} resourceLabel="este lead" onRetry={() => refetch()} />;
   }
 
   return (

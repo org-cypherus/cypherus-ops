@@ -58,7 +58,7 @@ export default function PlatformHomePage() {
   }
 
   if (overview.isError) {
-    return <ErrorState onRetry={() => overview.refetch()} />;
+    return <ErrorState error={overview.error} onRetry={() => overview.refetch()} />;
   }
 
   const companies = overview.data ?? [];

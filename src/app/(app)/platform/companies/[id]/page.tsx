@@ -160,7 +160,7 @@ export default function PlatformCompanyDetailPage() {
   }
 
   if (companyQuery.isError || !companyQuery.data) {
-    return <ErrorState onRetry={() => companyQuery.refetch()} />;
+    return <ErrorState error={companyQuery.error} onRetry={() => companyQuery.refetch()} />;
   }
 
   const company = companyQuery.data;

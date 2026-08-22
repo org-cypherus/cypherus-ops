@@ -41,7 +41,7 @@ export default function ContractsPage() {
   const [fromFilter, setFromFilter] = useState("");
   const [toFilter, setToFilter] = useState("");
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.contracts.list(),
     queryFn: () => fetchContracts(),
   });
@@ -155,7 +155,7 @@ export default function ContractsPage() {
           headers={["Lead", "Modelo", "Status", "Valor", "Criado em"]}
         />
       ) : isError ? (
-        <ErrorState onRetry={() => refetch()} />
+        <ErrorState error={error} resourceLabel="os contratos" onRetry={() => refetch()} />
       ) : (
         <TableContainer component={Paper} variant="outlined">
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2, pt: 2, pb: 1 }}>

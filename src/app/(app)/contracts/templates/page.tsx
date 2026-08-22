@@ -47,7 +47,7 @@ export default function TemplatesPage() {
   const [form, setForm] = useState(emptyForm);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.contracts.templates,
     queryFn: fetchTemplates,
   });
@@ -107,7 +107,7 @@ export default function TemplatesPage() {
           <CircularProgress />
         </Box>
       ) : isError ? (
-        <ErrorState onRetry={() => refetch()} />
+        <ErrorState error={error} resourceLabel="os modelos de contrato" onRetry={() => refetch()} />
       ) : (
         <Grid container spacing={2}>
           {(data || []).map((tpl) => (

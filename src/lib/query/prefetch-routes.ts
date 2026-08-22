@@ -8,7 +8,7 @@ import { fetchAdminDashboard, fetchCommercialDashboard, periodRange } from "@/mo
 import { fetchPayments } from "@/modules/financial/services";
 import { fetchKanban } from "@/modules/leads/services";
 import { fetchCompaniesOverview } from "@/modules/platform/services";
-import { fetchUserDirectory } from "@/modules/users/directory";
+import { fetchUserDirectoryOrEmpty } from "@/modules/users/directory";
 
 function periodBounds(days = 30) {
   const { from, to } = periodRange(days);
@@ -36,7 +36,7 @@ export function prefetchWarmQueries(queryClient: QueryClient, session: SessionUs
     tasks.push(
       queryClient.prefetchQuery({
         queryKey: queryKeys.userDirectory,
-        queryFn: fetchUserDirectory,
+        queryFn: fetchUserDirectoryOrEmpty,
       }),
     );
   }

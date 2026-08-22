@@ -341,7 +341,11 @@ export function LeadsPageClient() {
           kanban.isLoading ? (
             <KanbanSkeleton />
           ) : kanban.isError ? (
-            <ErrorState onRetry={() => kanban.refetch()} />
+            <ErrorState
+              error={kanban.error}
+              resourceLabel="os leads"
+              onRetry={() => kanban.refetch()}
+            />
           ) : !filteredKanban?.columns.some((c) => c.count > 0) ? (
             <EmptyState title="Nenhum lead no pipeline" description="Crie ou importe leads para começar." />
           ) : (
@@ -353,7 +357,7 @@ export function LeadsPageClient() {
             headers={["", "Nome", "Documento", "Status", "Responsável", "Origem", "Valor", "Criação"]}
           />
         ) : leads.isError ? (
-          <ErrorState onRetry={() => leads.refetch()} />
+          <ErrorState error={leads.error} resourceLabel="os leads" onRetry={() => leads.refetch()} />
         ) : !allLeads.length ? (
           <EmptyState title="Nenhum lead encontrado" />
         ) : (

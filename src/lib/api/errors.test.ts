@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseApiError, featureKeyFromError, isGatewayUpstreamTimeout } from "./errors";
+import { parseApiError, featureKeyFromError, isGatewayUpstreamTimeout, isPermissionDenied, permissionDeniedDescription } from "./errors";
 
 describe("parseApiError", () => {
   it("reads the CRM envelope", () => {
@@ -61,5 +61,20 @@ describe("parseApiError", () => {
     expect(parsed.message).toBe("Unable to reach upstream service");
     expect(parsed.requestId).toBe("43343a9e-0ac1-4255-8a42-3d138ae7a93a");
     expect(isGatewayUpstreamTimeout(parsed)).toBe(true);
+  });
+});
+
+describe("permission denied helpers", () => {
+  it("detects PERMISSION_DENIED and maps users.view", () => {
+    const parsed = parseApiError(403, {
+      error: {
+        code: "PERMISSION_DENIED",
+        message: "Usuário sem a permissão 'users.view'.",
+        details: { permission_key: "users.view" },
+      },
+      request_id: "e9a6bc35-251d-46d4-8a1d-7ba436351844",
+    });
+    expect(isPermissionDenied(parsed)).toBe(true);
+    expect(permissionDeniedDescription(parsed)).toContain("lista de usuários");
   });
 });

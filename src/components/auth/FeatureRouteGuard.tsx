@@ -1,61 +1,16 @@
 "use client";
 
-import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import WorkspacePremiumOutlinedIcon from "@mui/icons-material/WorkspacePremiumOutlined";
-import { Box, Button, CircularProgress, Stack, Typography } from "@mui/material";
-import Link from "next/link";
+import { Box, CircularProgress } from "@mui/material";
+import { AccessDeniedState } from "@/components/feedback/AccessDeniedState";
 import { hasFeature, minimumPlanForFeature } from "@/lib/billing/access";
 import { planLabel } from "@/lib/billing/plan-catalog";
-import { matchAppRoute } from "@/lib/billing/routes";
+import { canSeeAppRoute, matchAppRoute } from "@/lib/billing/routes";
 import { isPlatformPath } from "@/lib/platform/routes";
 import type { FeatureKey } from "@/lib/billing/types";
 import { useSession } from "@/modules/auth/hooks";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-
-function Shell({
-  icon,
-  title,
-  description,
-  action,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  action?: ReactNode;
-}) {
-  return (
-    <Box
-      flex={1}
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      px={2}
-      py={6}
-    >
-      <Stack spacing={2} alignItems="center" textAlign="center" maxWidth={440}>
-        <Box
-          sx={{
-            width: 56,
-            height: 56,
-            borderRadius: 2,
-            display: "grid",
-            placeItems: "center",
-            bgcolor: "action.hover",
-            color: "text.secondary",
-          }}
-        >
-          {icon}
-        </Box>
-        <Typography variant="h5" fontWeight={700}>
-          {title}
-        </Typography>
-        <Typography color="text.secondary">{description}</Typography>
-        {action}
-      </Stack>
-    </Box>
-  );
-}
 
 export function PlanUpsell({ feature, label }: { feature: FeatureKey; label?: string }) {
   const required = minimumPlanForFeature(feature);
@@ -63,33 +18,25 @@ export function PlanUpsell({ feature, label }: { feature: FeatureKey; label?: st
   const moduleLabel = label ?? "Este módulo";
 
   return (
-    <Shell
-      icon={<WorkspacePremiumOutlinedIcon />}
+    <AccessDeniedState
+      icon={<WorkspacePremiumOutlinedIcon sx={{ fontSize: { xs: 28, sm: 32 } }} />}
       title={`${moduleLabel} não está no seu plano`}
       description={`Disponível a partir do plano ${requiredLabel}. Faça upgrade da assinatura da empresa para liberar para toda a equipe.`}
-      action={
-        <Button component={Link} href="/#pricing" variant="contained">
-          Ver planos
-        </Button>
-      }
+      actionLabel="Ver planos"
+      actionHref="/#pricing"
+      actionVariant="contained"
     />
   );
 }
 
 export function PermissionDenied({ label }: { label?: string }) {
   return (
-    <Shell
-      icon={<LockOutlinedIcon />}
-      title="Sem permissão"
+    <AccessDeniedState
+      title="Acesso restrito"
       description={
         label
           ? `Seu cargo não tem acesso a ${label}. Peça ao administrador para ajustar as permissões.`
           : "Seu cargo não tem acesso a esta área. Peça ao administrador para ajustar as permissões."
-      }
-      action={
-        <Button component={Link} href="/leads" variant="outlined">
-          Voltar ao início
-        </Button>
       }
     />
   );
@@ -120,7 +67,7 @@ export function FeatureRouteGuard({ children }: { children: ReactNode }) {
   } else if (route) {
     if (route.feature && !hasFeature(user.features, route.feature)) {
       content = <PlanUpsell feature={route.feature} label={route.label} />;
-    } else if (!user.permissions.includes(route.permission)) {
+    } else if (!canSeeAppRoute(user, route)) {
       content = <PermissionDenied label={route.label} />;
     }
   }

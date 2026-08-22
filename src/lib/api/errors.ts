@@ -165,3 +165,36 @@ export function featureKeyFromError(error: ParsedApiError): string | undefined {
   }
   return undefined;
 }
+
+/** 403 HTTP ou código CRM `PERMISSION_DENIED`. */
+export function isPermissionDenied(error: Pick<ParsedApiError, "status" | "code">): boolean {
+  return error.status === 403 || error.code === "PERMISSION_DENIED";
+}
+
+export function permissionKeyFromError(error: ParsedApiError): string | undefined {
+  const details = error.details;
+  if (details && typeof details === "object" && !Array.isArray(details) && "permission_key" in details) {
+    const key = (details as { permission_key?: unknown }).permission_key;
+    return typeof key === "string" ? key : undefined;
+  }
+  return undefined;
+}
+
+const PERMISSION_KEY_LABELS: Record<string, string> = {
+  "users.view": "a lista de usuários da empresa",
+  "users.invite": "convidar usuários",
+  "roles.view": "cargos e papéis",
+  "leads.view": "os leads",
+  "contracts.view": "os contratos",
+  "invoices.view": "os pagamentos",
+  "commissions.view": "as comissões",
+  "dashboard.view": "o dashboard",
+  "dashboard.advanced.view": "o dashboard administrativo",
+};
+
+/** Mensagem amigável a partir de `details.permission_key` do CRM. */
+export function permissionDeniedDescription(error: ParsedApiError, fallbackResource?: string): string {
+  const key = permissionKeyFromError(error);
+  const resource = (key && PERMISSION_KEY_LABELS[key]) || fallbackResource || "este conteúdo";
+  return `Seu perfil não tem permissão para ver ${resource}. Peça ao administrador da empresa para liberar o acesso no seu cargo.`;
+}

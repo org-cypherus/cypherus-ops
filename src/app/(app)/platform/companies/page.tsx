@@ -55,7 +55,7 @@ export default function PlatformCompaniesPage() {
   }
 
   if (overview.isError) {
-    return <ErrorState onRetry={() => overview.refetch()} />;
+    return <ErrorState error={overview.error} onRetry={() => overview.refetch()} />;
   }
 
   return (

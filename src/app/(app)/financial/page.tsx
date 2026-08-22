@@ -201,7 +201,13 @@ export default function FinancialPage() {
   }
 
   if (payments.isError) {
-    return <ErrorState onRetry={() => payments.refetch()} />;
+    return (
+      <ErrorState
+        error={payments.error}
+        resourceLabel="os pagamentos"
+        onRetry={() => payments.refetch()}
+      />
+    );
   }
 
   return (

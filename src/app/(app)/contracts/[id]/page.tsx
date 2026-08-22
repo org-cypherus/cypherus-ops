@@ -161,12 +161,7 @@ export default function ContractDetailPage() {
         <Button component={Link} href="/contracts" sx={{ alignSelf: "flex-start" }}>
           ← Voltar aos contratos
         </Button>
-        <ErrorState onRetry={() => refetch()} />
-        {error ? (
-          <Typography variant="caption" color="text.secondary" textAlign="center">
-            {(error as Error).message || "Falha ao carregar o contrato"}
-          </Typography>
-        ) : null}
+        <ErrorState error={error} resourceLabel="este contrato" onRetry={() => refetch()} />
       </Stack>
     );
   }
