@@ -39,8 +39,29 @@ type UploadProgress = {
   percent: number;
 };
 
+/** Alinhado a STORAGE_MAX_UPLOAD_BYTES do CRM (20 MiB). */
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
 /** Duração visual da barra até 100% (independente da velocidade real do upload). */
 const UPLOAD_BAR_DURATION_MS = 2_000;
+
+function oversizedAttachmentMessage(file: File) {
+  return `"${file.name}" tem ${formatFileSize(file.size)} e ultrapassa o limite de 20 MB por arquivo.`;
+}
+
+function uploadAttachmentErrorMessage(error: unknown) {
+  const parsed = getApiError(error);
+  const message = parsed.message || "";
+  if (
+    parsed.status === 413 ||
+    /excede o limite/i.test(message) ||
+    /payload too large/i.test(message) ||
+    /\d+\s*bytes/i.test(message)
+  ) {
+    return "O arquivo ultrapassa o limite de 20 MB. Escolha um arquivo menor e tente novamente.";
+  }
+  return message || "Falha ao enviar anexo";
+}
 
 function runUploadBarAnimation(
   onTick: (percent: number) => void,
@@ -214,7 +235,24 @@ export function LeadAttachments({ lead }: { lead: Lead }) {
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
-    const list = Array.from(files);
+    const selected = Array.from(files);
+    const tooLarge = selected.filter((file) => file.size > MAX_ATTACHMENT_BYTES);
+    const list = selected.filter((file) => file.size <= MAX_ATTACHMENT_BYTES);
+
+    if (tooLarge.length === 1) {
+      enqueueSnackbar(oversizedAttachmentMessage(tooLarge[0]!), { variant: "error" });
+    } else if (tooLarge.length > 1) {
+      enqueueSnackbar(
+        `${tooLarge.length} arquivos ultrapassam o limite de 20 MB e não foram enviados.`,
+        { variant: "error" },
+      );
+    }
+
+    if (!list.length) {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
     let cancelled = false;
     try {
       for (let index = 0; index < list.length; index += 1) {
@@ -250,7 +288,7 @@ export function LeadAttachments({ lead }: { lead: Lead }) {
       enqueueSnackbar("Anexo(s) enviado(s)", { variant: "success" });
     } catch (error) {
       cancelled = true;
-      enqueueSnackbar(getApiError(error).message || "Falha ao enviar anexo", { variant: "error" });
+      enqueueSnackbar(uploadAttachmentErrorMessage(error), { variant: "error" });
     } finally {
       setUploadProgress(null);
     }
@@ -291,7 +329,7 @@ export function LeadAttachments({ lead }: { lead: Lead }) {
             Arraste arquivos ou clique para enviar
           </Typography>
           <Typography variant="caption" color="text.secondary" display="block">
-            PDF, imagens, Word, Excel ou texto · máx. 20 MB
+            PDF, imagens, Word, Excel ou texto · até 20 MB por arquivo
           </Typography>
           {uploadProgress ? (
             <Box mt={1.5} textAlign="left">
