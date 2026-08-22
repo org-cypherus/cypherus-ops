@@ -51,39 +51,19 @@ import {
   fetchCommissionRules,
   fetchCommissions,
   fetchPayments,
+  filterPayments,
   saveCommissionRule,
   type CommissionRule,
-  type Payment,
 } from "@/modules/financial/services";
 
 type RuleForm = {
   plan: string;
   type: CommissionRule["type"];
   value: number;
-  threshold: number;
   active: boolean;
 };
 
 const PAYMENT_STATUSES = ["Pendente", "Recebido", "Atrasado"] as const;
-
-function dayKey(value?: string) {
-  return value?.slice(0, 10) || "";
-}
-
-function filterPayments(
-  payments: Payment[],
-  filters: { lead: string; status: string; from: string; to: string },
-) {
-  const leadQ = filters.lead.trim().toLowerCase();
-  return payments.filter((payment) => {
-    if (leadQ && !payment.leadName.toLowerCase().includes(leadQ)) return false;
-    if (filters.status && payment.status !== filters.status) return false;
-    const due = dayKey(payment.dueDate);
-    if (filters.from && due && due < filters.from) return false;
-    if (filters.to && due && due > filters.to) return false;
-    return true;
-  });
-}
 
 export default function FinancialPage() {
   const searchParams = useSearchParams();
@@ -95,9 +75,8 @@ export default function FinancialPage() {
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
   const [ruleForm, setRuleForm] = useState<RuleForm>({
     plan: "",
-    type: "percentual_meta",
+    type: "percentual",
     value: 10,
-    threshold: 10000,
     active: false,
   });
   const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
@@ -180,7 +159,6 @@ export default function FinancialPage() {
         plan: ruleForm.plan,
         type: ruleForm.type,
         value: ruleForm.value,
-        threshold: ruleForm.threshold,
         active: ruleForm.active,
       }),
     onSuccess: () => {
@@ -258,7 +236,7 @@ export default function FinancialPage() {
           <TextField
             select
             size="small"
-            label="Status"
+            label="Tipo"
             value={commissionStatusFilter}
             onChange={(e) => setCommissionStatusFilter(e.target.value)}
             sx={{ minWidth: 150 }}
@@ -415,7 +393,9 @@ export default function FinancialPage() {
                   <TableRow>
                     <TableCell colSpan={4}>
                       <Typography variant="body2" color="text.secondary" py={2} textAlign="center">
-                        Nenhum pagamento encontrado com os filtros atuais.
+                        {hasActivePaymentFilters
+                          ? "Nenhum pagamento encontrado com os filtros atuais."
+                          : "Nenhum pagamento cadastrado."}
                       </Typography>
                     </TableCell>
                   </TableRow>
@@ -463,10 +443,9 @@ export default function FinancialPage() {
                       onClick={() => {
                         setEditingRule(null);
                         setRuleForm({
-                          plan: "Meta mínima 10k",
-                          type: "percentual_meta",
+                          plan: "Comissão padrão",
+                          type: "percentual",
                           value: 10,
-                          threshold: 10000,
                           active: false,
                         });
                         setRuleOpen(true);
@@ -476,8 +455,8 @@ export default function FinancialPage() {
                     </Button>
                   </Stack>
                 <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                  Vigente: soma as vendas do período; ao bater a meta mínima, % sobre o total
-                  acumulado (ex.: 3k+2k+6k=11k → 10% de 11k).
+                  CRM: uma regra vigente por empresa (`PERCENT` ou `FIXED`). Sem regra ativa o
+                  pagamento confirma, mas pode não gerar comissão.
                 </Typography>
                 {(rules.data || []).map((rule) => (
                   <Stack
@@ -505,7 +484,6 @@ export default function FinancialPage() {
                             plan: rule.plan,
                             type: rule.type,
                             value: rule.value,
-                            threshold: rule.threshold ?? 10000,
                             active: Boolean(rule.active),
                           });
                           setRuleOpen(true);
@@ -539,6 +517,9 @@ export default function FinancialPage() {
               <Typography variant="body2">Status: {selected.status}</Typography>
               {selected.paidAt ? (
                 <Typography variant="body2">Recebido em: {formatDate(selected.paidAt)}</Typography>
+              ) : null}
+              {selected.commissionId ? (
+                <Typography variant="body2">Comissão: {selected.commissionId}</Typography>
               ) : null}
               <FeatureGate feature="contracts" permission="contratos:visualizar">
                 <Button component={Link} href={`/contracts/${selected.contractId}`} size="small">
@@ -582,14 +563,12 @@ export default function FinancialPage() {
                 setRuleForm((f) => ({
                   ...f,
                   type: e.target.value as RuleForm["type"],
-                  threshold: e.target.value === "percentual_meta" ? f.threshold || 10000 : f.threshold,
                 }))
               }
               fullWidth
             >
-              <MenuItem value="percentual_meta">% após meta acumulada</MenuItem>
-              <MenuItem value="percentual">Percentual total</MenuItem>
-              <MenuItem value="taxa">Taxa fixa</MenuItem>
+              <MenuItem value="percentual">Percentual (0–100)</MenuItem>
+              <MenuItem value="taxa">Valor fixo</MenuItem>
             </TextField>
             <TextField
               type="number"
@@ -598,16 +577,6 @@ export default function FinancialPage() {
               onChange={(e) => setRuleForm((f) => ({ ...f, value: Number(e.target.value) }))}
               fullWidth
             />
-            {ruleForm.type === "percentual_meta" ? (
-              <TextField
-                type="number"
-                label="Meta mínima acumulada (R$)"
-                helperText="Soma as vendas do período. Abaixo da meta = 0. Na meta ou acima = % do total."
-                value={ruleForm.threshold}
-                onChange={(e) => setRuleForm((f) => ({ ...f, threshold: Number(e.target.value) }))}
-                fullWidth
-              />
-            ) : null}
             <TextField
               select
               label="Usar no cálculo automático"

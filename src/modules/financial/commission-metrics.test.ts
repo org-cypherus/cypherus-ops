@@ -4,7 +4,9 @@ import type { Commission } from "./services";
 
 function commission(partial: Partial<Commission> & Pick<Commission, "id" | "userName" | "amount">): Commission {
   return {
-    status: "Calculada",
+    status: "Percentual",
+    kind: "PERCENT",
+    baseAmount: partial.amount,
     ...partial,
   };
 }
@@ -30,10 +32,10 @@ describe("commission metrics", () => {
 
   it("filters by beneficiary and status", () => {
     const list = [
-      commission({ id: "1", userName: "Ana Costa", amount: 10, status: "Calculada" }),
-      commission({ id: "2", userName: "Bruno", amount: 20, status: "A pagar" }),
+      commission({ id: "1", userName: "Ana Costa", amount: 10, status: "Percentual" }),
+      commission({ id: "2", userName: "Bruno", amount: 20, status: "Fixa", kind: "FIXED" }),
     ];
     expect(filterCommissions(list, { beneficiary: "ana", status: "" })).toHaveLength(1);
-    expect(filterCommissions(list, { beneficiary: "", status: "A pagar" })).toHaveLength(1);
+    expect(filterCommissions(list, { beneficiary: "", status: "Fixa" })).toHaveLength(1);
   });
 });

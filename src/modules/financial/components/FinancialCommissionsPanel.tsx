@@ -42,7 +42,7 @@ export function FinancialCommissionsPanel({ commissions }: { commissions: Commis
       <Box>
         <Typography variant="h6">Comissões operacionais</Typography>
         <Typography variant="body2" color="text.secondary">
-          Ranking por beneficiário, participação do top 5 e distribuição por status
+          Ranking por beneficiário, participação do top 5 e distribuição por tipo (PERCENT/FIXED)
         </Typography>
       </Box>
 
@@ -111,7 +111,7 @@ export function FinancialCommissionsPanel({ commissions }: { commissions: Commis
             <Card variant="outlined" sx={{ height: "100%" }}>
               <CardContent>
                 <Typography variant="h6" sx={{ mb: 2 }}>
-                  Mix por status (R$)
+                  Mix por tipo (R$)
                 </Typography>
                 <PieChart
                   height={280}

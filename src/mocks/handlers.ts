@@ -11,10 +11,13 @@ import {
   getCompanyById,
   getSubscriptionByCompanyId,
   mockCompanies,
+  mockCommissionRules,
+  mockCommissions,
   mockContracts,
   mockFeatureCatalog,
   mockFeatureOverrides,
   mockLeads,
+  mockPayments,
   mockPlans,
   mockTemplates,
   mockUsers,
@@ -474,9 +477,56 @@ export const handlers = [
     }),
   ),
 
-  http.get(`${API}/v1/companies/:companyId/payments`, () => HttpResponse.json([])),
-  http.get(`${API}/v1/companies/:companyId/commissions`, () => HttpResponse.json([])),
-  http.get(`${API}/v1/companies/:companyId/commission-rules`, () => HttpResponse.json([])),
+  http.get(`${API}/v1/companies/:companyId/payments`, () =>
+    HttpResponse.json(
+      mockPayments.map((payment) => ({
+        id: payment.id,
+        company_id: currentUser.companyId,
+        contract_id: payment.contractId,
+        lead_id: payment.leadId,
+        amount: payment.amount,
+        due_date: payment.dueDate.slice(0, 10),
+        status:
+          payment.status === "Recebido"
+            ? "CONFIRMED"
+            : payment.status === "Atrasado"
+              ? "OVERDUE"
+              : "PENDING",
+        paid_at: payment.paidAt ?? null,
+        created_at: payment.dueDate,
+        commission_id: payment.id === "p1" ? "cm1" : null,
+      })),
+    ),
+  ),
+  http.get(`${API}/v1/companies/:companyId/commissions`, () =>
+    HttpResponse.json(
+      mockCommissions.map((commission) => ({
+        id: commission.id,
+        company_id: currentUser.companyId,
+        payment_id: commission.paymentId || "p1",
+        contract_id: "c1",
+        beneficiary_user_id: commission.userId,
+        kind: commission.status === "Fixa" ? "FIXED" : "PERCENT",
+        base_amount: commission.amount * 10,
+        rate: commission.status === "Fixa" ? null : 10,
+        amount: commission.amount,
+        created_at: `${commission.period || "2026-07"}-15T12:00:00.000Z`,
+      })),
+    ),
+  ),
+  http.get(`${API}/v1/companies/:companyId/commission-rules`, () =>
+    HttpResponse.json(
+      mockCommissionRules.map((rule) => ({
+        id: rule.id,
+        company_id: currentUser.companyId,
+        name: rule.plan,
+        kind: rule.type === "taxa" ? "FIXED" : "PERCENT",
+        rate: rule.type === "taxa" ? null : rule.value,
+        amount: rule.type === "taxa" ? rule.value : null,
+        is_active: Boolean(rule.active),
+      })),
+    ),
+  ),
   http.get(`${API}/v1/companies/:companyId/contracts`, () =>
     HttpResponse.json(mockContracts.map(toCrmContract)),
   ),
