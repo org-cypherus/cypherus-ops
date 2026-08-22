@@ -70,10 +70,14 @@ function toCrmLead(lead: Lead) {
     status: uiStageToApiStatus(lead.status) ?? "NEW",
     priority: uiPriorityToApi(lead.priority) ?? "MEDIUM",
     tags: lead.tags,
-    process: lead.process,
+    process: {
+      ...lead.process,
+      potential_value: lead.process.totalValue,
+      value: lead.process.totalValue,
+    },
     pipeline_stage_id: null,
     created_at: lead.createdAt,
-    updated_at: lead.createdAt,
+    updated_at: lead.updatedAt || lead.createdAt,
   };
 }
 
@@ -289,7 +293,9 @@ export const handlers = [
     return HttpResponse.json(keys.map((permission_key) => ({ permission_key, scope: "COMPANY" })));
   }),
 
-  http.get(`${API}/v1/companies/:companyId/leads`, () => HttpResponse.json(mockLeads.map(toCrmLead))),
+  http.get(`${API}/v1/companies/:companyId/leads`, () =>
+    HttpResponse.json({ items: mockLeads.map(toCrmLead), next_cursor: null }),
+  ),
 
   http.get(`${API}/v1/companies/:companyId/leads/:leadId`, ({ params }) => {
     const lead = mockLeads.find((item) => item.id === params.leadId);
@@ -382,6 +388,7 @@ export const handlers = [
         status: uiStageToApiStatus(column.status),
         lead_count: column.count,
         potential_value: column.potentialValue,
+        has_more: false,
         leads: column.leads.map(toCrmLead),
       })),
     });

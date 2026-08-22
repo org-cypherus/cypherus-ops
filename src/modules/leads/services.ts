@@ -8,9 +8,11 @@ import type { Attachment, KanbanBoard, Lead, LegalStage, PipelineStage } from ".
 import {
   leadToCreateRequest,
   leadToUpdateRequest,
+  nextLeadCursor,
   toKanbanBoard,
   toUiLead,
   uiStageToApiStatus,
+  unwrapLeadList,
   type CrmLead,
   type CrmPipeline,
   type CrmPipelineBoard,
@@ -29,24 +31,47 @@ export type LeadFilters = {
   to?: string;
 };
 
+/** YYYY-MM-DD — compara datas de filtro sem deslocar por timezone do ISO. */
+export function dayKey(value?: string) {
+  return value?.slice(0, 10) || "";
+}
+
+function hasClientFilters(filters?: LeadFilters) {
+  if (!filters) return false;
+  return Boolean(
+    filters.q?.trim() ||
+      filters.ownerId ||
+      filters.origin ||
+      filters.priority ||
+      filters.tag ||
+      filters.from ||
+      filters.to ||
+      filters.status,
+  );
+}
+
 export function filterKanbanBoard(board: KanbanBoard, filters?: LeadFilters): KanbanBoard {
-  if (!filters) return board;
-  const q = filters.q?.trim().toLowerCase();
+  if (!hasClientFilters(filters)) return board;
+  const q = filters!.q?.trim().toLowerCase();
+  const from = dayKey(filters!.from);
+  const to = dayKey(filters!.to);
   return {
     columns: board.columns.map((column) => {
       const leads = column.leads.filter((lead) => {
         if (q && !`${lead.name} ${lead.email} ${lead.phone}`.toLowerCase().includes(q)) return false;
-        if (filters.ownerId && lead.ownerId !== filters.ownerId) return false;
-        if (filters.origin && lead.origin !== filters.origin) return false;
-        if (filters.priority && lead.priority !== filters.priority) return false;
-        if (filters.tag && !lead.tags.includes(filters.tag)) return false;
-        if (filters.from && lead.createdAt < filters.from) return false;
-        if (filters.to && lead.createdAt > filters.to) return false;
+        if (filters!.ownerId && lead.ownerId !== filters!.ownerId) return false;
+        if (filters!.origin && lead.origin !== filters!.origin) return false;
+        if (filters!.priority && lead.priority !== filters!.priority) return false;
+        if (filters!.tag && !lead.tags.includes(filters!.tag)) return false;
+        const created = dayKey(lead.createdAt);
+        if (from && created && created < from) return false;
+        if (to && created && created > to) return false;
         return true;
       });
       return {
         ...column,
         leads,
+        // Com filtro client-side, totais refletem só o slice carregado no board.
         count: leads.length,
         potentialValue: leads.reduce((sum, lead) => sum + lead.process.totalValue, 0),
       };
@@ -72,13 +97,26 @@ async function enrichLeads(leads: CrmLead[]): Promise<Lead[]> {
   return leads.map((lead) => toUiLead(lead, owners[lead.owner_user_id]));
 }
 
+async function fetchAllCrmLeads(query: Record<string, string> = {}, maxPages = 20): Promise<CrmLead[]> {
+  const items: CrmLead[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < maxPages; page += 1) {
+    const params = { ...query, limit: "100", ...(cursor ? { cursor } : {}) };
+    const { data } = await api.get<unknown>(companyPath("/leads"), { params });
+    items.push(...unwrapLeadList(data));
+    cursor = nextLeadCursor(data);
+    if (!cursor) break;
+  }
+  return items;
+}
+
 export async function fetchLeadNameMap(): Promise<Record<string, string>> {
   return getQueryClient().ensureQueryData({
     queryKey: queryKeys.leadNames,
     staleTime: PIPELINE_STALE_TIME_MS,
     queryFn: async () => {
-      const { data } = await api.get<Array<{ id: string; name: string }>>(companyPath("/leads"));
-      return Object.fromEntries((data ?? []).map((lead) => [lead.id, lead.name]));
+      const leads = await fetchAllCrmLeads();
+      return Object.fromEntries(leads.map((lead) => [lead.id, lead.name]));
     },
   });
 }
@@ -96,10 +134,20 @@ export async function fetchLeads(params?: LeadFilters) {
   if (params?.ownerId) query.owner_user_id = params.ownerId;
   if (params?.origin) query.source = params.origin;
   if (params?.status) query.status = uiStageToApiStatus(params.status) ?? params.status;
-  const { data } = await api.get<CrmLead[]>(companyPath("/leads"), { params: query });
-  let leads = await enrichLeads(data);
+  const raw = await fetchAllCrmLeads(query);
+  let leads = await enrichLeads(raw);
   if (params?.priority) leads = leads.filter((lead) => lead.priority === params.priority);
   if (params?.tag) leads = leads.filter((lead) => lead.tags.includes(params.tag!));
+  const from = dayKey(params?.from);
+  const to = dayKey(params?.to);
+  if (from || to) {
+    leads = leads.filter((lead) => {
+      const created = dayKey(lead.createdAt);
+      if (from && created && created < from) return false;
+      if (to && created && created > to) return false;
+      return true;
+    });
+  }
   return paginate(leads, params);
 }
 
@@ -157,7 +205,10 @@ export async function importLeads(rows: Array<Partial<Lead> & { name: string; em
   const csvLines = ["name,cpf,owner_user_id,email,phone,source,process"];
   for (const row of rows) {
     const owner = row.ownerId || fallbackOwner;
-    const process = JSON.stringify({ totalValue: row.process?.totalValue ?? 0 });
+    const process = JSON.stringify({
+      potential_value: row.process?.totalValue ?? 0,
+      value: row.process?.totalValue ?? 0,
+    });
     const fields = [
       row.name,
       row.cpf || "",

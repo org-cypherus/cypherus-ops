@@ -263,7 +263,7 @@ export function LeadsPageClient() {
           label="De"
           InputLabelProps={{ shrink: true }}
           value={filters.from?.slice(0, 10) || ""}
-          onChange={(e) => setFilter("from", e.target.value ? new Date(e.target.value).toISOString() : "")}
+          onChange={(e) => setFilter("from", e.target.value)}
         />
         <TextField
           size="small"
@@ -271,7 +271,7 @@ export function LeadsPageClient() {
           label="Até"
           InputLabelProps={{ shrink: true }}
           value={filters.to?.slice(0, 10) || ""}
-          onChange={(e) => setFilter("to", e.target.value ? new Date(e.target.value + "T23:59:59").toISOString() : "")}
+          onChange={(e) => setFilter("to", e.target.value)}
         />
       </Stack>
 

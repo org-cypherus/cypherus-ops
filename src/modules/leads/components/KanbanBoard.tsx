@@ -62,11 +62,13 @@ function Column({
   status,
   count,
   potentialValue,
+  hasMore,
   leads,
 }: {
   status: PipelineStage;
   count: number;
   potentialValue: number;
+  hasMore?: boolean;
   leads: Lead[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -92,6 +94,11 @@ function Column({
         <Typography variant="caption" color="text.secondary">
           {count} leads · {formatCurrency(potentialValue)}
         </Typography>
+        {hasMore ? (
+          <Typography variant="caption" color="warning.main">
+            Exibindo {leads.length} de {count}
+          </Typography>
+        ) : null}
       </Stack>
       <Box pr={0.25}>
         {leads.map((lead) => (
