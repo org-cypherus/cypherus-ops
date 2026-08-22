@@ -11,19 +11,30 @@ import {
   getCompanyById,
   getSubscriptionByCompanyId,
   mockCompanies,
+  mockContracts,
   mockFeatureCatalog,
   mockFeatureOverrides,
   mockLeads,
   mockPlans,
+  mockTemplates,
   mockUsers,
   patchLead,
   resolveMockCompanyFeatures,
   toCompanyResponse,
   updateLeadStatus,
+  type Contract as MockContract,
+  type ContractTemplate as MockTemplate,
 } from "./data";
 import type { Lead } from "@/modules/leads/types";
 
 const API = "/api/bff";
+
+const CONTRACT_UI_TO_STATUS: Record<string, string> = {
+  Rascunho: "DRAFT",
+  Enviado: "GENERATED",
+  Assinado: "SIGNED",
+  Arquivado: "ARCHIVED",
+};
 
 function crmError(status: number, code: string, message: string) {
   return HttpResponse.json({ error: { code, message }, request_id: "mock" }, { status });
@@ -78,6 +89,41 @@ function toCrmLead(lead: Lead) {
     pipeline_stage_id: null,
     created_at: lead.createdAt,
     updated_at: lead.updatedAt || lead.createdAt,
+  };
+}
+
+function toCrmContract(contract: MockContract) {
+  const version = contract.pdfId ? 1 : 0;
+  return {
+    id: contract.id,
+    company_id: currentUser.companyId,
+    lead_id: contract.leadId,
+    template_id: contract.templateId,
+    title: contract.templateName,
+    status: CONTRACT_UI_TO_STATUS[contract.status] ?? "DRAFT",
+    data: { valor: String(contract.value), value: String(contract.value) },
+    current_version: version,
+    signed_attachment_id: contract.signedPdfId ?? null,
+    created_at: contract.createdAt,
+    updated_at: contract.createdAt,
+    signed_at: contract.signedAt ?? null,
+    archived_at: null,
+    versions: contract.pdfId
+      ? [{ version: 1, attachment_id: contract.pdfId, created_at: contract.createdAt }]
+      : [],
+  };
+}
+
+function toCrmTemplate(template: MockTemplate) {
+  return {
+    id: template.id,
+    company_id: currentUser.companyId,
+    name: template.name,
+    body: template.body,
+    placeholders: template.placeholders.map((key) => key.replace(/^\{\{\s*|\s*\}\}$/g, "")),
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -305,7 +351,11 @@ export const handlers = [
 
   http.get(`${API}/v1/companies/:companyId/leads/:leadId/events`, () => HttpResponse.json([])),
   http.get(`${API}/v1/companies/:companyId/leads/:leadId/attachments`, () => HttpResponse.json([])),
-  http.get(`${API}/v1/companies/:companyId/leads/:leadId/contracts`, () => HttpResponse.json([])),
+  http.get(`${API}/v1/companies/:companyId/leads/:leadId/contracts`, ({ params }) =>
+    HttpResponse.json(
+      mockContracts.filter((item) => item.leadId === params.leadId).map(toCrmContract),
+    ),
+  ),
 
   http.post(`${API}/v1/companies/:companyId/leads`, async ({ request }) => {
     const body = (await request.json()) as { name: string; email: string; cpf: string; owner_user_id: string };
@@ -427,8 +477,17 @@ export const handlers = [
   http.get(`${API}/v1/companies/:companyId/payments`, () => HttpResponse.json([])),
   http.get(`${API}/v1/companies/:companyId/commissions`, () => HttpResponse.json([])),
   http.get(`${API}/v1/companies/:companyId/commission-rules`, () => HttpResponse.json([])),
-  http.get(`${API}/v1/companies/:companyId/contracts`, () => HttpResponse.json([])),
-  http.get(`${API}/v1/companies/:companyId/contract-templates`, () => HttpResponse.json([])),
+  http.get(`${API}/v1/companies/:companyId/contracts`, () =>
+    HttpResponse.json(mockContracts.map(toCrmContract)),
+  ),
+  http.get(`${API}/v1/companies/:companyId/contracts/:contractId`, ({ params }) => {
+    const contract = mockContracts.find((item) => item.id === params.contractId);
+    if (!contract) return crmError(404, "CONTRACT_NOT_FOUND", "Contrato não encontrado.");
+    return HttpResponse.json(toCrmContract(contract));
+  }),
+  http.get(`${API}/v1/companies/:companyId/contract-templates`, () =>
+    HttpResponse.json(mockTemplates.map(toCrmTemplate)),
+  ),
   http.get(`${API}/v1/companies/:companyId/distribution/rules`, () => HttpResponse.json([])),
 
   http.post(`${API}/v1/companies`, async ({ request }) => {

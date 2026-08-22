@@ -362,19 +362,30 @@ export async function addLeadTimelineEntry(
 }
 
 export async function fetchLeadContracts(leadId: string) {
+  const statusLabel: Record<string, string> = {
+    DRAFT: "Rascunho",
+    GENERATED: "Enviado",
+    SIGNED: "Assinado",
+    ARCHIVED: "Arquivado",
+  };
   const { data } = await api.get<Array<{
     id: string;
     title?: string;
     status: string;
     template_id?: string | null;
-    data?: Record<string, string>;
-  }>>(companyPath(`/leads/${leadId}/contracts`));
-  return data.map((item) => ({
-    id: item.id,
-    templateName: item.title || "Contrato",
-    status: item.status,
-    value: Number(item.data?.value ?? item.data?.valor ?? 0),
-  }));
+    data?: Record<string, string> | null;
+  }> | null>(companyPath(`/leads/${leadId}/contracts`));
+  const list = Array.isArray(data) ? data : [];
+  return list.map((item) => {
+    const raw = item.data?.valor ?? item.data?.value ?? "0";
+    const value = Number(raw);
+    return {
+      id: item.id,
+      templateName: item.title || "Contrato",
+      status: statusLabel[item.status] ?? item.status,
+      value: Number.isFinite(value) ? value : 0,
+    };
+  });
 }
 
 export type LegalKanbanBoard = {

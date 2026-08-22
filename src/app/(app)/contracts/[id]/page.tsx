@@ -187,7 +187,10 @@ export default function ContractDetailPage() {
           <Stack direction="row" spacing={1} alignItems="center" mt={0.5}>
             <StatusBadge label={data.status} />
             <Typography variant="body2" color="text.secondary">
-              {data.templateName} · {formatCurrency(data.value)}
+              {data.templateName}
+              {data.title && data.title !== data.templateName ? ` · ${data.title}` : ""}
+              {" · "}
+              {formatCurrency(data.value)}
             </Typography>
           </Stack>
         </Box>

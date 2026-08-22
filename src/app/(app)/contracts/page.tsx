@@ -25,30 +25,13 @@ import { TableSkeleton } from "@/components/feedback/PageSkeletons";
 import { FeatureGate } from "@/components/auth/FeatureGate";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { queryKeys } from "@/lib/query/keys";
-import { fetchContracts, type Contract } from "@/modules/contracts/services";
+import {
+  fetchContracts,
+  filterContracts,
+  type Contract,
+} from "@/modules/contracts/services";
 
 const CONTRACT_STATUSES: Contract["status"][] = ["Rascunho", "Enviado", "Assinado", "Arquivado"];
-
-function dayKey(value?: string) {
-  return value?.slice(0, 10) || "";
-}
-
-function filterContracts(
-  contracts: Contract[],
-  filters: { lead: string; status: string; template: string; from: string; to: string },
-) {
-  const leadQ = filters.lead.trim().toLowerCase();
-  const templateQ = filters.template.trim().toLowerCase();
-  return contracts.filter((contract) => {
-    if (leadQ && !contract.leadName.toLowerCase().includes(leadQ)) return false;
-    if (filters.status && contract.status !== filters.status) return false;
-    if (templateQ && !contract.templateName.toLowerCase().includes(templateQ)) return false;
-    const created = dayKey(contract.createdAt);
-    if (filters.from && created && created < filters.from) return false;
-    if (filters.to && created && created > filters.to) return false;
-    return true;
-  });
-}
 
 export default function ContractsPage() {
   const router = useRouter();
@@ -224,7 +207,9 @@ export default function ContractsPage() {
                 <TableRow>
                   <TableCell colSpan={5}>
                     <Typography variant="body2" color="text.secondary" py={2} textAlign="center">
-                      Nenhum contrato encontrado com os filtros atuais.
+                      {hasActiveFilters
+                        ? "Nenhum contrato encontrado com os filtros atuais."
+                        : "Nenhum contrato cadastrado."}
                     </Typography>
                   </TableCell>
                 </TableRow>
