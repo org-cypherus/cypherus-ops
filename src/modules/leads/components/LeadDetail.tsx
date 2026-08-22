@@ -30,13 +30,16 @@ import { useRouter } from "next/navigation";
 import { useSnackbar } from "notistack";
 import { useState, type ReactNode } from "react";
 import { FeatureGate } from "@/components/auth/FeatureGate";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
+import { Role } from "@/lib/auth/permissions";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { ScheduleFromLeadDialog } from "@/modules/calendar/components/ScheduleFromLeadDialog";
 import { UpcomingLeadEvents } from "@/modules/calendar/components/UpcomingLeadEvents";
-import { useCanAccess } from "@/modules/auth/hooks";
+import { useCanAccess, useSession } from "@/modules/auth/hooks";
 import { useAfterFirstPaint } from "@/lib/hooks/useAfterFirstPaint";
+import { useUserDirectory } from "@/modules/users/hooks";
 import {
   useAddTimelineEntry,
   useDeleteLead,
@@ -116,6 +119,9 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const addTimeline = useAddTimelineEntry(lead.id);
   const { enqueueSnackbar } = useSnackbar();
   const router = useRouter();
+  const { data: session } = useSession();
+  const isComercial = session?.role === Role.Comercial;
+  const canChangeOwner = !isComercial;
 
   const [editing, setEditing] = useState<SectionKey>(null);
   const [draft, setDraft] = useState<Record<string, string | number>>({});
@@ -131,6 +137,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   // Agenda/contratos só com feature e depois do lead principal pintar.
   const secondaryReady = useAfterFirstPaint(lead.id);
   const contracts = useLeadContracts(lead.id, canViewContracts && secondaryReady);
+  const users = useUserDirectory(canChangeOwner);
 
   function startEdit(
     section: SectionKey,
@@ -147,6 +154,18 @@ export function LeadDetail({ lead }: { lead: Lead }) {
         setEditing(null);
       },
     });
+  }
+
+  function changeOwner(ownerId: string) {
+    if (!ownerId || ownerId === lead.ownerId) return;
+    updateLead.mutate(
+      { ownerId },
+      {
+        onSuccess: () => {
+          enqueueSnackbar("Responsável atualizado", { variant: "success" });
+        },
+      },
+    );
   }
 
   function submitTimelineEntry() {
@@ -179,14 +198,16 @@ export function LeadDetail({ lead }: { lead: Lead }) {
               </Avatar>
               <Box>
                 <Typography variant="h5">{lead.name}</Typography>
-                <Stack direction="row" spacing={1} alignItems="center" mt={0.5}>
+                <Stack direction="row" spacing={1} alignItems="center" mt={0.5} flexWrap="wrap" useFlexGap>
                   <StatusBadge label={lead.status} />
                   {lead.legalStatus ? (
                     <StatusBadge label={`Jurídico: ${lead.legalStatus}`} />
                   ) : null}
-                  <Typography variant="body2" color="text.secondary">
-                    Responsável: {lead.ownerName}
-                  </Typography>
+                  {!canChangeOwner ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Responsável: {lead.ownerName || "—"}
+                    </Typography>
+                  ) : null}
                 </Stack>
               </Box>
             </Stack>
@@ -228,6 +249,31 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                   Agendar retorno
                 </Button>
               </FeatureGate>
+              <PermissionGate permission="crm:editar">
+                {canChangeOwner ? (
+                  <TextField
+                    select
+                    size="small"
+                    label="Responsável"
+                    value={lead.ownerId || ""}
+                    disabled={updateLead.isPending || users.isLoading}
+                    onChange={(e) => changeOwner(e.target.value)}
+                    sx={{ minWidth: 200 }}
+                  >
+                    {lead.ownerId &&
+                    !(users.data || []).some((user) => user.id === lead.ownerId) ? (
+                      <MenuItem value={lead.ownerId}>
+                        {lead.ownerName || lead.ownerId}
+                      </MenuItem>
+                    ) : null}
+                    {(users.data || []).map((user) => (
+                      <MenuItem key={user.id} value={user.id}>
+                        {user.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : null}
+              </PermissionGate>
               <TextField
                 select
                 size="small"
