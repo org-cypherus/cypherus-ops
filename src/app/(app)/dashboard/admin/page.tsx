@@ -32,7 +32,10 @@ import {
   useChartMargins,
   useIsCompactChart,
 } from "@/modules/dashboard/ChartShell";
-import { MoneyVisibilityToggle, useMoneyVisibility } from "@/modules/dashboard/MoneyVisibility";
+import {
+  MoneyVisibilityToggle,
+  useMoneyVisibility,
+} from "@/modules/dashboard/MoneyVisibility";
 import {
   fetchAdminDashboard,
   fillRevenueByMonth,
@@ -86,24 +89,30 @@ export default function AdminDashboardPage() {
 
   const revenueSeries = useMemo(() => {
     if (!data) return [];
-    const filled = fillRevenueByMonth(data.revenueByMonth, data.from ?? from, data.to ?? to);
-    if (data.revenueByMonth.some((item) => item.amount > 0) && !filled.some((item) => item.amount > 0)) {
+    const filled = fillRevenueByMonth(
+      data.revenueByMonth,
+      data.from ?? from,
+      data.to ?? to,
+    );
+    if (
+      data.revenueByMonth.some((item) => item.amount > 0) &&
+      !filled.some((item) => item.amount > 0)
+    ) {
       return data.revenueByMonth;
     }
     return filled.length ? filled : data.revenueByMonth;
   }, [data, from, to]);
 
   const hasRevenueBars = revenueSeries.some((item) => item.amount > 0);
-  const performance = data?.performance ?? [];
   const ownerLabels = useMemo(
     () =>
       Object.fromEntries(
-        performance.map((row) => [
+        (data?.performance ?? []).map((row) => [
           row.ownerUserId,
           truncateLabel(row.ownerName, isCompact ? 10 : 16),
         ]),
       ),
-    [performance, isCompact],
+    [data?.performance, isCompact],
   );
 
   if (isLoading) {
@@ -130,7 +139,10 @@ export default function AdminDashboardPage() {
       label: "Conversão (assinados / leads)",
       value: formatPercent(data.conversion),
     },
-    { label: "Receita (pagamentos confirmados)", value: formatMoney(data.revenue) },
+    {
+      label: "Receita (pagamentos confirmados)",
+      value: formatMoney(data.revenue),
+    },
     { label: "Ticket médio", value: formatMoney(data.avgTicket) },
     { label: "Contratos assinados", value: String(data.signedContracts) },
     { label: "Contratos pendentes", value: String(data.pendingContracts) },
@@ -139,6 +151,7 @@ export default function AdminDashboardPage() {
     { label: "Usuários ativos", value: String(data.activeUsers) },
   ];
 
+  const performance = data.performance;
   const periodLabel =
     data.from && data.to ? `${data.from} → ${data.to}` : `${from} → ${to}`;
 
@@ -151,10 +164,17 @@ export default function AdminDashboardPage() {
         gap={2}
       >
         <Box minWidth={0}>
-          <Typography variant="h4" sx={{ fontSize: { xs: "1.5rem", sm: "2rem" } }}>
+          <Typography
+            variant="h4"
+            sx={{ fontSize: { xs: "1.5rem", sm: "2rem" } }}
+          >
             Dashboard Administrativo
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-word" }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ wordBreak: "break-word" }}
+          >
             Totais da empresa no CRM · período {periodLabel}
           </Typography>
         </Box>
@@ -165,7 +185,9 @@ export default function AdminDashboardPage() {
             size="small"
             label="Período"
             value={period}
-            onChange={(e) => router.push(`/dashboard/admin?period=${e.target.value}`)}
+            onChange={(e) =>
+              router.push(`/dashboard/admin?period=${e.target.value}`)
+            }
             sx={{ minWidth: { xs: 120, sm: 140 } }}
           >
             <MenuItem value="7">7 dias</MenuItem>
@@ -178,15 +200,28 @@ export default function AdminDashboardPage() {
 
       <Grid container spacing={2}>
         {kpis.map((kpi) => (
-          <Grid key={kpi.label} size={{ xs: 12, sm: 6, md: 4, lg: 3 }} sx={{ minWidth: 0 }}>
+          <Grid
+            key={kpi.label}
+            size={{ xs: 12, sm: 6, md: 4, lg: 3 }}
+            sx={{ minWidth: 0 }}
+          >
             <Card variant="outlined" sx={cardSx}>
               <CardContent sx={{ py: 1.75, "&:last-child": { pb: 1.75 } }}>
-                <Typography variant="body2" color="text.secondary" noWrap title={kpi.label}>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  noWrap
+                  title={kpi.label}
+                >
                   {kpi.label}
                 </Typography>
                 <Typography
                   variant="h6"
-                  sx={{ mt: 0.75, fontSize: { xs: "1.05rem", md: "1.15rem" }, wordBreak: "break-word" }}
+                  sx={{
+                    mt: 0.75,
+                    fontSize: { xs: "1.05rem", md: "1.15rem" },
+                    wordBreak: "break-word",
+                  }}
                 >
                   {kpi.value}
                 </Typography>
@@ -203,7 +238,8 @@ export default function AdminDashboardPage() {
               <Box>
                 <Typography variant="h6">Receita mensal</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Pagamentos confirmados por mês · total {formatMoney(data.revenue)}
+                  Pagamentos confirmados por mês · total{" "}
+                  {formatMoney(data.revenue)}
                 </Typography>
               </Box>
               {hasRevenueBars ? (
@@ -219,15 +255,19 @@ export default function AdminDashboardPage() {
                           scaleType: "band",
                           tickLabelStyle: {
                             fontSize: isCompact ? 10 : 12,
-                            angle: isCompact && revenueSeries.length > 4 ? -35 : 0,
-                            textAnchor: isCompact && revenueSeries.length > 4 ? "end" : "middle",
+                            angle:
+                              isCompact && revenueSeries.length > 4 ? -35 : 0,
+                            textAnchor:
+                              isCompact && revenueSeries.length > 4
+                                ? "end"
+                                : "middle",
                           },
-                          valueFormatter: (value) => formatMonthLabel(String(value ?? "")),
+                          valueFormatter: (value) =>
+                            formatMonthLabel(String(value ?? "")),
                         },
                       ]}
                       yAxis={[
                         {
-                          width: isCompact ? 48 : 56,
                           valueFormatter: moneyAxisFormatter,
                           tickLabelStyle: { fontSize: isCompact ? 10 : 12 },
                         },
@@ -236,7 +276,8 @@ export default function AdminDashboardPage() {
                         {
                           data: revenueSeries.map((item) => item.amount),
                           label: "Receita",
-                          valueFormatter: (value) => formatMoney(Number(value ?? 0)),
+                          valueFormatter: (value) =>
+                            formatMoney(Number(value ?? 0)),
                         },
                       ]}
                       slotProps={{
@@ -244,7 +285,11 @@ export default function AdminDashboardPage() {
                       }}
                     />
                   </ChartShell>
-                  <TableContainer component={Paper} variant="outlined" sx={tableWrapSx}>
+                  <TableContainer
+                    component={Paper}
+                    variant="outlined"
+                    sx={tableWrapSx}
+                  >
                     <Table size="small" sx={{ minWidth: 280 }}>
                       <TableHead>
                         <TableRow>
@@ -258,9 +303,13 @@ export default function AdminDashboardPage() {
                           .filter((item) => item.amount > 0 || item.count > 0)
                           .map((item) => (
                             <TableRow key={item.month}>
-                              <TableCell>{formatMonthLabel(item.month)}</TableCell>
+                              <TableCell>
+                                {formatMonthLabel(item.month)}
+                              </TableCell>
                               <TableCell align="right">{item.count}</TableCell>
-                              <TableCell align="right">{formatMoney(item.amount)}</TableCell>
+                              <TableCell align="right">
+                                {formatMoney(item.amount)}
+                              </TableCell>
                             </TableRow>
                           ))}
                       </TableBody>
@@ -307,18 +356,22 @@ export default function AdminDashboardPage() {
                       slotProps={{
                         legend: {
                           direction: "row",
-                          position: { vertical: "bottom", horizontal: "middle" },
-                          sx: {
-                            fontSize: 11,
-                            maxWidth: "100%",
-                            flexWrap: "wrap",
-                            justifyContent: "center",
+                          position: {
+                            vertical: "bottom",
+                            horizontal: "middle",
                           },
+                          padding: 0,
+                          itemGap: 8,
+                          labelStyle: { fontSize: 11 },
                         },
                       }}
                     />
                   </ChartShell>
-                  <TableContainer component={Paper} variant="outlined" sx={tableWrapSx}>
+                  <TableContainer
+                    component={Paper}
+                    variant="outlined"
+                    sx={tableWrapSx}
+                  >
                     <Table size="small" sx={{ minWidth: 220 }}>
                       <TableHead>
                         <TableRow>
@@ -359,9 +412,17 @@ export default function AdminDashboardPage() {
           </Box>
           {performance.length ? (
             <>
-              <ChartShell height={Math.max(240, performance.length * (isCompact ? 44 : 36) + 80)}>
+              <ChartShell
+                height={Math.max(
+                  240,
+                  performance.length * (isCompact ? 44 : 36) + 80,
+                )}
+              >
                 <BarChart
-                  height={Math.max(240, performance.length * (isCompact ? 44 : 36) + 80)}
+                  height={Math.max(
+                    240,
+                    performance.length * (isCompact ? 44 : 36) + 80,
+                  )}
                   layout="horizontal"
                   margin={{
                     ...moneyMargins,
@@ -373,8 +434,8 @@ export default function AdminDashboardPage() {
                     {
                       data: performance.map((row) => row.ownerUserId),
                       scaleType: "band",
-                      width: isCompact ? 68 : 96,
-                      valueFormatter: (value) => ownerLabels[String(value ?? "")] ?? String(value ?? ""),
+                      valueFormatter: (value) =>
+                        ownerLabels[String(value ?? "")] ?? String(value ?? ""),
                       tickLabelStyle: { fontSize: isCompact ? 10 : 12 },
                     },
                   ]}
@@ -388,7 +449,8 @@ export default function AdminDashboardPage() {
                     {
                       data: performance.map((row) => row.potentialValue),
                       label: "Valor potencial",
-                      valueFormatter: (value) => formatMoney(Number(value ?? 0)),
+                      valueFormatter: (value) =>
+                        formatMoney(Number(value ?? 0)),
                     },
                   ]}
                   slotProps={{
@@ -396,7 +458,11 @@ export default function AdminDashboardPage() {
                   }}
                 />
               </ChartShell>
-              <TableContainer component={Paper} variant="outlined" sx={tableWrapSx}>
+              <TableContainer
+                component={Paper}
+                variant="outlined"
+                sx={tableWrapSx}
+              >
                 <Table size="small" sx={{ minWidth: 480 }}>
                   <TableHead>
                     <TableRow>
@@ -410,11 +476,19 @@ export default function AdminDashboardPage() {
                   <TableBody>
                     {performance.map((row) => (
                       <TableRow key={row.ownerUserId}>
-                        <TableCell sx={{ wordBreak: "break-word" }}>{row.ownerName}</TableCell>
+                        <TableCell sx={{ wordBreak: "break-word" }}>
+                          {row.ownerName}
+                        </TableCell>
                         <TableCell align="right">{row.leadCount}</TableCell>
-                        <TableCell align="right">{row.convertedCount}</TableCell>
-                        <TableCell align="right">{formatPercent(row.conversionRate)}</TableCell>
-                        <TableCell align="right">{formatMoney(row.potentialValue)}</TableCell>
+                        <TableCell align="right">
+                          {row.convertedCount}
+                        </TableCell>
+                        <TableCell align="right">
+                          {formatPercent(row.conversionRate)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {formatMoney(row.potentialValue)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
