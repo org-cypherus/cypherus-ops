@@ -35,7 +35,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSnackbar } from "notistack";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
@@ -51,6 +51,10 @@ import { defaultPasswordFromName } from "@/lib/utils/password";
 import { formatDate } from "@/lib/utils/format";
 import { OrphanLeadsPanel } from "@/modules/admin/components/OrphanLeadsPanel";
 import { ReassignLeadsOnDeleteDialog } from "@/modules/admin/components/ReassignLeadsOnDeleteDialog";
+import {
+  buildManagerExitDestinations,
+  ReassignManagerExitDialog,
+} from "@/modules/admin/components/ReassignManagerExitDialog";
 import { UserOrgTree } from "@/modules/admin/components/UserOrgTree";
 import { UserPermissionsEditor } from "@/modules/admin/components/UserPermissionsEditor";
 import { editablePermissions } from "@/modules/admin/permission-modules";
@@ -68,6 +72,17 @@ import {
   updateUser,
   type AppUser,
 } from "@/modules/admin/services";
+import {
+  ensureTeamNamed,
+  fetchTeamsResilient,
+  fetchTeamsWithMembers,
+  findManagedTeamForUser,
+  teamNameOptions,
+  teamNamesInUse,
+  updateTeam,
+  upsertTeamMember,
+  type CrmTeam,
+} from "@/modules/admin/teams";
 import { useSession } from "@/modules/auth/hooks";
 
 type SavePayload = {
@@ -77,6 +92,17 @@ type SavePayload = {
 };
 
 type UsersTab = "list" | "tree";
+
+const CUSTOM_TEAM_VALUE = "__custom__";
+
+type PendingManagerExit = {
+  fromTeam: CrmTeam;
+  managerName: string;
+  collaboratorIds: string[];
+  destinations: ReturnType<typeof buildManagerExitDestinations>;
+  after: "deactivate" | "save";
+  savePayload?: SavePayload;
+};
 
 export default function UsersPage() {
   const theme = useTheme();
@@ -97,6 +123,9 @@ export default function UsersPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AppUser | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [leadsReassignOpen, setLeadsReassignOpen] = useState(false);
+  const [pendingManagerExit, setPendingManagerExit] = useState<PendingManagerExit | null>(null);
+  const [teamSelectMode, setTeamSelectMode] = useState<"list" | "custom">("list");
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
   const [createdEmail, setCreatedEmail] = useState<string | null>(null);
   const [draftPermissions, setDraftPermissions] = useState<Permission[]>([]);
@@ -126,6 +155,37 @@ export default function UsersPage() {
     queryFn: fetchUsers,
   });
 
+  const teamsQuery = useQuery({
+    queryKey: queryKeys.teams,
+    queryFn: async () => {
+      const ownerId =
+        data?.find((user) => user.isOwner)?.id ??
+        data?.find((user) => user.role === Role.Administrador)?.id ??
+        meId ??
+        undefined;
+      const result = await fetchTeamsResilient(ownerId);
+      return result.teams
+        .filter((team) => team.is_active)
+        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+    },
+    enabled: Boolean(session.data) && (open || tab === "tree"),
+  });
+
+  const teamOptions = teamsQuery.data ?? [];
+  const teamNames = useMemo(
+    () => teamNameOptions(teamsQuery.data ?? []),
+    [teamsQuery.data],
+  );
+  const ownerIdForTeams =
+    data?.find((user) => user.isOwner)?.id ??
+    data?.find((user) => user.role === Role.Administrador)?.id ??
+    meId ??
+    undefined;
+  const usedTeamNames = useMemo(
+    () => teamNamesInUse(teamsQuery.data ?? [], ownerIdForTeams),
+    [teamsQuery.data, ownerIdForTeams],
+  );
+
   const editDetailQuery = useQuery({
     queryKey: queryKeys.userDetail(editing?.id ?? ""),
     queryFn: () => fetchUser(editing!.id),
@@ -143,7 +203,7 @@ export default function UsersPage() {
   const upgradePlan = nextPlanForMoreUsers(planCode);
   const limitHint = usersLimitLabel(features, activeCount);
   const showPermissions = Boolean(editing && isAdmin && !createdPassword);
-  const canSubmit = isValid && !editDetailQuery.isLoading;
+  const watchedTeam = watch("team");
 
   useEffect(() => {
     if (!open) return;
@@ -152,9 +212,11 @@ export default function UsersPage() {
       setDraftPermissions([]);
       setPermissionsDirty(false);
       setRoleAdjusted(false);
+      setTeamSelectMode("list");
       return;
     }
     const source = editDetailQuery.data ?? editing;
+    const names = teamNameOptions(teamsQuery.data ?? []);
     reset({
       name: source.name,
       email: source.email,
@@ -163,9 +225,10 @@ export default function UsersPage() {
       team: source.team || "",
       status: source.status === "Inativo" ? "Inativo" : "Ativo",
     });
+    setTeamSelectMode(source.team && !names.includes(source.team) ? "custom" : "list");
     setPermissionsDirty(false);
     setRoleAdjusted(false);
-  }, [open, editing, editDetailQuery.data, reset]);
+  }, [open, editing, editDetailQuery.data, reset, teamsQuery.data]);
 
   useEffect(() => {
     if (!editing || !permissionsQuery.data || permissionsDirty || roleAdjusted) return;
@@ -177,18 +240,48 @@ export default function UsersPage() {
 
   const save = useMutation({
     mutationFn: async ({ values, permissions, syncPermissions }: SavePayload) => {
+      const ownerId =
+        data?.find((user) => user.isOwner)?.id ??
+        data?.find((user) => user.role === Role.Administrador)?.id ??
+        meId ??
+        undefined;
+      const ensured = await ensureTeamNamed({ name: values.team, ownerId }).catch(() => null);
+      const selectedTeam =
+        ensured ??
+        teamOptions.find((team) => team.name.toLowerCase() === values.team.trim().toLowerCase());
+
       if (editing) {
         const user = await updateUser(editing.id, values);
         if (syncPermissions) {
           await syncUserPermissionOverrides(editing.id, permissions);
         }
+        if (selectedTeam && values.role !== Role.Administrador) {
+          await upsertTeamMember(selectedTeam.id, {
+            user_id: user.id,
+            is_leader: values.role === Role.Gestor,
+          }).catch(() => undefined);
+        }
+        if (values.role !== Role.Gestor || values.status === "Inativo") {
+          const managed = await findManagedTeamForUser(editing.id, ownerId);
+          if (managed && managed.collaboratorIds.length === 0) {
+            await updateTeam(managed.team.id, { manager_user_id: null }).catch(() => undefined);
+          }
+        }
         return { user, invitationToken: undefined as string | undefined };
       }
       const created = await createUser(values);
+      if (selectedTeam && values.role !== Role.Administrador) {
+        await upsertTeamMember(selectedTeam.id, {
+          user_id: created.id,
+          is_leader: values.role === Role.Gestor,
+        }).catch(() => undefined);
+      }
       return { user: created, invitationToken: created.invitationToken };
     },
     onSuccess: ({ invitationToken }, { values, syncPermissions }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.teams });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.orgTree });
       if (editing) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.userDetail(editing.id) });
         void queryClient.invalidateQueries({ queryKey: queryKeys.userPermissions(editing.id) });
@@ -212,20 +305,112 @@ export default function UsersPage() {
     },
   });
 
-  function submitForm(values: AdminUserFormValues) {
-    save.mutate({
+  const canSubmit =
+    isValid &&
+    !editDetailQuery.isLoading &&
+    !teamsQuery.isLoading &&
+    !save.isPending &&
+    Boolean(watchedTeam?.trim());
+
+  async function maybeRequireManagerExit(params: {
+    userId: string;
+    userName: string;
+    leavingManagerRole: boolean;
+    after: PendingManagerExit["after"];
+    savePayload?: SavePayload;
+  }): Promise<boolean> {
+    if (!params.leavingManagerRole) return false;
+    const ownerId =
+      data?.find((user) => user.isOwner)?.id ??
+      data?.find((user) => user.role === Role.Administrador)?.id ??
+      meId ??
+      undefined;
+    const managed = await findManagedTeamForUser(params.userId, ownerId);
+    if (!managed || managed.collaboratorIds.length === 0) return false;
+
+    const org = await fetchTeamsWithMembers(ownerId);
+    const treeUsers = (data || []).filter((user) => user.status !== "Inativo");
+    const owner = treeUsers.find((user) => user.isOwner) ?? null;
+    const managers = org.teams
+      .filter((team) => team.manager_user_id && team.manager_user_id !== owner?.id)
+      .map((team) => {
+        const manager = treeUsers.find((user) => user.id === team.manager_user_id);
+        return manager ? { user: manager, team } : null;
+      })
+      .filter((item): item is { user: AppUser; team: CrmTeam } => Boolean(item));
+
+    setPendingManagerExit({
+      fromTeam: managed.team,
+      managerName: params.userName,
+      collaboratorIds: managed.collaboratorIds,
+      destinations: buildManagerExitDestinations({
+        owner,
+        managers,
+        excludeTeamId: managed.team.id,
+      }),
+      after: params.after,
+      savePayload: params.savePayload,
+    });
+    return true;
+  }
+
+  async function submitForm(values: AdminUserFormValues) {
+    const payload: SavePayload = {
       values,
       permissions: draftPermissions,
       syncPermissions: Boolean(editing && canEditOverrides && permissionsDirty),
-    });
+    };
+    if (editing) {
+      const leavingManagerRole =
+        values.status === "Inativo" ||
+        (editing.role === Role.Gestor && values.role !== Role.Gestor);
+      const blocked = await maybeRequireManagerExit({
+        userId: editing.id,
+        userName: editing.name,
+        leavingManagerRole,
+        after: "save",
+        savePayload: payload,
+      });
+      if (blocked) return;
+    }
+    save.mutate(payload);
   }
+
+  async function requestDeactivate(user: { id: string; name: string }) {
+    setDeleteTarget(user);
+    const ownerId =
+      data?.find((item) => item.isOwner)?.id ??
+      data?.find((item) => item.role === Role.Administrador)?.id ??
+      meId ??
+      undefined;
+    const managed = await findManagedTeamForUser(user.id, ownerId);
+    if (managed && managed.collaboratorIds.length > 0) {
+      const blocked = await maybeRequireManagerExit({
+        userId: user.id,
+        userName: user.name,
+        leavingManagerRole: true,
+        after: "deactivate",
+      });
+      if (blocked) {
+        setLeadsReassignOpen(false);
+        return;
+      }
+    } else if (managed) {
+      await updateTeam(managed.team.id, { manager_user_id: null }).catch(() => undefined);
+    }
+    setLeadsReassignOpen(true);
+  }
+
   async function afterUserDeactivated() {
     await queryClient.invalidateQueries({ queryKey: queryKeys.userDirectory });
     await queryClient.invalidateQueries({ queryKey: queryKeys.users });
     await queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
     await queryClient.invalidateQueries({ queryKey: queryKeys.kanban });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.orgTree });
+    await queryClient.invalidateQueries({ queryKey: queryKeys.teams });
     await refetch();
     setDeleteTarget(null);
+    setLeadsReassignOpen(false);
   }
 
   function closeDialog() {
@@ -237,6 +422,7 @@ export default function UsersPage() {
     setDraftPermissions([]);
     setPermissionsDirty(false);
     setRoleAdjusted(false);
+    setTeamSelectMode("list");
   }
 
   function handlePermissionsChange(next: Permission[]) {
@@ -400,7 +586,7 @@ export default function UsersPage() {
                               disabled={!canDeactivate}
                               onChange={() => {
                                 if (canDeactivate) {
-                                  setDeleteTarget({ id: user.id, name: user.name });
+                                  void requestDeactivate({ id: user.id, name: user.name });
                                 }
                               }}
                             />
@@ -424,7 +610,7 @@ export default function UsersPage() {
                         <Tooltip title="Desativar">
                           <IconButton
                             size="small"
-                            onClick={() => setDeleteTarget({ id: user.id, name: user.name })}
+                            onClick={() => void requestDeactivate({ id: user.id, name: user.name })}
                           >
                             <DeleteOutlineIcon fontSize="small" />
                           </IconButton>
@@ -550,14 +736,78 @@ export default function UsersPage() {
                     </TextField>
                   )}
                 />
-                <TextField
-                  id="admin-user-team"
-                  label="Time"
-                  fullWidth
-                  required
-                  {...register("team")}
-                  error={Boolean(errors.team)}
-                  helperText={errors.team?.message}
+                <Controller
+                  name="team"
+                  control={control}
+                  render={({ field }) => {
+                    const selectValue =
+                      teamSelectMode === "custom"
+                        ? CUSTOM_TEAM_VALUE
+                        : field.value && teamNames.includes(field.value)
+                          ? field.value
+                          : field.value
+                            ? CUSTOM_TEAM_VALUE
+                            : "";
+                    return (
+                      <Stack spacing={1.5} sx={{ width: "100%" }}>
+                        <TextField
+                          id="admin-user-team"
+                          select
+                          label="Time"
+                          fullWidth
+                          required
+                          value={selectValue}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (next === CUSTOM_TEAM_VALUE) {
+                              setTeamSelectMode("custom");
+                              if (teamNames.includes(field.value)) field.onChange("");
+                              return;
+                            }
+                            setTeamSelectMode("list");
+                            field.onChange(next);
+                          }}
+                          onBlur={field.onBlur}
+                          inputRef={field.ref}
+                          disabled={teamsQuery.isLoading}
+                          error={Boolean(errors.team)}
+                          helperText={
+                            errors.team?.message ||
+                            (teamsQuery.isLoading
+                              ? "Carregando times…"
+                              : "Escolha um time pré-definido ou adicione outro")
+                          }
+                        >
+                          <MenuItem value="" disabled>
+                            Selecione o time
+                          </MenuItem>
+                          {teamNames.map((name) => {
+                            const inUse = usedTeamNames.has(name.toLowerCase());
+                            return (
+                              <MenuItem key={name} value={name}>
+                                {name}
+                                {inUse ? " · em uso" : ""}
+                              </MenuItem>
+                            );
+                          })}
+                          <MenuItem value={CUSTOM_TEAM_VALUE}>+ Adicionar time…</MenuItem>
+                        </TextField>
+                        {teamSelectMode === "custom" || selectValue === CUSTOM_TEAM_VALUE ? (
+                          <TextField
+                            id="admin-user-team-custom"
+                            label="Nome do novo time"
+                            fullWidth
+                            required
+                            value={field.value}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            onBlur={field.onBlur}
+                            error={Boolean(errors.team)}
+                            helperText={errors.team?.message || "Será criado no CRM ao salvar"}
+                          />
+                        ) : null}
+                      </Stack>
+                    );
+                  }}
                 />
               </Stack>
               {editing ? (
@@ -639,12 +889,45 @@ export default function UsersPage() {
       </Dialog>
 
       <ReassignLeadsOnDeleteDialog
-        open={Boolean(deleteTarget)}
+        open={Boolean(deleteTarget) && leadsReassignOpen}
         userId={deleteTarget?.id ?? null}
         userName={deleteTarget?.name}
-        onClose={() => setDeleteTarget(null)}
+        onClose={() => {
+          setDeleteTarget(null);
+          setLeadsReassignOpen(false);
+        }}
         onCompleted={afterUserDeactivated}
       />
+
+      {pendingManagerExit ? (
+        <ReassignManagerExitDialog
+          open
+          managerName={pendingManagerExit.managerName}
+          fromTeam={pendingManagerExit.fromTeam}
+          collaboratorIds={pendingManagerExit.collaboratorIds}
+          destinations={pendingManagerExit.destinations}
+          onClose={() => {
+            setPendingManagerExit(null);
+            if (pendingManagerExit.after === "deactivate") {
+              setDeleteTarget(null);
+              setLeadsReassignOpen(false);
+            }
+          }}
+          onCompleted={async () => {
+            const next = pendingManagerExit;
+            setPendingManagerExit(null);
+            await queryClient.invalidateQueries({ queryKey: queryKeys.orgTree });
+            await queryClient.invalidateQueries({ queryKey: queryKeys.teams });
+            if (next.after === "save" && next.savePayload) {
+              save.mutate(next.savePayload);
+              return;
+            }
+            if (next.after === "deactivate") {
+              setLeadsReassignOpen(true);
+            }
+          }}
+        />
+      ) : null}
     </Stack>
   );
 }
