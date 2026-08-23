@@ -52,6 +52,28 @@ describe("buildOrgTree", () => {
     expect(tree.managers).toHaveLength(1);
     expect(tree.managers[0]?.user.id).toBe("g1");
     expect(tree.managers[0]?.collaborators.map((item) => item.user.id)).toEqual(["c1"]);
+    expect(tree.ownerCollaborators).toEqual([]);
     expect(tree.unassigned.map((item) => item.id)).toEqual(["f1"]);
+  });
+
+  it("lists root-team members under ownerCollaborators", () => {
+    const owner = user({ id: "o1", name: "Owner", role: Role.Administrador, isOwner: true });
+    const direct = user({ id: "d1", name: "Direto", role: Role.Comercial });
+    const teams: CrmTeam[] = [
+      {
+        id: "t-root",
+        company_id: "co",
+        parent_team_id: null,
+        name: "Empresa",
+        manager_user_id: "o1",
+        is_active: true,
+      },
+    ];
+    const membersByTeamId: Record<string, CrmTeamMember[]> = {
+      "t-root": [{ team_id: "t-root", user_id: "d1", is_leader: false }],
+    };
+    const tree = buildOrgTree([owner, direct], teams, membersByTeamId);
+    expect(tree.ownerCollaborators.map((item) => item.user.id)).toEqual(["d1"]);
+    expect(tree.unassigned).toEqual([]);
   });
 });
