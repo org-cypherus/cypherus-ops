@@ -4,6 +4,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
 import EventAvailableOutlinedIcon from "@mui/icons-material/EventAvailableOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import MeetingRoomOutlinedIcon from "@mui/icons-material/MeetingRoomOutlined";
 import PhoneOutlinedIcon from "@mui/icons-material/PhoneOutlined";
 import VideocamOutlinedIcon from "@mui/icons-material/VideocamOutlined";
@@ -33,6 +34,8 @@ import { FeatureGate } from "@/components/auth/FeatureGate";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
+import { CurrencyField } from "@/components/inputs/CurrencyField";
+import { IntegerField } from "@/components/inputs/IntegerField";
 import { Role } from "@/lib/auth/permissions";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { ScheduleFromLeadDialog } from "@/modules/calendar/components/ScheduleFromLeadDialog";
@@ -48,6 +51,7 @@ import {
 } from "../hooks";
 import type { Lead, TimelineContactType } from "../types";
 import { PIPELINE_STAGES, TIMELINE_CONTACT_TYPES } from "../types";
+import { timelineEventLabel } from "../timeline-labels";
 import { LeadAttachments } from "./LeadAttachments";
 
 const CONTACT_META: Record<
@@ -81,9 +85,13 @@ const CONTACT_META: Record<
   },
 };
 
-function timelineIcon(type: string) {
+function timelineEventMeta(type: string) {
   if (type in CONTACT_META) return CONTACT_META[type as TimelineContactType];
-  return null;
+  return {
+    icon: <HistoryOutlinedIcon fontSize="small" />,
+    color: "#546E7A",
+    label: timelineEventLabel(type),
+  };
 }
 
 function Field({
@@ -692,52 +700,36 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                         setDraft((d) => ({ ...d, bank: e.target.value }))
                       }
                     />
-                    <TextField
+                    <IntegerField
                       label="Parcelas"
-                      type="number"
                       size="small"
-                      value={draft.installments || 0}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          installments: Number(e.target.value),
-                        }))
+                      value={Number(draft.installments || 0)}
+                      onChange={(installments) =>
+                        setDraft((d) => ({ ...d, installments }))
                       }
                     />
-                    <TextField
+                    <CurrencyField
                       label="Valor parcela"
-                      type="number"
                       size="small"
-                      value={draft.installmentValue || 0}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          installmentValue: Number(e.target.value),
-                        }))
+                      value={Number(draft.installmentValue || 0)}
+                      onChange={(installmentValue) =>
+                        setDraft((d) => ({ ...d, installmentValue }))
                       }
                     />
-                    <TextField
+                    <CurrencyField
                       label="Valor financiado"
-                      type="number"
                       size="small"
-                      value={draft.financedValue || 0}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          financedValue: Number(e.target.value),
-                        }))
+                      value={Number(draft.financedValue || 0)}
+                      onChange={(financedValue) =>
+                        setDraft((d) => ({ ...d, financedValue }))
                       }
                     />
-                    <TextField
+                    <CurrencyField
                       label="Valor total"
-                      type="number"
                       size="small"
-                      value={draft.totalValue || 0}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          totalValue: Number(e.target.value),
-                        }))
+                      value={Number(draft.totalValue || 0)}
+                      onChange={(totalValue) =>
+                        setDraft((d) => ({ ...d, totalValue }))
                       }
                     />
                     <TextField
@@ -985,7 +977,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 >
                   <Stack spacing={1.5} divider={<Divider flexItem />}>
                     {lead.timeline.map((event) => {
-                      const meta = timelineIcon(event.type);
+                      const meta = timelineEventMeta(event.type);
                       return (
                         <Stack
                           key={event.id}
@@ -997,17 +989,15 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                             sx={{
                               width: 32,
                               height: 32,
-                              bgcolor: meta
-                                ? `${meta.color}22`
-                                : "action.hover",
-                              color: meta?.color || "text.secondary",
+                              bgcolor: `${meta.color}22`,
+                              color: meta.color,
                             }}
                           >
-                            {meta?.icon || event.type.charAt(0)}
+                            {meta.icon}
                           </Avatar>
                           <Box flex={1} minWidth={0}>
                             <Typography variant="subtitle2">
-                              {meta?.label || event.type}
+                              {meta.label}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
                               {event.description}

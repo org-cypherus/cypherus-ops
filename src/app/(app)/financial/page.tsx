@@ -340,7 +340,12 @@ export default function FinancialPage() {
           { label: "Receita recebida", value: formatCurrency(received) },
           { label: "Pendências", value: formatCurrency(pending) },
           ...(commissionsEnabled
-            ? [{ label: "Comissões a pagar", value: formatCurrency(commissionsTotal) }]
+            ? [
+                {
+                  label: "Comissões a pagar",
+                  value: commissions.isLoading ? "Carregando…" : formatCurrency(commissionsTotal),
+                },
+              ]
             : []),
         ].map((kpi) => (
           <Grid key={kpi.label} size={{ xs: 12, md: commissionsEnabled ? 4 : 6 }}>
@@ -464,7 +469,16 @@ export default function FinancialPage() {
                   CRM: uma regra vigente por empresa (`PERCENT` ou `FIXED`). Sem regra ativa o
                   pagamento confirma, mas pode não gerar comissão.
                 </Typography>
-                {(rules.data || []).map((rule) => (
+                {rules.isLoading ? (
+                  <Box py={2} display="flex" justifyContent="center">
+                    <CircularProgress size={22} />
+                  </Box>
+                ) : !(rules.data || []).length ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Nenhuma regra cadastrada.
+                  </Typography>
+                ) : (
+                  (rules.data || []).map((rule) => (
                   <Stack
                     key={rule.id}
                     direction="row"
@@ -502,7 +516,8 @@ export default function FinancialPage() {
                       </IconButton>
                     </Stack>
                   </Stack>
-                ))}
+                ))
+                )}
               </CardContent>
             </Card>
             </FeatureGate>

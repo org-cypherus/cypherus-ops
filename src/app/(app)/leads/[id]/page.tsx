@@ -19,7 +19,7 @@ export default function LeadDetailPage() {
   }
 
   return (
-    <Stack spacing={2}>
+    <Stack spacing={2} sx={{ pb: 4 }}>
       <Button component={Link} href={backHref} sx={{ alignSelf: "flex-start" }}>
         {backLabel}
       </Button>

@@ -20,10 +20,15 @@ function periodBounds(days = 30) {
 }
 
 /** Prefetch pós-sessão: home comercial (kanban) + diretório de users. */
-export function prefetchWarmQueries(queryClient: QueryClient, session: SessionUser) {
+export function prefetchWarmQueries(
+  queryClient: QueryClient,
+  session: SessionUser,
+  options?: { pathname?: string },
+) {
   const tasks: Promise<unknown>[] = [];
+  const onLeadsHome = options?.pathname === "/leads";
 
-  if (session.permissions.includes("crm:visualizar")) {
+  if (session.permissions.includes("crm:visualizar") && !onLeadsHome) {
     tasks.push(
       queryClient.prefetchQuery({
         queryKey: queryKeys.kanban,

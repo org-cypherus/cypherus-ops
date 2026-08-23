@@ -10,8 +10,10 @@ import {
 } from "@mui/material";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { PieChart } from "@mui/x-charts/PieChart";
+import { pieChartLegendLayout } from "@/components/charts/pie-legend";
 import { useMemo } from "react";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
+import { humanizeEnumLabel } from "@/lib/utils/labels";
 import { buildCashPanelMetrics } from "../cash-metrics";
 import type { Payment } from "../services";
 
@@ -65,13 +67,13 @@ export function FinancialCashPanel({ payments }: { payments: Payment[] }) {
               </Typography>
               {mixHasData ? (
                 <PieChart
-                  height={280}
+                  {...pieChartLegendLayout}
                   series={[
                     {
                       data: metrics.statusMix.map((slice, index) => ({
                         id: index,
                         value: slice.amount,
-                        label: `${slice.status} (${slice.count})`,
+                        label: `${humanizeEnumLabel(slice.status)} (${slice.count})`,
                       })),
                     },
                   ]}

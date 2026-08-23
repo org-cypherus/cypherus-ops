@@ -26,6 +26,7 @@ import { useMemo } from "react";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { queryKeys } from "@/lib/query/keys";
 import { formatPercent } from "@/lib/utils/format";
+import { humanizeEnumLabel } from "@/lib/utils/labels";
 import {
   ChartShell,
   useChartMargins,
@@ -292,7 +293,10 @@ export default function AdminDashboardPage() {
                           data: data.leadsByOrigin.map((item, index) => ({
                             id: index,
                             value: item.value,
-                            label: truncateLabel(item.origin, isCompact ? 12 : 18),
+                            label: truncateLabel(
+                              humanizeEnumLabel(item.origin),
+                              isCompact ? 12 : 18,
+                            ),
                           })),
                           innerRadius: isCompact ? 36 : 48,
                           outerRadius: isCompact ? 72 : 90,
@@ -325,7 +329,9 @@ export default function AdminDashboardPage() {
                       <TableBody>
                         {data.leadsByOrigin.map((item) => (
                           <TableRow key={item.origin}>
-                            <TableCell sx={{ wordBreak: "break-word" }}>{item.origin}</TableCell>
+                            <TableCell sx={{ wordBreak: "break-word" }}>
+                              {humanizeEnumLabel(item.origin)}
+                            </TableCell>
                             <TableCell align="right">{item.value}</TableCell>
                           </TableRow>
                         ))}

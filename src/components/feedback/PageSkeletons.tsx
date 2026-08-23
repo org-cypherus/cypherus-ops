@@ -37,7 +37,9 @@ export function KanbanSkeleton({ columns = 4 }: { columns?: number }) {
         display: "flex",
         gap: 1.5,
         overflowX: "auto",
-        alignItems: "flex-start",
+        alignItems: "stretch",
+        height: "100%",
+        minHeight: 280,
         pb: 1,
       }}
     >
@@ -47,6 +49,7 @@ export function KanbanSkeleton({ columns = 4 }: { columns?: number }) {
           variant="outlined"
           sx={{
             flex: "0 0 260px",
+            height: "100%",
             p: 1.5,
             display: "flex",
             flexDirection: "column",

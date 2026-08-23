@@ -17,8 +17,10 @@ import {
 } from "@mui/material";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { PieChart } from "@mui/x-charts/PieChart";
+import { pieChartLegendLayout } from "@/components/charts/pie-legend";
 import { useMemo } from "react";
 import { formatCurrency, formatPercent } from "@/lib/utils/format";
+import { humanizeEnumLabel } from "@/lib/utils/labels";
 import { buildCommissionPanelMetrics } from "../commission-metrics";
 import type { Commission } from "../services";
 
@@ -114,13 +116,13 @@ export function FinancialCommissionsPanel({ commissions }: { commissions: Commis
                   Mix por tipo (R$)
                 </Typography>
                 <PieChart
-                  height={280}
+                  {...pieChartLegendLayout}
                   series={[
                     {
                       data: metrics.statusMix.map((slice, index) => ({
                         id: index,
                         value: slice.amount,
-                        label: `${slice.status} (${slice.count})`,
+                        label: `${humanizeEnumLabel(slice.status)} (${slice.count})`,
                       })),
                     },
                   ]}

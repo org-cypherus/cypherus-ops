@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  Box,
+  CircularProgress,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -25,7 +27,7 @@ export function GlobalSearchDialog() {
   const router = useRouter();
   const contractsEnabled = useFeature("contracts").enabled;
 
-  const { data } = useQuery({
+  const { data, isFetching } = useQuery({
     queryKey: queryKeys.search(q),
     queryFn: async () => {
       const { data } = await api.get<{
@@ -97,7 +99,12 @@ export function GlobalSearchDialog() {
             </List>
           </>
         ) : null}
-        {q.length >= 2 && !hasLeads && !hasContracts ? (
+        {q.length >= 2 && isFetching ? (
+          <Box display="flex" justifyContent="center" py={2}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : null}
+        {q.length >= 2 && !isFetching && !hasLeads && !hasContracts ? (
           <Typography color="text.secondary">Nenhum resultado.</Typography>
         ) : null}
       </DialogContent>

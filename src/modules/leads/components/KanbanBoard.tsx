@@ -79,7 +79,8 @@ function Column({
         minWidth: 260,
         width: 260,
         flex: "0 0 260px",
-        alignSelf: "flex-start",
+        height: "100%",
+        minHeight: 0,
         display: "flex",
         flexDirection: "column",
         bgcolor: isOver ? "action.hover" : "background.paper",
@@ -100,7 +101,7 @@ function Column({
           </Typography>
         ) : null}
       </Stack>
-      <Box pr={0.25}>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.25 }}>
         {leads.map((lead) => (
           <LeadCard key={lead.id} lead={lead} />
         ))}
@@ -139,22 +140,26 @@ export function KanbanBoard({ board }: { board: KanbanBoardType }) {
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-      <Box
-        display="flex"
-        gap={1.5}
-        alignItems="flex-start"
-        pb={0.5}
-        sx={{
-          overflowX: "auto",
-          overflowY: "visible",
-        }}
-      >
-        {board.columns.map((column) => (
-          <Column key={column.status} {...column} />
-        ))}
-      </Box>
-      <DragOverlay>{active ? <LeadCard lead={active} dragging /> : null}</DragOverlay>
-    </DndContext>
+    <Box sx={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+        <Box
+          display="flex"
+          gap={1.5}
+          alignItems="stretch"
+          pb={0.5}
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflowX: "auto",
+            overflowY: "hidden",
+          }}
+        >
+          {board.columns.map((column) => (
+            <Column key={column.status} {...column} />
+          ))}
+        </Box>
+        <DragOverlay>{active ? <LeadCard lead={active} dragging /> : null}</DragOverlay>
+      </DndContext>
+    </Box>
   );
 }
