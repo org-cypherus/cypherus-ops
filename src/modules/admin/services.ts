@@ -167,8 +167,18 @@ export async function updateUser(id: string, values: Partial<AppUser>) {
   const data = await fetchUserDirectory();
   seedUserDirectory(data);
   const user = data.find((item) => item.id === id);
-  if (!user) throw new Error("Usuário não encontrado após atualizar.");
   const cached = getUserProfileExtras(id);
+  if (!user) {
+    // Soft-delete remove o usuário da listagem — ainda devolvemos o estado local.
+    return mapCrmUserToAppUser({
+      id,
+      name: values.name ?? "",
+      email: "",
+      status: values.status === "Inativo" ? "INACTIVE" : "ACTIVE",
+      phone: values.phone ?? cached?.phone,
+      job_title: values.team ?? cached?.team,
+    });
+  }
   return toAppUser({
     id: user.id,
     name: values.name ?? user.name,

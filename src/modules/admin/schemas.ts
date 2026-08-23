@@ -29,8 +29,8 @@ export const adminUserFormSchema = z.object({
   team: z
     .string()
     .trim()
-    .min(2, "Informe o time")
-    .max(80, "Time muito longo"),
+    .min(1, "Selecione o time")
+    .max(120, "Time muito longo"),
   status: z.enum(["Ativo", "Inativo"]),
 });
 
@@ -44,6 +44,6 @@ export const emptyAdminUserForm: AdminUserFormValues = {
   email: "",
   phone: "",
   role: Role.Comercial,
-  team: "Vendas",
+  team: "",
   status: "Ativo",
 };
