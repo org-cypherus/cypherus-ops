@@ -89,13 +89,21 @@ export function DistributeLeadsDialog({ open, onClose, leadIds }: Props) {
             label="Responsável"
             value={ownerId}
             onChange={(e) => setOwnerId(e.target.value)}
+            disabled={users.isLoading}
+            helperText={users.isLoading ? "Carregando…" : undefined}
             sx={{ mt: 2 }}
           >
-            {(users.data || []).map((u) => (
-              <MenuItem key={u.id} value={u.id}>
-                {u.name}
+            {users.isLoading ? (
+              <MenuItem value="" disabled>
+                Carregando…
               </MenuItem>
-            ))}
+            ) : (
+              (users.data || []).map((u) => (
+                <MenuItem key={u.id} value={u.id}>
+                  {u.name}
+                </MenuItem>
+              ))
+            )}
           </TextField>
         ) : null}
       </DialogContent>

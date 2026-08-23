@@ -215,14 +215,22 @@ export function LeadsPageClient() {
             label="Responsável"
             value={filters.ownerId || ""}
             onChange={(e) => setFilter("ownerId", e.target.value)}
+            disabled={users.isLoading}
+            helperText={users.isLoading ? "Carregando…" : undefined}
             sx={{ minWidth: 160 }}
           >
             <MenuItem value="">Todos</MenuItem>
-            {(users.data || []).map((u) => (
-              <MenuItem key={u.id} value={u.id}>
-                {u.name}
+            {users.isLoading ? (
+              <MenuItem value="__loading" disabled>
+                Carregando…
               </MenuItem>
-            ))}
+            ) : (
+              (users.data || []).map((u) => (
+                <MenuItem key={u.id} value={u.id}>
+                  {u.name}
+                </MenuItem>
+              ))
+            )}
           </TextField>
         ) : null}
         <TextField
@@ -339,7 +347,15 @@ export function LeadsPageClient() {
         </Paper>
       ) : null}
 
-      <Box sx={{ display: "flex", flexDirection: "column" }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: view === "kanban" ? "hidden" : "auto",
+        }}
+      >
         {view === "kanban" ? (
           kanban.isLoading ? (
             <KanbanSkeleton />

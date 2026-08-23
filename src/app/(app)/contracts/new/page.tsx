@@ -23,6 +23,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
+import { CurrencyField } from "@/components/inputs/CurrencyField";
 import { formatCurrency } from "@/lib/utils/format";
 import { fetchLeads } from "@/modules/leads/services";
 import {
@@ -159,13 +160,21 @@ export default function ContractWizardPage() {
                 label="Lead"
                 value={leadId}
                 onChange={(e) => setLeadId(e.target.value)}
+                disabled={leads.isLoading}
+                helperText={leads.isLoading ? "Carregando leads…" : undefined}
                 fullWidth
               >
-                {(leads.data?.data || []).map((lead) => (
-                  <MenuItem key={lead.id} value={lead.id}>
-                    {lead.name} — {formatCurrency(lead.process.totalValue)}
+                {leads.isLoading ? (
+                  <MenuItem value="" disabled>
+                    Carregando…
                   </MenuItem>
-                ))}
+                ) : (
+                  (leads.data?.data || []).map((lead) => (
+                    <MenuItem key={lead.id} value={lead.id}>
+                      {lead.name} — {formatCurrency(lead.process.totalValue)}
+                    </MenuItem>
+                  ))
+                )}
               </TextField>
               <Button variant="contained" disabled={!leadId} onClick={() => setActiveStep(1)}>
                 Continuar
@@ -180,13 +189,21 @@ export default function ContractWizardPage() {
                 label="Modelo"
                 value={templateId}
                 onChange={(e) => setTemplateId(e.target.value)}
+                disabled={templates.isLoading}
+                helperText={templates.isLoading ? "Carregando modelos…" : undefined}
                 fullWidth
               >
-                {(templates.data || []).map((tpl) => (
-                  <MenuItem key={tpl.id} value={tpl.id}>
-                    {tpl.name}
+                {templates.isLoading ? (
+                  <MenuItem value="" disabled>
+                    Carregando…
                   </MenuItem>
-                ))}
+                ) : (
+                  (templates.data || []).map((tpl) => (
+                    <MenuItem key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                    </MenuItem>
+                  ))
+                )}
               </TextField>
               <Stack direction="row" spacing={1}>
                 <Button onClick={() => setActiveStep(0)}>Voltar</Button>
@@ -199,11 +216,10 @@ export default function ContractWizardPage() {
 
           {activeStep === 2 && (
             <Stack spacing={2}>
-              <TextField
-                type="number"
+              <CurrencyField
                 label="Valor do contrato"
                 value={value}
-                onChange={(e) => setValue(Number(e.target.value))}
+                onChange={setValue}
                 fullWidth
               />
               <Typography variant="body2" color="text.secondary">

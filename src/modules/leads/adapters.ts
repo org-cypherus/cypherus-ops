@@ -1,5 +1,6 @@
 import type { Attachment, KanbanBoard, Lead, LeadPriority, PipelineStage } from "./types";
 import { PIPELINE_STAGES } from "./types";
+import { timelineEventLabel } from "./timeline-labels";
 
 export type CrmLead = {
   id: string;
@@ -175,7 +176,9 @@ export function toUiLead(
   const eventTimeline = (extras?.events ?? []).map((event, index) => ({
     id: `event-${index}`,
     type: event.type,
-    description: String(event.payload?.description ?? event.payload?.message ?? event.type),
+    description: String(
+      event.payload?.description ?? event.payload?.message ?? timelineEventLabel(event.type),
+    ),
     createdAt: event.created_at,
     userName: String(event.payload?.actor_name ?? "Sistema"),
   }));

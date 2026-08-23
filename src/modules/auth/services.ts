@@ -143,13 +143,13 @@ async function hydrateSession(
   });
   onPartial?.(partial);
 
-  const [{ data: roles }, subscriptionRes, plans] = await Promise.all([
+  const [{ data: roles }, subscriptionRes] = await Promise.all([
     api
       .get<RoleResponse[]>(`/v1/companies/${companyId}/users/${user.id}/roles`)
       .catch(() => ({ data: [] as RoleResponse[] })),
     api.get<SubscriptionResponse>(`/v1/companies/${companyId}/subscriptions/current`).catch(() => null),
-    loadPlansCatalog().catch(() => [] as PlanResponse[]),
   ]);
+  const plans = await loadPlansCatalog().catch(() => [] as PlanResponse[]);
 
   const subscription = subscriptionRes?.data;
   const plan = plans.find((item) => item.id === subscription?.plan_id);

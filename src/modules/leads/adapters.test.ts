@@ -65,3 +65,21 @@ describe("daysSince / toUiLead", () => {
     expect(ui.daysInStage).toBe(daysSince(ui.updatedAt, new Date()));
   });
 });
+
+describe("timeline events", () => {
+  it("maps timeline event labels in the description fallback", () => {
+    const ui = toUiLead(baseLead, "João", {
+      events: [
+        {
+          type: "CONTRACT_CREATED",
+          payload: { actor_name: "Sistema" },
+          created_at: "2026-08-20T12:00:00.000Z",
+        },
+      ],
+    });
+    expect(ui.timeline[0].type).toBe("CONTRACT_CREATED");
+    expect(ui.timeline[0].description).toBe("Contrato criado");
+    expect(ui.timeline[0].userName).toBe("Sistema");
+  });
+});
+

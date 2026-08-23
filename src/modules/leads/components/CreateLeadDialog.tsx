@@ -18,7 +18,8 @@ import {
 } from "@mui/material";
 import { useSnackbar } from "notistack";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
+import { CurrencyField } from "@/components/inputs/CurrencyField";
 import { formatCurrency } from "@/lib/utils/format";
 import { useSession } from "@/modules/auth/hooks";
 import { Role } from "@/lib/auth/permissions";
@@ -49,6 +50,7 @@ export function CreateLeadDialog({ open, onClose }: Props) {
     trigger,
     watch,
     getValues,
+    control,
     formState: { errors },
   } = useForm<LeadFormValues>({
     resolver: zodResolver(leadFormSchema),
@@ -102,7 +104,12 @@ export function CreateLeadDialog({ open, onClose }: Props) {
         ownerId: isComercial ? session?.id : formValues.ownerId,
         priority: formValues.priority,
         status: formValues.status,
-        tags: formValues.tags ? formValues.tags.split(",").map((t) => t.trim()).filter(Boolean) : [],
+        tags: formValues.tags
+          ? formValues.tags
+              .split(",")
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : [],
         observations: formValues.observations,
         process: { totalValue: formValues.totalValue },
       },
@@ -119,7 +126,8 @@ export function CreateLeadDialog({ open, onClose }: Props) {
 
   const ownerName = isComercial
     ? "Regra de distribuição do admin"
-    : users.data?.find((u) => u.id === values.ownerId)?.name || "Regra de distribuição do admin";
+    : users.data?.find((u) => u.id === values.ownerId)?.name ||
+      "Regra de distribuição do admin";
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -133,12 +141,35 @@ export function CreateLeadDialog({ open, onClose }: Props) {
           ))}
         </Stepper>
 
-        <Stack spacing={2} component="form" id="create-lead-form" onSubmit={handleSubmit(submit)}>
+        <Stack
+          spacing={2}
+          component="form"
+          id="create-lead-form"
+          onSubmit={handleSubmit(submit)}
+        >
           {activeStep === 0 ? (
             <>
-              <TextField label="Nome" error={Boolean(errors.name)} helperText={errors.name?.message} {...register("name")} fullWidth />
-              <TextField label="E-mail" error={Boolean(errors.email)} helperText={errors.email?.message} {...register("email")} fullWidth />
-              <TextField label="Telefone" error={Boolean(errors.phone)} helperText={errors.phone?.message} {...register("phone")} fullWidth />
+              <TextField
+                label="Nome"
+                error={Boolean(errors.name)}
+                helperText={errors.name?.message}
+                {...register("name")}
+                fullWidth
+              />
+              <TextField
+                label="E-mail"
+                error={Boolean(errors.email)}
+                helperText={errors.email?.message}
+                {...register("email")}
+                fullWidth
+              />
+              <TextField
+                label="Telefone"
+                error={Boolean(errors.phone)}
+                helperText={errors.phone?.message}
+                {...register("phone")}
+                fullWidth
+              />
               <TextField label="WhatsApp" {...register("whatsapp")} fullWidth />
               <TextField label="CPF" {...register("cpf")} fullWidth />
             </>
@@ -150,7 +181,15 @@ export function CreateLeadDialog({ open, onClose }: Props) {
               <TextField label="Campanha" {...register("campaign")} fullWidth />
               <TextField label="Canal" {...register("channel")} fullWidth />
               {!isComercial ? (
-                <TextField select label="Responsável" defaultValue="" {...register("ownerId")} fullWidth>
+                <TextField
+                  select
+                  label="Responsável"
+                  defaultValue=""
+                  disabled={users.isLoading}
+                  helperText={users.isLoading ? "Carregando…" : undefined}
+                  {...register("ownerId")}
+                  fullWidth
+                >
                   <MenuItem value="">Usar regra de distribuição</MenuItem>
                   {(users.data || []).map((u) => (
                     <MenuItem key={u.id} value={u.id}>
@@ -160,30 +199,66 @@ export function CreateLeadDialog({ open, onClose }: Props) {
                 </TextField>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  O responsável será definido pela regra de distribuição configurada pelo administrador
-                  (não fica automaticamente com quem cadastrou).
+                  O responsável será definido pela regra de distribuição
+                  configurada pelo administrador (não fica automaticamente com
+                  quem cadastrou).
                 </Typography>
               )}
-              <TextField select label="Prioridade" defaultValue="media" {...register("priority")} fullWidth>
+              <TextField
+                select
+                label="Prioridade"
+                defaultValue="media"
+                {...register("priority")}
+                fullWidth
+              >
                 <MenuItem value="baixa">baixa</MenuItem>
                 <MenuItem value="media">media</MenuItem>
                 <MenuItem value="alta">alta</MenuItem>
               </TextField>
-              <TextField select label="Status" defaultValue="Novo Lead" {...register("status")} fullWidth>
+              <TextField
+                select
+                label="Status"
+                defaultValue="Novo Lead"
+                {...register("status")}
+                fullWidth
+              >
                 {PIPELINE_STAGES.map((s) => (
                   <MenuItem key={s} value={s}>
                     {s}
                   </MenuItem>
                 ))}
               </TextField>
-              <TextField label="Tags (vírgula)" {...register("tags")} fullWidth />
+              <TextField
+                label="Tags (vírgula)"
+                {...register("tags")}
+                fullWidth
+              />
             </>
           ) : null}
 
           {activeStep === 2 ? (
             <>
-              <TextField label="Valor potencial" type="number" {...register("totalValue")} fullWidth />
-              <TextField label="Observações" multiline minRows={3} {...register("observations")} fullWidth />
+              <Controller
+                name="totalValue"
+                control={control}
+                render={({ field }) => (
+                  <CurrencyField
+                    label="Valor potencial"
+                    value={Number(field.value || 0)}
+                    onChange={field.onChange}
+                    error={Boolean(errors.totalValue)}
+                    helperText={errors.totalValue?.message}
+                    fullWidth
+                  />
+                )}
+              />
+              <TextField
+                label="Observações"
+                multiline
+                minRows={3}
+                {...register("observations")}
+                fullWidth
+              />
             </>
           ) : null}
 
@@ -199,20 +274,44 @@ export function CreateLeadDialog({ open, onClose }: Props) {
                 Confira os dados antes de criar
               </Typography>
               <Stack spacing={0.75}>
-                <Typography variant="body2"><strong>Nome:</strong> {getValues("name")}</Typography>
-                <Typography variant="body2"><strong>E-mail:</strong> {getValues("email")}</Typography>
-                <Typography variant="body2"><strong>Telefone:</strong> {getValues("phone")}</Typography>
-                <Typography variant="body2"><strong>CPF:</strong> {getValues("cpf") || "—"}</Typography>
-                <Typography variant="body2"><strong>Origem:</strong> {getValues("origin") || "—"}</Typography>
-                <Typography variant="body2"><strong>Campanha:</strong> {getValues("campaign") || "—"}</Typography>
-                <Typography variant="body2"><strong>Responsável:</strong> {ownerName}</Typography>
-                <Typography variant="body2"><strong>Prioridade:</strong> {getValues("priority")}</Typography>
-                <Typography variant="body2"><strong>Status:</strong> {getValues("status")}</Typography>
                 <Typography variant="body2">
-                  <strong>Valor:</strong> {formatCurrency(Number(getValues("totalValue") || 0))}
+                  <strong>Nome:</strong> {getValues("name")}
                 </Typography>
-                <Typography variant="body2"><strong>Tags:</strong> {getValues("tags") || "—"}</Typography>
-                <Typography variant="body2"><strong>Observações:</strong> {getValues("observations") || "—"}</Typography>
+                <Typography variant="body2">
+                  <strong>E-mail:</strong> {getValues("email")}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Telefone:</strong> {getValues("phone")}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>CPF:</strong> {getValues("cpf") || "—"}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Origem:</strong> {getValues("origin") || "—"}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Campanha:</strong> {getValues("campaign") || "—"}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Responsável:</strong> {ownerName}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Prioridade:</strong> {getValues("priority")}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Status:</strong> {getValues("status")}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Valor:</strong>{" "}
+                  {formatCurrency(Number(getValues("totalValue") || 0))}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Tags:</strong> {getValues("tags") || "—"}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Observações:</strong>{" "}
+                  {getValues("observations") || "—"}
+                </Typography>
               </Stack>
             </Box>
           ) : null}
@@ -229,7 +328,12 @@ export function CreateLeadDialog({ open, onClose }: Props) {
             Continuar
           </Button>
         ) : (
-          <Button type="submit" form="create-lead-form" variant="contained" disabled={createLead.isPending}>
+          <Button
+            type="submit"
+            form="create-lead-form"
+            variant="contained"
+            disabled={createLead.isPending}
+          >
             Confirmar e criar
           </Button>
         )}
