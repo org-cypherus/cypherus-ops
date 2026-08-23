@@ -15,7 +15,6 @@ import {
   Button,
   Card,
   CardContent,
-  Chip,
   CircularProgress,
   Divider,
   Grid2 as Grid,
@@ -23,7 +22,6 @@ import {
   MenuItem,
   Stack,
   TextField,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import Link from "next/link";
@@ -84,6 +82,18 @@ const CONTACT_META: Record<
     label: "Presencial",
   },
 };
+
+function ContactTypeOption({ type }: { type: TimelineContactType }) {
+  const meta = CONTACT_META[type];
+  return (
+    <Stack direction="row" spacing={1} alignItems="center">
+      <Box component="span" sx={{ display: "inline-flex", color: meta.color }}>
+        {meta.icon}
+      </Box>
+      <span>{meta.label}</span>
+    </Stack>
+  );
+}
 
 function timelineEventMeta(type: string) {
   if (type in CONTACT_META) return CONTACT_META[type as TimelineContactType];
@@ -902,48 +912,35 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 </Typography>
 
                 <Stack spacing={1.25} mb={2}>
-                  <Typography variant="caption" color="text.secondary">
-                    Registrar contato
-                  </Typography>
-                  <Stack
-                    direction="row"
-                    spacing={0.75}
-                    flexWrap="wrap"
-                    useFlexGap
+                  <TextField
+                    select
+                    size="small"
+                    fullWidth
+                    label="Tipo de contato"
+                    value={contactType}
+                    onChange={(e) =>
+                      setContactType(e.target.value as TimelineContactType)
+                    }
+                    slotProps={{
+                      select: {
+                        renderValue: (value) => (
+                          <ContactTypeOption type={value as TimelineContactType} />
+                        ),
+                      },
+                    }}
+                    sx={{
+                      "& .MuiSelect-select": {
+                        display: "flex",
+                        alignItems: "center",
+                      },
+                    }}
                   >
-                    {TIMELINE_CONTACT_TYPES.map((type) => {
-                      const meta = CONTACT_META[type];
-                      const selected = contactType === type;
-                      return (
-                        <Tooltip key={type} title={meta.label}>
-                          <Chip
-                            icon={
-                              <Box
-                                component="span"
-                                sx={{
-                                  display: "inline-flex",
-                                  color: selected ? "#fff" : meta.color,
-                                }}
-                              >
-                                {meta.icon}
-                              </Box>
-                            }
-                            label={meta.label}
-                            clickable
-                            size="small"
-                            onClick={() => setContactType(type)}
-                            sx={{
-                              bgcolor: selected ? meta.color : "transparent",
-                              color: selected ? "#fff" : "text.primary",
-                              borderColor: meta.color,
-                              border: "1px solid",
-                              "& .MuiChip-icon": { color: "inherit" },
-                            }}
-                          />
-                        </Tooltip>
-                      );
-                    })}
-                  </Stack>
+                    {TIMELINE_CONTACT_TYPES.map((type) => (
+                      <MenuItem key={type} value={type}>
+                        <ContactTypeOption type={type} />
+                      </MenuItem>
+                    ))}
+                  </TextField>
                   <TextField
                     size="small"
                     fullWidth
