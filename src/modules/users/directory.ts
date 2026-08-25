@@ -11,6 +11,9 @@ export type UserDirectoryEntry = {
   status?: string;
   is_owner?: boolean;
   created_at?: string | null;
+  phone?: string | null;
+  job_title?: string | null;
+  roles?: Array<{ id: string; code: string; name: string }>;
 };
 
 export async function fetchUserDirectory(): Promise<UserDirectoryEntry[]> {
@@ -22,6 +25,9 @@ export async function fetchUserDirectory(): Promise<UserDirectoryEntry[]> {
     status: user.status,
     is_owner: user.is_owner,
     created_at: user.created_at,
+    phone: user.phone,
+    job_title: user.job_title,
+    roles: Array.isArray(user.roles) ? user.roles : undefined,
   }));
   getQueryClient().setQueryData(queryKeys.userDirectory, list);
   return list;
@@ -61,6 +67,9 @@ export function seedUserDirectory(users: UserDirectoryEntry[]) {
       status: user.status,
       is_owner: user.is_owner,
       created_at: user.created_at,
+      phone: user.phone,
+      job_title: user.job_title,
+      roles: user.roles,
     })),
   );
 }

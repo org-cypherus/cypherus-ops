@@ -1,7 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { Role } from "@/lib/auth/permissions";
 import type { AppUser } from "./services";
-import { buildOrgTree, type CrmTeam, type CrmTeamMember } from "./teams";
+import {
+  buildOrgTree,
+  matchTeamName,
+  parseTeamMembersPayload,
+  TEAM_EMPTY_MEMBERS_MESSAGE,
+  TEAM_NOT_REGISTERED_MEMBERS_MESSAGE,
+  teamNameOptions,
+  type CrmTeam,
+  type CrmTeamMember,
+} from "./teams";
 
 function user(partial: Partial<AppUser> & Pick<AppUser, "id" | "name">): AppUser {
   return {
@@ -13,6 +22,53 @@ function user(partial: Partial<AppUser> & Pick<AppUser, "id" | "name">): AppUser
     ...partial,
   };
 }
+
+describe("teamNameOptions", () => {
+  beforeEach(() => {
+    window.localStorage.removeItem("cypherus.ops.extraTeamNames.v1");
+  });
+
+  it("keeps default teams first in the requested order", () => {
+    expect(teamNameOptions()).toEqual(["Comercial", "Gestor", "Operação", "Marketing"]);
+  });
+
+  it("appends extra and existing team names after the defaults", () => {
+    const existing: CrmTeam[] = [
+      {
+        id: "t1",
+        company_id: "co",
+        parent_team_id: null,
+        name: "Jurídico",
+        manager_user_id: null,
+        is_active: true,
+      },
+    ];
+    expect(teamNameOptions(existing, ["Suporte"])).toEqual([
+      "Comercial",
+      "Gestor",
+      "Operação",
+      "Marketing",
+      "Jurídico",
+      "Suporte",
+    ]);
+  });
+
+  it("does not duplicate names that match a default team", () => {
+    expect(teamNameOptions([], ["comercial", "Novo"])).toEqual([
+      "Comercial",
+      "Gestor",
+      "Operação",
+      "Marketing",
+      "Novo",
+    ]);
+  });
+
+  it("matches a default team name without regard to case", () => {
+    expect(matchTeamName("comercial", teamNameOptions())).toBe("Comercial");
+    expect(matchTeamName("  GESTOR ", teamNameOptions())).toBe("Gestor");
+    expect(matchTeamName("financeiro", teamNameOptions())).toBeUndefined();
+  });
+});
 
 describe("buildOrgTree", () => {
   it("builds owner → managers → collaborators and lists unassigned", () => {
@@ -75,5 +131,51 @@ describe("buildOrgTree", () => {
     const tree = buildOrgTree([owner, direct], teams, membersByTeamId);
     expect(tree.ownerCollaborators.map((item) => item.user.id)).toEqual(["d1"]);
     expect(tree.unassigned).toEqual([]);
+  });
+
+  it("keeps a lone owner as the root even without teams", () => {
+    const owner = user({ id: "o1", name: "Owner", role: Role.Administrador, isOwner: true });
+    const tree = buildOrgTree([owner], [], {});
+    expect(tree.owner?.id).toBe("o1");
+    expect(tree.rootTeam).toBeNull();
+    expect(tree.managers).toEqual([]);
+    expect(tree.ownerCollaborators).toEqual([]);
+    expect(tree.unassigned).toEqual([]);
+  });
+});
+
+describe("parseTeamMembersPayload", () => {
+  it("reads members from items and keeps a null message", () => {
+    expect(
+      parseTeamMembersPayload(
+        {
+          items: [{ team_id: "t1", user_id: "u1", is_leader: true }],
+          message: null,
+        },
+        "t1",
+      ),
+    ).toEqual({
+      items: [{ team_id: "t1", user_id: "u1", is_leader: true, joined_at: undefined }],
+      message: null,
+    });
+  });
+
+  it("returns the missing-team message with an empty list", () => {
+    expect(
+      parseTeamMembersPayload({ items: [], message: TEAM_NOT_REGISTERED_MEMBERS_MESSAGE }, "gone"),
+    ).toEqual({ items: [], message: TEAM_NOT_REGISTERED_MEMBERS_MESSAGE });
+  });
+
+  it("returns the empty-team message with an empty list", () => {
+    expect(
+      parseTeamMembersPayload({ items: [], message: TEAM_EMPTY_MEMBERS_MESSAGE }, "t1"),
+    ).toEqual({ items: [], message: TEAM_EMPTY_MEMBERS_MESSAGE });
+  });
+
+  it("fills team_id from the requested team when the item omits it", () => {
+    expect(parseTeamMembersPayload({ items: [{ user_id: "u2" }], message: null }, "t9")).toEqual({
+      items: [{ team_id: "t9", user_id: "u2", is_leader: false, joined_at: undefined }],
+      message: null,
+    });
   });
 });

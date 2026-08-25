@@ -1,5 +1,11 @@
 import { api } from "@/lib/api/client";
-import { mapApiPermissions, mapRoleCode, roleCodeFromUi, UI_TO_API_PERMISSION } from "@/lib/auth/mappers";
+import {
+  mapApiPermissions,
+  mapRoleCode,
+  resolveRoleName,
+  roleCodeFromUi,
+  UI_TO_API_PERMISSION,
+} from "@/lib/auth/mappers";
 import type { Permission, RoleName } from "@/lib/auth/permissions";
 import { companyPath } from "@/lib/auth/session";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
@@ -20,6 +26,14 @@ export type AppUser = {
   isOwner?: boolean;
 };
 
+type CrmRole = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+type AssignedRole = Pick<CrmRole, "code" | "name">;
+
 type CrmUser = {
   id: string;
   name: string;
@@ -29,12 +43,7 @@ type CrmUser = {
   phone?: string | null;
   job_title?: string | null;
   created_at?: string | null;
-};
-
-type CrmRole = {
-  id: string;
-  code: string;
-  name: string;
+  roles?: CrmRole[];
 };
 
 export type OverrideEffect = "ALLOW" | "DENY";
@@ -63,12 +72,29 @@ async function fetchRoles() {
 
 async function roleIdFor(role: RoleName, roles: CrmRole[]) {
   const code = roleCodeFromUi(role);
-  return roles.find((item) => item.code.toUpperCase() === code)?.id
-    ?? roles.find((item) => item.code.toUpperCase() === "SALES")?.id
-    ?? roles[0]?.id;
+  return (
+    roles.find((item) => item.code.toUpperCase() === code)?.id ??
+    roles.find(
+      (item) => resolveRoleName(item.code) === role || resolveRoleName(item.name) === role,
+    )?.id ??
+    roles.find((item) => item.code.toUpperCase() === "SALES")?.id ??
+    roles[0]?.id
+  );
 }
 
-export function mapCrmUserToAppUser(user: CrmUser, roleCode?: string): AppUser {
+function roleFromAssigned(
+  role?: string | AssignedRole,
+  isOwner = false,
+): RoleName {
+  if (typeof role === "string") return mapRoleCode(role, isOwner);
+  return (
+    resolveRoleName(role?.name) ??
+    resolveRoleName(role?.code) ??
+    mapRoleCode(undefined, isOwner)
+  );
+}
+
+export function mapCrmUserToAppUser(user: CrmUser, role?: string | AssignedRole): AppUser {
   const cached = getUserProfileExtras(user.id);
   const statusRaw = String(user.status ?? "ACTIVE").toUpperCase();
   const status: AppUser["status"] =
@@ -78,7 +104,7 @@ export function mapCrmUserToAppUser(user: CrmUser, roleCode?: string): AppUser {
     name: user.name,
     email: user.email,
     phone: user.phone?.trim() || cached?.phone || "",
-    role: mapRoleCode(roleCode, user.is_owner),
+    role: roleFromAssigned(role, user.is_owner),
     team: user.job_title?.trim() || cached?.team || "",
     status,
     createdAt: user.created_at ?? undefined,
@@ -86,32 +112,68 @@ export function mapCrmUserToAppUser(user: CrmUser, roleCode?: string): AppUser {
   };
 }
 
-async function toAppUser(user: CrmUser): Promise<AppUser> {
-  const { data: assigned } = await api
-    .get<CrmRole[]>(companyPath(`/users/${user.id}/roles`))
+async function fetchAssignedRoles(userId: string): Promise<CrmRole[]> {
+  const { data } = await api
+    .get<CrmRole[] | null>(companyPath(`/users/${userId}/roles`), { timeout: 8_000 })
     .catch(() => ({ data: [] as CrmRole[] }));
-  return mapCrmUserToAppUser(user, assigned[0]?.code);
+  return Array.isArray(data) ? data : [];
+}
+
+async function toAppUser(user: CrmUser, assigned?: CrmRole[]): Promise<AppUser> {
+  const roles =
+    assigned !== undefined
+      ? assigned
+      : user.roles && user.roles.length > 0
+        ? user.roles
+        : await fetchAssignedRoles(user.id);
+  return mapCrmUserToAppUser(user, roles[0]);
 }
 
 export async function fetchUser(id: string): Promise<AppUser> {
-  const { data } = await api.get<CrmUser>(companyPath(`/users/${id}`));
-  return toAppUser(data);
+  const data = await fetchUserDirectory();
+  const extras = getAllUserProfileExtras();
+  const user = data.find((item) => item.id === id);
+  if (!user) {
+    throw Object.assign(new Error("Usuário não encontrado"), {
+      apiError: {
+        status: 404,
+        code: "USER_NOT_FOUND",
+        message: "Usuário não encontrado",
+      },
+    });
+  }
+  return toAppUser(
+    {
+      id: user.id,
+      name: user.name,
+      email: user.email ?? "",
+      status: user.status ?? "ACTIVE",
+      is_owner: user.is_owner,
+      phone: user.phone?.trim() || extras[user.id]?.phone,
+      job_title: user.job_title?.trim() || extras[user.id]?.team,
+      created_at: user.created_at,
+    },
+    user.roles,
+  );
 }
 
 export async function fetchUsers() {
   const data = await fetchUserDirectory();
   const extras = getAllUserProfileExtras();
   return mapWithConcurrency(data, 2, (user) =>
-    toAppUser({
-      id: user.id,
-      name: user.name,
-      email: user.email ?? "",
-      status: user.status ?? "ACTIVE",
-      is_owner: user.is_owner,
-      phone: extras[user.id]?.phone,
-      job_title: extras[user.id]?.team,
-      created_at: user.created_at,
-    }),
+    toAppUser(
+      {
+        id: user.id,
+        name: user.name,
+        email: user.email ?? "",
+        status: user.status ?? "ACTIVE",
+        is_owner: user.is_owner,
+        phone: user.phone?.trim() || extras[user.id]?.phone,
+        job_title: user.job_title?.trim() || extras[user.id]?.team,
+        created_at: user.created_at,
+      },
+      user.roles ?? [],
+    ),
   );
 }
 
@@ -157,9 +219,11 @@ export async function updateUser(id: string, values: Partial<AppUser>) {
     });
   }
   if (values.role) {
-    const roles = await fetchRoles();
+    const roles = await fetchRoles().catch(() => [] as CrmRole[]);
     const roleId = await roleIdFor(values.role, roles);
-    if (roleId) await api.put(companyPath(`/users/${id}/roles`), { role_id: roleId });
+    if (roleId) {
+      await api.put(companyPath(`/users/${id}/roles`), { role_id: roleId });
+    }
   }
   if (values.status === "Inativo") {
     await api.post(companyPath(`/users/${id}/deactivate`));
@@ -179,16 +243,20 @@ export async function updateUser(id: string, values: Partial<AppUser>) {
       job_title: values.team ?? cached?.team,
     });
   }
-  return toAppUser({
-    id: user.id,
-    name: values.name ?? user.name,
-    email: user.email ?? "",
-    status: user.status ?? "ACTIVE",
-    is_owner: user.is_owner,
-    phone: values.phone ?? cached?.phone,
-    job_title: values.team ?? cached?.team,
-    created_at: user.created_at,
-  });
+  return toAppUser(
+    {
+      id: user.id,
+      name: values.name ?? user.name,
+      email: user.email ?? "",
+      status: user.status ?? "ACTIVE",
+      is_owner: user.is_owner,
+      phone: values.phone ?? cached?.phone,
+      job_title: values.team ?? cached?.team,
+      created_at: user.created_at,
+      roles: user.roles,
+    },
+    user.roles,
+  );
 }
 
 export async function deactivateUser(id: string) {

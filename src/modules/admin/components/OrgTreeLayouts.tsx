@@ -118,9 +118,11 @@ function CollabActions({
 export function OrgTreeBlueprintView({
   tree,
   actions,
+  hideEmptyHint = false,
 }: {
   tree: OrgTree;
   actions: OrgTreeViewActions;
+  hideEmptyHint?: boolean;
 }) {
   const data = orgTreeToChartData(tree);
   if (!data) return null;
@@ -129,7 +131,7 @@ export function OrgTreeBlueprintView({
 
   return (
     <Stack spacing={1.5}>
-      {!tree.managers.length && !tree.ownerCollaborators.length ? (
+      {!hideEmptyHint && !tree.managers.length && !tree.ownerCollaborators.length ? (
         <Typography variant="body2" color="text.secondary">
           Nenhum gestor vinculado. Use “Vincular gestor” para montar a hierarquia.
         </Typography>

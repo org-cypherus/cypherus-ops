@@ -3,7 +3,7 @@
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import { Box, Button, Typography } from "@mui/material";
 import { getApiError } from "@/lib/api/client";
-import { isPermissionDenied, permissionDeniedDescription } from "@/lib/api/errors";
+import { isPermissionDenied, isUserNotFound, permissionDeniedDescription } from "@/lib/api/errors";
 import { AccessDeniedState } from "./AccessDeniedState";
 
 type Props = {
@@ -23,16 +23,20 @@ export function ErrorState({
   error,
   resourceLabel,
 }: Props) {
-  if (error) {
-    const parsed = getApiError(error);
-    if (isPermissionDenied(parsed)) {
-      return (
-        <AccessDeniedState
-          description={permissionDeniedDescription(parsed, resourceLabel)}
-        />
-      );
-    }
+  const parsed = error ? getApiError(error) : null;
+  if (parsed && isPermissionDenied(parsed)) {
+    return (
+      <AccessDeniedState
+        description={permissionDeniedDescription(parsed, resourceLabel)}
+      />
+    );
   }
+
+  const missingUser = parsed ? isUserNotFound(parsed) : false;
+  const resolvedTitle = missingUser ? "Usuário não encontrado" : title;
+  const resolvedDescription = missingUser
+    ? parsed?.message || "Usuário não encontrado."
+    : description;
 
   return (
     <Box
@@ -46,10 +50,10 @@ export function ErrorState({
     >
       <ErrorOutlineIcon color="error" sx={{ fontSize: { xs: 40, sm: 48 } }} />
       <Typography variant="h6" sx={{ fontSize: { xs: "1.1rem", sm: "1.25rem" } }}>
-        {title}
+        {resolvedTitle}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 420, lineHeight: 1.6 }}>
-        {description}
+        {resolvedDescription}
       </Typography>
       {onRetry ? (
         <Button variant="outlined" onClick={onRetry} sx={{ mt: 1 }}>

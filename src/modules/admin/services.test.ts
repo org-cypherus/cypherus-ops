@@ -32,4 +32,31 @@ describe("mapCrmUserToAppUser", () => {
     expect(mapped.createdAt).toBe("2026-03-10T15:30:00.000Z");
     expect(mapped.role).toBe("Comercial");
   });
+
+  it("uses the assigned role name stored in the CRM", () => {
+    const mapped = mapCrmUserToAppUser(
+      {
+        id: "u3",
+        name: "Elena Rocha",
+        email: "elena@acme.com",
+        status: "ACTIVE",
+      },
+      { code: "LEGAL", name: "Jurídico" },
+    );
+    expect(mapped.role).toBe("Jurídico");
+  });
+
+  it("keeps the assigned cargo even when the user is owner", () => {
+    const mapped = mapCrmUserToAppUser(
+      {
+        id: "u4",
+        name: "Ana Souza",
+        email: "ana@acme.com",
+        status: "ACTIVE",
+        is_owner: true,
+      },
+      { code: "MANAGER", name: "Gestor" },
+    );
+    expect(mapped.role).toBe("Gestor");
+  });
 });

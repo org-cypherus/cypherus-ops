@@ -171,6 +171,11 @@ export function isPermissionDenied(error: Pick<ParsedApiError, "status" | "code"
   return error.status === 403 || error.code === "PERMISSION_DENIED";
 }
 
+/** 404 CRM `USER_NOT_FOUND` — GET não deve criar; a UI mostra a mensagem. */
+export function isUserNotFound(error: Pick<ParsedApiError, "code">): boolean {
+  return error.code === "USER_NOT_FOUND";
+}
+
 export function permissionKeyFromError(error: ParsedApiError): string | undefined {
   const details = error.details;
   if (details && typeof details === "object" && !Array.isArray(details) && "permission_key" in details) {

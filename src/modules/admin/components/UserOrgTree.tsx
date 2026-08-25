@@ -20,9 +20,10 @@ import {
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { getApiError } from "@/lib/api/client";
+import { isUserNotFound } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/query/keys";
 import type { AppUser } from "@/modules/admin/services";
 import { OrgPersonNode } from "@/modules/admin/components/OrgHierarchyChart";
@@ -34,9 +35,11 @@ import {
 import {
   assignCollaboratorToManager,
   buildOrgTree,
-  ensureRootTeam,
   fetchTeamsWithMembers,
   linkManagerToOrg,
+  loadExtraTeamNames,
+  matchTeamName,
+  rememberTeamName,
   removeTeamMember,
   teamNameOptions,
   teamNamesInUse,
@@ -72,6 +75,7 @@ export function UserOrgTree({ users, canManage }: Props) {
   const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<string[]>([]);
   const [selectedTeamName, setSelectedTeamName] = useState("");
   const [customTeamName, setCustomTeamName] = useState("");
+  const [extraTeamNames, setExtraTeamNames] = useState<string[]>([]);
   const [pendingRemove, setPendingRemove] = useState<PendingRemoveManager | null>(null);
 
   const ownerId =
@@ -80,10 +84,7 @@ export function UserOrgTree({ users, canManage }: Props) {
 
   const orgQuery = useQuery({
     queryKey: [...queryKeys.orgTree, ownerId ?? "none"] as const,
-    queryFn: async () => {
-      if (ownerId) await ensureRootTeam(ownerId);
-      return fetchTeamsWithMembers(ownerId);
-    },
+    queryFn: () => fetchTeamsWithMembers(ownerId),
     placeholderData: (previous) => previous,
   });
 
@@ -95,14 +96,22 @@ export function UserOrgTree({ users, canManage }: Props) {
   }, [orgQuery.data, users]);
 
   const teamOptions = useMemo(
-    () => teamNameOptions(orgQuery.data?.teams ?? []),
-    [orgQuery.data?.teams],
+    () => teamNameOptions(orgQuery.data?.teams ?? [], extraTeamNames),
+    [orgQuery.data?.teams, extraTeamNames],
   );
+
+  useEffect(() => {
+    setExtraTeamNames(loadExtraTeamNames());
+  }, [dialog]);
 
   const usedTeamNames = useMemo(
     () => teamNamesInUse(orgQuery.data?.teams ?? [], tree.owner?.id),
     [orgQuery.data?.teams, tree.owner?.id],
   );
+  const memberNotices = useMemo(() => {
+    const byTeam = orgQuery.data?.messagesByTeamId ?? {};
+    return Array.from(new Set(Object.values(byTeam).filter(Boolean)));
+  }, [orgQuery.data?.messagesByTeamId]);
 
   const invalidateOrg = async () => {
     // Recarrega mesclando com o snapshot local — não deixa a UI “apagar” a árvore.
@@ -286,7 +295,7 @@ export function UserOrgTree({ users, canManage }: Props) {
         ? selectedCollaboratorIds.length > 0 && !mutation.isPending
         : Boolean(selectedUserId) && !mutation.isPending;
 
-  if (orgQuery.isLoading) {
+  if (orgQuery.isLoading && !tree.owner) {
     return (
       <Box py={6} display="flex" justifyContent="center">
         <CircularProgress />
@@ -294,7 +303,7 @@ export function UserOrgTree({ users, canManage }: Props) {
     );
   }
 
-  if (orgQuery.isError) {
+  if (orgQuery.isError && !(tree.owner && isUserNotFound(getApiError(orgQuery.error)))) {
     return (
       <ErrorState
         error={orgQuery.error}
@@ -306,17 +315,6 @@ export function UserOrgTree({ users, canManage }: Props) {
 
   return (
     <Stack spacing={2.5}>
-      {orgQuery.data?.listFailed ? (
-        <Alert severity="info">
-          A listagem global de times do CRM ainda falha por um gestor soft-deleted em time seed. A
-          árvore usa o cache local dos vínculos — redeploy do saas-crm com `present_teams` resiliente
-          remove este aviso.
-        </Alert>
-      ) : orgQuery.data?.recoveredFromConflict ? (
-        <Alert severity="success">
-          Listagem de times restaurada após reparo de times seed com gestor inválido.
-        </Alert>
-      ) : null}
       <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={1.5}>
         <Box>
           <Typography variant="subtitle1" fontWeight={700}>
@@ -338,6 +336,12 @@ export function UserOrgTree({ users, canManage }: Props) {
         ) : null}
       </Stack>
 
+      {memberNotices.map((notice) => (
+        <Alert key={notice} severity="info">
+          {notice}
+        </Alert>
+      ))}
+
       {!tree.owner ? (
         <Typography variant="body2" color="text.secondary">
           Nenhum administrador owner encontrado para a raiz do organograma.
@@ -345,6 +349,7 @@ export function UserOrgTree({ users, canManage }: Props) {
       ) : (
         <OrgTreeBlueprintView
           tree={tree}
+          hideEmptyHint={memberNotices.length > 0}
           actions={{
             canManage,
             onAddCollaborator: openAddCollaborator,
@@ -445,7 +450,7 @@ export function UserOrgTree({ users, canManage }: Props) {
                   label="Time"
                   value={selectedTeamName}
                   onChange={(e) => setSelectedTeamName(e.target.value)}
-                  helperText="Times pré-definidos ou adicione um novo"
+                  helperText="Comercial, Gestor, Operação e Marketing — ou adicione outro time"
                 >
                   {teamOptions.map((name) => {
                     const inUse = usedTeamNames.has(name.toLowerCase());
@@ -456,16 +461,46 @@ export function UserOrgTree({ users, canManage }: Props) {
                       </MenuItem>
                     );
                   })}
-                  <MenuItem value={CUSTOM_TEAM_VALUE}>+ Adicionar time…</MenuItem>
+                  <MenuItem value={CUSTOM_TEAM_VALUE}>+ Adicionar time</MenuItem>
                 </TextField>
                 {selectedTeamName === CUSTOM_TEAM_VALUE ? (
-                  <TextField
-                    fullWidth
-                    label="Nome do novo time"
-                    value={customTeamName}
-                    onChange={(e) => setCustomTeamName(e.target.value)}
-                    autoFocus
-                  />
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="flex-start">
+                    <TextField
+                      fullWidth
+                      label="Nome do novo time"
+                      value={customTeamName}
+                      onChange={(e) => setCustomTeamName(e.target.value)}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        const next = customTeamName.trim();
+                        if (!next) return;
+                        const canonical = matchTeamName(next, teamOptions) ?? next;
+                        rememberTeamName(canonical);
+                        setExtraTeamNames(loadExtraTeamNames());
+                        setSelectedTeamName(canonical);
+                        setCustomTeamName("");
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outlined"
+                      sx={{ mt: { sm: 0.5 }, whiteSpace: "nowrap", minHeight: 40 }}
+                      disabled={!customTeamName.trim()}
+                      onClick={() => {
+                        const next = customTeamName.trim();
+                        if (!next) return;
+                        const canonical = matchTeamName(next, teamOptions) ?? next;
+                        rememberTeamName(canonical);
+                        setExtraTeamNames(loadExtraTeamNames());
+                        setSelectedTeamName(canonical);
+                        setCustomTeamName("");
+                      }}
+                    >
+                      Adicionar
+                    </Button>
+                  </Stack>
                 ) : null}
               </>
             ) : null}

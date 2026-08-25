@@ -35,8 +35,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSnackbar } from "notistack";
-import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { getApiError } from "@/lib/api/client";
@@ -59,13 +59,13 @@ import { UserOrgTree } from "@/modules/admin/components/UserOrgTree";
 import { UserPermissionsEditor } from "@/modules/admin/components/UserPermissionsEditor";
 import { editablePermissions } from "@/modules/admin/permission-modules";
 import {
+  adminUserEditSchema,
   adminUserFormSchema,
   emptyAdminUserForm,
   type AdminUserFormValues,
 } from "@/modules/admin/schemas";
 import {
   createUser,
-  fetchUser,
   fetchUserEffectivePermissions,
   fetchUsers,
   syncUserPermissionOverrides,
@@ -77,6 +77,9 @@ import {
   fetchTeamsResilient,
   fetchTeamsWithMembers,
   findManagedTeamForUser,
+  loadExtraTeamNames,
+  matchTeamName,
+  rememberTeamName,
   teamNameOptions,
   teamNamesInUse,
   updateTeam,
@@ -126,11 +129,17 @@ export default function UsersPage() {
   const [leadsReassignOpen, setLeadsReassignOpen] = useState(false);
   const [pendingManagerExit, setPendingManagerExit] = useState<PendingManagerExit | null>(null);
   const [teamSelectMode, setTeamSelectMode] = useState<"list" | "custom">("list");
+  const [extraTeamNames, setExtraTeamNames] = useState<string[]>(() => loadExtraTeamNames());
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
   const [createdEmail, setCreatedEmail] = useState<string | null>(null);
   const [draftPermissions, setDraftPermissions] = useState<Permission[]>([]);
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   const [roleAdjusted, setRoleAdjusted] = useState(false);
+  const [nameFilter, setNameFilter] = useState("");
+  const [emailFilter, setEmailFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const editingRef = useRef<AppUser | null>(null);
+  editingRef.current = editing;
 
   const {
     control,
@@ -140,7 +149,10 @@ export default function UsersPage() {
     watch,
     formState: { errors, isValid },
   } = useForm<AdminUserFormValues>({
-    resolver: zodResolver(adminUserFormSchema),
+    resolver: async (values, context, options) => {
+      const schema = editingRef.current ? adminUserEditSchema : adminUserFormSchema;
+      return zodResolver(schema)(values, context, options);
+    },
     mode: "onChange",
     defaultValues: emptyAdminUserForm,
   });
@@ -153,6 +165,7 @@ export default function UsersPage() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.users,
     queryFn: fetchUsers,
+    staleTime: 0,
   });
 
   const teamsQuery = useQuery({
@@ -168,14 +181,25 @@ export default function UsersPage() {
         .filter((team) => team.is_active)
         .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
     },
-    enabled: Boolean(session.data) && (open || tab === "tree"),
+    enabled: Boolean(session.data),
   });
 
   const teamOptions = teamsQuery.data ?? [];
   const teamNames = useMemo(
-    () => teamNameOptions(teamsQuery.data ?? []),
-    [teamsQuery.data],
+    () => teamNameOptions(teamsQuery.data ?? [], extraTeamNames),
+    [teamsQuery.data, extraTeamNames],
   );
+
+  function commitTeamToList(name: string): string {
+    const trimmed = name.trim();
+    if (!trimmed) return "";
+    const canonical = matchTeamName(trimmed, teamNames) ?? trimmed;
+    rememberTeamName(canonical);
+    setExtraTeamNames(loadExtraTeamNames());
+    setTeamSelectMode("list");
+    return canonical;
+  }
+
   const ownerIdForTeams =
     data?.find((user) => user.isOwner)?.id ??
     data?.find((user) => user.role === Role.Administrador)?.id ??
@@ -185,12 +209,21 @@ export default function UsersPage() {
     () => teamNamesInUse(teamsQuery.data ?? [], ownerIdForTeams),
     [teamsQuery.data, ownerIdForTeams],
   );
-
-  const editDetailQuery = useQuery({
-    queryKey: queryKeys.userDetail(editing?.id ?? ""),
-    queryFn: () => fetchUser(editing!.id),
-    enabled: Boolean(open && editing?.id),
-  });
+  const activeUsers = useMemo(
+    () => (data || []).filter((user) => user.status !== "Inativo"),
+    [data],
+  );
+  const filteredUsers = useMemo(() => {
+    const name = nameFilter.trim().toLowerCase();
+    const email = emailFilter.trim().toLowerCase();
+    return activeUsers.filter((user) => {
+      if (name && !user.name.toLowerCase().includes(name)) return false;
+      if (email && !user.email.toLowerCase().includes(email)) return false;
+      if (roleFilter && user.role !== roleFilter) return false;
+      return true;
+    });
+  }, [activeUsers, nameFilter, emailFilter, roleFilter]);
+  const hasActiveUserFilters = Boolean(nameFilter.trim() || emailFilter.trim() || roleFilter);
 
   const permissionsQuery = useQuery({
     queryKey: queryKeys.userPermissions(editing?.id ?? ""),
@@ -215,20 +248,19 @@ export default function UsersPage() {
       setTeamSelectMode("list");
       return;
     }
-    const source = editDetailQuery.data ?? editing;
-    const names = teamNameOptions(teamsQuery.data ?? []);
+    const names = teamNameOptions(teamsQuery.data ?? [], extraTeamNames);
     reset({
-      name: source.name,
-      email: source.email,
-      phone: formatPhone(source.phone || ""),
-      role: source.role,
-      team: source.team || "",
-      status: source.status === "Inativo" ? "Inativo" : "Ativo",
+      name: editing.name,
+      email: editing.email,
+      phone: formatPhone(editing.phone || ""),
+      role: editing.role,
+      team: editing.team || "",
+      status: editing.status === "Inativo" ? "Inativo" : "Ativo",
     });
-    setTeamSelectMode(source.team && !names.includes(source.team) ? "custom" : "list");
+    setTeamSelectMode(editing.team && !matchTeamName(editing.team, names) ? "custom" : "list");
     setPermissionsDirty(false);
     setRoleAdjusted(false);
-  }, [open, editing, editDetailQuery.data, reset, teamsQuery.data]);
+  }, [open, editing, reset]);
 
   useEffect(() => {
     if (!editing || !permissionsQuery.data || permissionsDirty || roleAdjusted) return;
@@ -245,10 +277,14 @@ export default function UsersPage() {
         data?.find((user) => user.role === Role.Administrador)?.id ??
         meId ??
         undefined;
-      const ensured = await ensureTeamNamed({ name: values.team, ownerId }).catch(() => null);
+      const teamName = values.team.trim();
+      if (teamName) rememberTeamName(teamName);
+      const ensured = teamName
+        ? await ensureTeamNamed({ name: teamName, ownerId }).catch(() => null)
+        : null;
       const selectedTeam =
         ensured ??
-        teamOptions.find((team) => team.name.toLowerCase() === values.team.trim().toLowerCase());
+        teamOptions.find((team) => team.name.toLowerCase() === teamName.toLowerCase());
 
       if (editing) {
         const user = await updateUser(editing.id, values);
@@ -261,8 +297,11 @@ export default function UsersPage() {
             is_leader: values.role === Role.Gestor,
           }).catch(() => undefined);
         }
-        if (values.role !== Role.Gestor || values.status === "Inativo") {
-          const managed = await findManagedTeamForUser(editing.id, ownerId);
+        if (
+          editing.role === Role.Gestor &&
+          (values.role !== Role.Gestor || values.status === "Inativo")
+        ) {
+          const managed = await findManagedTeamForUser(editing.id, ownerId).catch(() => null);
           if (managed && managed.collaboratorIds.length === 0) {
             await updateTeam(managed.team.id, { manager_user_id: null }).catch(() => undefined);
           }
@@ -283,7 +322,6 @@ export default function UsersPage() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.teams });
       void queryClient.invalidateQueries({ queryKey: queryKeys.orgTree });
       if (editing) {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.userDetail(editing.id) });
         void queryClient.invalidateQueries({ queryKey: queryKeys.userPermissions(editing.id) });
         enqueueSnackbar(
           syncPermissions ? "Usuário e permissões atualizados" : "Usuário atualizado",
@@ -305,12 +343,7 @@ export default function UsersPage() {
     },
   });
 
-  const canSubmit =
-    isValid &&
-    !editDetailQuery.isLoading &&
-    !teamsQuery.isLoading &&
-    !save.isPending &&
-    Boolean(watchedTeam?.trim());
+  const canSubmit = !save.isPending && (editing ? true : isValid && Boolean(watchedTeam?.trim()));
 
   async function maybeRequireManagerExit(params: {
     userId: string;
@@ -320,38 +353,42 @@ export default function UsersPage() {
     savePayload?: SavePayload;
   }): Promise<boolean> {
     if (!params.leavingManagerRole) return false;
-    const ownerId =
-      data?.find((user) => user.isOwner)?.id ??
-      data?.find((user) => user.role === Role.Administrador)?.id ??
-      meId ??
-      undefined;
-    const managed = await findManagedTeamForUser(params.userId, ownerId);
-    if (!managed || managed.collaboratorIds.length === 0) return false;
+    try {
+      const ownerId =
+        data?.find((user) => user.isOwner)?.id ??
+        data?.find((user) => user.role === Role.Administrador)?.id ??
+        meId ??
+        undefined;
+      const managed = await findManagedTeamForUser(params.userId, ownerId);
+      if (!managed || managed.collaboratorIds.length === 0) return false;
 
-    const org = await fetchTeamsWithMembers(ownerId);
-    const treeUsers = (data || []).filter((user) => user.status !== "Inativo");
-    const owner = treeUsers.find((user) => user.isOwner) ?? null;
-    const managers = org.teams
-      .filter((team) => team.manager_user_id && team.manager_user_id !== owner?.id)
-      .map((team) => {
-        const manager = treeUsers.find((user) => user.id === team.manager_user_id);
-        return manager ? { user: manager, team } : null;
-      })
-      .filter((item): item is { user: AppUser; team: CrmTeam } => Boolean(item));
+      const org = await fetchTeamsWithMembers(ownerId);
+      const treeUsers = (data || []).filter((user) => user.status !== "Inativo");
+      const owner = treeUsers.find((user) => user.isOwner) ?? null;
+      const managers = org.teams
+        .filter((team) => team.manager_user_id && team.manager_user_id !== owner?.id)
+        .map((team) => {
+          const manager = treeUsers.find((user) => user.id === team.manager_user_id);
+          return manager ? { user: manager, team } : null;
+        })
+        .filter((item): item is { user: AppUser; team: CrmTeam } => Boolean(item));
 
-    setPendingManagerExit({
-      fromTeam: managed.team,
-      managerName: params.userName,
-      collaboratorIds: managed.collaboratorIds,
-      destinations: buildManagerExitDestinations({
-        owner,
-        managers,
-        excludeTeamId: managed.team.id,
-      }),
-      after: params.after,
-      savePayload: params.savePayload,
-    });
-    return true;
+      setPendingManagerExit({
+        fromTeam: managed.team,
+        managerName: params.userName,
+        collaboratorIds: managed.collaboratorIds,
+        destinations: buildManagerExitDestinations({
+          owner,
+          managers,
+          excludeTeamId: managed.team.id,
+        }),
+        after: params.after,
+        savePayload: params.savePayload,
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async function submitForm(values: AdminUserFormValues) {
@@ -370,7 +407,7 @@ export default function UsersPage() {
         leavingManagerRole,
         after: "save",
         savePayload: payload,
-      });
+      }).catch(() => false);
       if (blocked) return;
     }
     save.mutate(payload);
@@ -508,7 +545,7 @@ export default function UsersPage() {
             onRetry={() => refetch()}
           />
         ) : (
-          <UserOrgTree users={(data || []).filter((user) => user.status !== "Inativo")} canManage={isAdmin} />
+          <UserOrgTree users={activeUsers} canManage={isAdmin} />
         )
       ) : isLoading ? (
         <Box py={8} display="flex" justifyContent="center">
@@ -523,6 +560,51 @@ export default function UsersPage() {
       ) : (
         <Stack spacing={2.5}>
           <OrphanLeadsPanel />
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1} flexWrap="wrap" useFlexGap>
+            <TextField
+              size="small"
+              label="Nome"
+              placeholder="Buscar por nome..."
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
+              sx={{ minWidth: 180, flex: 1 }}
+            />
+            <TextField
+              size="small"
+              label="E-mail"
+              placeholder="Buscar por e-mail..."
+              value={emailFilter}
+              onChange={(e) => setEmailFilter(e.target.value)}
+              sx={{ minWidth: 180, flex: 1 }}
+            />
+            <TextField
+              select
+              size="small"
+              label="Cargo"
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              sx={{ minWidth: 160 }}
+            >
+              <MenuItem value="">Todos</MenuItem>
+              {ROLE_NAMES.map((role) => (
+                <MenuItem key={role} value={role}>
+                  {role}
+                </MenuItem>
+              ))}
+            </TextField>
+            {hasActiveUserFilters ? (
+              <Button
+                size="small"
+                onClick={() => {
+                  setNameFilter("");
+                  setEmailFilter("");
+                  setRoleFilter("");
+                }}
+              >
+                Limpar filtros
+              </Button>
+            ) : null}
+          </Stack>
           <TableContainer component={Paper} variant="outlined" sx={{ overflowX: "auto" }}>
           <Table size="small">
             <TableHead>
@@ -537,9 +619,16 @@ export default function UsersPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {(data || [])
-                .filter((user) => user.status !== "Inativo")
-                .map((user) => {
+              {filteredUsers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7}>
+                    <Typography variant="body2" color="text.secondary">
+                      Nenhum usuário encontrado com esses filtros.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredUsers.map((user) => {
                 const isSelf = user.id === meId;
                 const canDeactivate = !isSelf && user.status === "Ativo" && !user.isOwner;
                 return (
@@ -619,7 +708,8 @@ export default function UsersPage() {
                     </TableCell>
                   </TableRow>
                 );
-              })}
+              })
+              )}
             </TableBody>
           </Table>
         </TableContainer>
@@ -652,10 +742,6 @@ export default function UsersPage() {
                 validar o convite e definir a senha.
               </Typography>
             </Stack>
-          ) : editDetailQuery.isLoading && editing ? (
-            <Box py={6} display="flex" justifyContent="center">
-              <CircularProgress size={28} />
-            </Box>
           ) : (
             <Stack
               component="form"
@@ -693,7 +779,7 @@ export default function UsersPage() {
                     id="admin-user-phone"
                     label="Telefone"
                     fullWidth
-                    required
+                    required={!editing}
                     inputMode="tel"
                     placeholder="(11) 98888-0000"
                     value={field.value}
@@ -740,11 +826,12 @@ export default function UsersPage() {
                   name="team"
                   control={control}
                   render={({ field }) => {
+                    const matchedName = matchTeamName(field.value, teamNames);
                     const selectValue =
                       teamSelectMode === "custom"
                         ? CUSTOM_TEAM_VALUE
-                        : field.value && teamNames.includes(field.value)
-                          ? field.value
+                        : matchedName
+                          ? matchedName
                           : field.value
                             ? CUSTOM_TEAM_VALUE
                             : "";
@@ -755,13 +842,13 @@ export default function UsersPage() {
                           select
                           label="Time"
                           fullWidth
-                          required
+                          required={!editing}
                           value={selectValue}
                           onChange={(e) => {
                             const next = e.target.value;
                             if (next === CUSTOM_TEAM_VALUE) {
                               setTeamSelectMode("custom");
-                              if (teamNames.includes(field.value)) field.onChange("");
+                              if (matchTeamName(field.value, teamNames)) field.onChange("");
                               return;
                             }
                             setTeamSelectMode("list");
@@ -769,17 +856,18 @@ export default function UsersPage() {
                           }}
                           onBlur={field.onBlur}
                           inputRef={field.ref}
-                          disabled={teamsQuery.isLoading}
                           error={Boolean(errors.team)}
                           helperText={
                             errors.team?.message ||
                             (teamsQuery.isLoading
-                              ? "Carregando times…"
-                              : "Escolha um time pré-definido ou adicione outro")
+                              ? "Carregando times da empresa…"
+                              : teamsQuery.isError
+                                ? "Não foi possível listar os times. Use um nome padrão ou adicione outro."
+                                : "Comercial, Gestor, Operação e Marketing — ou adicione outro time")
                           }
                         >
-                          <MenuItem value="" disabled>
-                            Selecione o time
+                          <MenuItem value="">
+                            {editing ? "Sem time" : "Selecione o time"}
                           </MenuItem>
                           {teamNames.map((name) => {
                             const inUse = usedTeamNames.has(name.toLowerCase());
@@ -790,20 +878,43 @@ export default function UsersPage() {
                               </MenuItem>
                             );
                           })}
-                          <MenuItem value={CUSTOM_TEAM_VALUE}>+ Adicionar time…</MenuItem>
+                          <MenuItem value={CUSTOM_TEAM_VALUE}>+ Adicionar time</MenuItem>
                         </TextField>
                         {teamSelectMode === "custom" || selectValue === CUSTOM_TEAM_VALUE ? (
-                          <TextField
-                            id="admin-user-team-custom"
-                            label="Nome do novo time"
-                            fullWidth
-                            required
-                            value={field.value}
-                            onChange={(e) => field.onChange(e.target.value)}
-                            onBlur={field.onBlur}
-                            error={Boolean(errors.team)}
-                            helperText={errors.team?.message || "Será criado no CRM ao salvar"}
-                          />
+                          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems="flex-start">
+                            <TextField
+                              id="admin-user-team-custom"
+                              label="Nome do novo time"
+                              fullWidth
+                              required
+                              autoFocus
+                              value={matchTeamName(field.value, teamNames) ? "" : field.value}
+                              onChange={(e) => field.onChange(e.target.value)}
+                              onBlur={field.onBlur}
+                              onKeyDown={(e) => {
+                                if (e.key !== "Enter") return;
+                                e.preventDefault();
+                                const next = commitTeamToList(field.value);
+                                if (next) field.onChange(next);
+                              }}
+                              error={Boolean(errors.team)}
+                              helperText={
+                                errors.team?.message || "O time entra na lista e é criado ao salvar"
+                              }
+                            />
+                            <Button
+                              type="button"
+                              variant="outlined"
+                              sx={{ mt: { sm: 0.5 }, whiteSpace: "nowrap", minHeight: 40 }}
+                              disabled={!field.value.trim()}
+                              onClick={() => {
+                                const next = commitTeamToList(field.value);
+                                if (next) field.onChange(next);
+                              }}
+                            >
+                              Adicionar
+                            </Button>
+                          </Stack>
                         ) : null}
                       </Stack>
                     );
@@ -814,7 +925,7 @@ export default function UsersPage() {
                 <Typography variant="body2" color="text.secondary">
                   Criado em:{" "}
                   <strong>
-                    {formatDate(editDetailQuery.data?.createdAt ?? editing.createdAt)}
+                    {formatDate(editing.createdAt)}
                   </strong>
                 </Typography>
               ) : null}
@@ -873,9 +984,9 @@ export default function UsersPage() {
               <Button onClick={closeDialog}>Cancelar</Button>
               <Button
                 type="submit"
-                form={editDetailQuery.isLoading && editing ? undefined : "admin-user-form"}
+                form="admin-user-form"
                 variant="contained"
-                disabled={!canSubmit || save.isPending || (Boolean(editing) && editDetailQuery.isLoading)}
+                disabled={!canSubmit || save.isPending}
               >
                 {save.isPending
                   ? "Salvando…"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapApiFeatures, mapApiPermissions, mapRoleCode } from "./mappers";
+import { mapApiFeatures, mapApiPermissions, mapRoleCode, roleCodeFromUi } from "./mappers";
 import { Role } from "./permissions";
 
 describe("mapApiPermissions", () => {
@@ -30,6 +30,19 @@ describe("mapRoleCode", () => {
   it("maps owner and API codes", () => {
     expect(mapRoleCode("SALES")).toBe(Role.Comercial);
     expect(mapRoleCode("FINANCE")).toBe(Role.Financeiro);
-    expect(mapRoleCode("MANAGER", true)).toBe(Role.Administrador);
+    expect(mapRoleCode("LEGAL")).toBe(Role.Jurídico);
+    expect(mapRoleCode("Jurídico")).toBe(Role.Jurídico);
+    expect(mapRoleCode("MANAGER", true)).toBe(Role.Gestor);
+    expect(mapRoleCode(undefined, true)).toBe(Role.Administrador);
+  });
+});
+
+describe("roleCodeFromUi", () => {
+  it("writes the CRM code stored for each cargo", () => {
+    expect(roleCodeFromUi(Role.Administrador)).toBe("ADMIN");
+    expect(roleCodeFromUi(Role.Gestor)).toBe("MANAGER");
+    expect(roleCodeFromUi(Role.Comercial)).toBe("SALES");
+    expect(roleCodeFromUi(Role.Financeiro)).toBe("FINANCE");
+    expect(roleCodeFromUi(Role.Jurídico)).toBe("LEGAL");
   });
 });

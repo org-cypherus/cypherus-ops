@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adminUserFormSchema } from "./schemas";
+import { adminUserEditSchema, adminUserFormSchema } from "./schemas";
 
 describe("adminUserFormSchema", () => {
   it("accepts a valid user payload", () => {
@@ -14,7 +14,7 @@ describe("adminUserFormSchema", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("requires phone and team on create and edit", () => {
+  it("requires phone and team on create", () => {
     const parsed = adminUserFormSchema.safeParse({
       name: "Ana Souza",
       email: "ana@cypherops.com",
@@ -36,5 +36,19 @@ describe("adminUserFormSchema", () => {
       status: "Ativo",
     });
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe("adminUserEditSchema", () => {
+  it("allows saving without phone and team", () => {
+    const parsed = adminUserEditSchema.safeParse({
+      name: "Ana Souza",
+      email: "ana@cypherops.com",
+      phone: "",
+      role: "Gestor",
+      team: "",
+      status: "Ativo",
+    });
+    expect(parsed.success).toBe(true);
   });
 });

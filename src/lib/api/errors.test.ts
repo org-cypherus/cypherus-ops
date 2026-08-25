@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseApiError, featureKeyFromError, isGatewayUpstreamTimeout, isPermissionDenied, permissionDeniedDescription } from "./errors";
+import { parseApiError, featureKeyFromError, isGatewayUpstreamTimeout, isPermissionDenied, isUserNotFound, permissionDeniedDescription } from "./errors";
 
 describe("parseApiError", () => {
   it("reads the CRM envelope", () => {
@@ -76,5 +76,16 @@ describe("permission denied helpers", () => {
     });
     expect(isPermissionDenied(parsed)).toBe(true);
     expect(permissionDeniedDescription(parsed)).toContain("lista de usuários");
+  });
+
+  it("detects USER_NOT_FOUND", () => {
+    const parsed = parseApiError(404, {
+      error: {
+        code: "USER_NOT_FOUND",
+        message: "Usuário não encontrado.",
+      },
+    });
+    expect(isUserNotFound(parsed)).toBe(true);
+    expect(parsed.message).toBe("Usuário não encontrado.");
   });
 });

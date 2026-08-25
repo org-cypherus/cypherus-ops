@@ -101,6 +101,18 @@ function crmError(status: number, code: string, message: string) {
   return HttpResponse.json({ error: { code, message }, request_id: "mock" }, { status });
 }
 
+const ROLES = [
+  { id: "role-admin", code: "ADMIN", name: "Administrador" },
+  { id: "role-manager", code: "MANAGER", name: "Gestor" },
+  { id: "role-sales", code: "SALES", name: "Comercial" },
+  { id: "role-finance", code: "FINANCE", name: "Financeiro" },
+  { id: "role-legal", code: "LEGAL", name: "Jurídico" },
+];
+
+function roleForUser(user: { role?: string } | undefined) {
+  return ROLES.find((item) => item.name === user?.role) ?? ROLES[2];
+}
+
 function toCrmUser(user: (typeof mockUsers)[number]) {
   return {
     id: user.id,
@@ -115,6 +127,7 @@ function toCrmUser(user: (typeof mockUsers)[number]) {
     last_login_at: null,
     created_at: user.createdAt || "2026-01-15T12:00:00.000Z",
     updated_at: user.createdAt || "2026-01-15T12:00:00.000Z",
+    roles: [roleForUser(user)],
   };
 }
 
@@ -211,13 +224,6 @@ function mePayload(user = currentUser) {
       .map((permission) => ({ permission, granted: true, scope: "COMPANY", source: "ROLE" })),
   };
 }
-
-const ROLES = [
-  { id: "role-admin", code: "ADMIN", name: "Administrador" },
-  { id: "role-manager", code: "MANAGER", name: "Gestor" },
-  { id: "role-sales", code: "SALES", name: "Comercial" },
-  { id: "role-finance", code: "FINANCE", name: "Financeiro" },
-];
 
 export const handlers = [
   http.post(`${API}/v1/auth/login`, async ({ request }) => {
@@ -384,10 +390,34 @@ export const handlers = [
     return HttpResponse.json({ ...toCrmUser(user), phone: user.phone, job_title: user.team });
   }),
 
+  http.patch(`${API}/v1/companies/:companyId/users/:userId`, async ({ params, request }) => {
+    const user = mockUsers.find((item) => item.id === params.userId);
+    if (!user) return crmError(404, "USER_NOT_FOUND", "Usuário não encontrado.");
+    const body = (await request.json()) as {
+      name?: string;
+      phone?: string | null;
+      job_title?: string | null;
+    };
+    if (typeof body.name === "string" && body.name.trim()) user.name = body.name.trim();
+    if (typeof body.phone === "string") user.phone = body.phone;
+    if (typeof body.job_title === "string") user.team = body.job_title;
+    return HttpResponse.json({ ...toCrmUser(user), phone: user.phone, job_title: user.team });
+  }),
+
   http.get(`${API}/v1/companies/:companyId/users/:userId/roles`, ({ params }) => {
     const user = mockUsers.find((item) => item.id === params.userId);
-    const role = ROLES.find((item) => item.name === user?.role) ?? ROLES[2];
+    const role = roleForUser(user);
     return HttpResponse.json([role]);
+  }),
+
+  http.put(`${API}/v1/companies/:companyId/users/:userId/roles`, async ({ params, request }) => {
+    const body = (await request.json()) as { role_id?: string };
+    const user = mockUsers.find((item) => item.id === params.userId);
+    const role = ROLES.find((item) => item.id === body.role_id);
+    if (user && role) {
+      user.role = role.name as RoleName;
+    }
+    return HttpResponse.json(role ? [role] : []);
   }),
 
   http.get(`${API}/v1/companies/:companyId/users/:userId/permissions`, ({ params }) => {
@@ -453,8 +483,20 @@ export const handlers = [
 
   http.get(`${API}/v1/companies/:companyId/teams/:teamId/members`, ({ params }) => {
     const team = mockTeams.find((item) => item.id === params.teamId && item.company_id === params.companyId);
-    if (!team) return crmError(404, "TEAM_NOT_FOUND", "Time não encontrado.");
-    return HttpResponse.json(mockTeamMembers.filter((member) => member.team_id === team.id));
+    if (!team) {
+      return HttpResponse.json({
+        items: [],
+        message:
+          "Este time não está cadastrado ou foi removido. Cadastre um time e vincule gestores, supervisores e funcionários.",
+      });
+    }
+    const items = mockTeamMembers.filter((member) => member.team_id === team.id);
+    return HttpResponse.json({
+      items,
+      message: items.length
+        ? null
+        : "Este time ainda não possui gestores, supervisores ou funcionários. Vincule usuários para começar.",
+    });
   }),
 
   http.put(`${API}/v1/companies/:companyId/teams/:teamId/members`, async ({ params, request }) => {
