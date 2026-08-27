@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseApiError, featureKeyFromError, isGatewayUpstreamTimeout, isPermissionDenied, isUserNotFound, permissionDeniedDescription } from "./errors";
+import { parseApiError, featureKeyFromError, fieldFromError, isGatewayUpstreamTimeout, isPermissionDenied, isUserNotFound, permissionDeniedDescription } from "./errors";
 
 describe("parseApiError", () => {
   it("reads the CRM envelope", () => {
@@ -48,6 +48,31 @@ describe("parseApiError", () => {
     expect(parsed.requestId).toBe("from-body");
     expect(parsed.traceId).toBe("trc-body");
     expect(parsed.code).toBe("BFF_PROXY_ERROR");
+  });
+
+  it("reads domain VALIDATION_ERROR with error_message and field", () => {
+    const parsed = parseApiError(422, {
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "CPF inválido.",
+        details: { field: "cpf" },
+      },
+      request_id: "bcae744c-9313-4d6c-984b-04af505e3a63",
+    });
+    expect(parsed.code).toBe("VALIDATION_ERROR");
+    expect(parsed.message).toBe("CPF inválido.");
+    expect(fieldFromError(parsed)).toBe("cpf");
+  });
+
+  it("reads logger-style error_code / error_message bodies", () => {
+    const parsed = parseApiError(422, {
+      error_code: "VALIDATION_ERROR",
+      error_message: "CPF inválido.",
+      error_details: { field: "cpf" },
+    });
+    expect(parsed.code).toBe("VALIDATION_ERROR");
+    expect(parsed.message).toBe("CPF inválido.");
+    expect(fieldFromError(parsed)).toBe("cpf");
   });
 
   it("reads the gateway ServiceUnavailable envelope", () => {

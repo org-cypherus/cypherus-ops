@@ -2,6 +2,7 @@ import { api, getApiError } from "@/lib/api/client";
 import { companyPath } from "@/lib/auth/session";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
 import type { AppUser } from "./services";
+import { getUserProfileExtras, saveUserProfileExtras } from "./user-profile-extras";
 
 export const PREDEFINED_TEAM_NAMES = [
   "Comercial",
@@ -10,9 +11,25 @@ export const PREDEFINED_TEAM_NAMES = [
   "Marketing",
 ] as const;
 
-const KNOWN_TEAMS_STORAGE_KEY = "cypherus.ops.knownTeams.v2";
-const EXTRA_TEAM_NAMES_STORAGE_KEY = "cypherus.ops.extraTeamNames.v1";
-const ORG_SNAPSHOT_KEY = "cypherus.ops.orgSnapshot.v1";
+const LEGACY_TEAM_CACHE_KEYS = [
+  "cypherus.ops.knownTeams.v2",
+  "cypherus.ops.extraTeamNames.v1",
+  "cypherus.ops.orgSnapshot.v1",
+] as const;
+
+function clearLegacyTeamCache() {
+  if (typeof window === "undefined") return;
+  try {
+    for (const key of LEGACY_TEAM_CACHE_KEYS) {
+      window.localStorage.removeItem(key);
+    }
+    window.sessionStorage.removeItem("cypherus.ops.knownTeams");
+  } catch {
+    /* ignore */
+  }
+}
+
+clearLegacyTeamCache();
 
 export type CrmTeam = {
   id: string;
@@ -82,18 +99,6 @@ export function parseTeamMembersPayload(raw: unknown, teamId = ""): TeamMembersL
   return { items, message };
 }
 
-function isUnregisteredTeamMembersMessage(message: string | null | undefined): boolean {
-  if (!message) return false;
-  if (message === TEAM_NOT_REGISTERED_MEMBERS_MESSAGE) return true;
-  return /não está cadastrado|foi removido/i.test(message);
-}
-
-type OrgSnapshot = {
-  teams: CrmTeam[];
-  membersByTeamId: Record<string, CrmTeamMember[]>;
-  updatedAt: string;
-};
-
 export type OrgTreeCollaborator = {
   kind: "collaborator";
   user: AppUser;
@@ -148,159 +153,12 @@ function conflictTeamId(error: unknown): string | null {
   return typeof teamId === "string" && teamId ? teamId : null;
 }
 
-function readKnownTeams(): CrmTeam[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw =
-      window.localStorage.getItem(KNOWN_TEAMS_STORAGE_KEY) ??
-      window.sessionStorage.getItem("cypherus.ops.knownTeams");
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item): item is Partial<CrmTeam> & { id: string } =>
-        Boolean(item && typeof item === "object" && typeof (item as CrmTeam).id === "string"),
-      )
-      .map((item) => normalizeTeam(item));
-  } catch {
-    return [];
-  }
-}
-
-function writeKnownTeams(teams: CrmTeam[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(KNOWN_TEAMS_STORAGE_KEY, JSON.stringify(teams));
-  } catch {
-    /* ignore quota */
-  }
-}
-
-/** Mantém times criados/atualizados mesmo quando GET /teams falha no CRM. */
-export function rememberTeam(team: CrmTeam) {
-  const normalized = normalizeTeam(team);
-  const current = readKnownTeams().filter((item) => item.id !== normalized.id);
-  current.push(normalized);
-  writeKnownTeams(current);
-  const snap = readOrgSnapshot();
-  writeOrgSnapshot({
-    teams: mergeTeams(snap?.teams ?? [], [normalized]),
-    membersByTeamId: snap?.membersByTeamId ?? {},
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-function readOrgSnapshot(): OrgSnapshot | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(ORG_SNAPSHOT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as OrgSnapshot;
-    if (!parsed || !Array.isArray(parsed.teams)) return null;
-    return {
-      teams: parsed.teams.map((team) => normalizeTeam(team)),
-      membersByTeamId: parsed.membersByTeamId ?? {},
-      updatedAt: parsed.updatedAt ?? "",
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeOrgSnapshot(snapshot: OrgSnapshot) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(ORG_SNAPSHOT_KEY, JSON.stringify(snapshot));
-  } catch {
-    /* ignore */
-  }
-}
-
-function rememberMembers(teamId: string, members: CrmTeamMember[]) {
-  const snap = readOrgSnapshot() ?? {
-    teams: readKnownTeams(),
-    membersByTeamId: {},
-    updatedAt: new Date().toISOString(),
-  };
-  writeOrgSnapshot({
-    ...snap,
-    membersByTeamId: { ...snap.membersByTeamId, [teamId]: members },
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-function mergeMembers(
-  primary: CrmTeamMember[],
-  secondary: CrmTeamMember[],
-): CrmTeamMember[] {
-  const byUser = new Map<string, CrmTeamMember>();
-  for (const member of secondary) byUser.set(member.user_id, member);
-  for (const member of primary) byUser.set(member.user_id, member);
-  return Array.from(byUser.values());
-}
-
-function mergeTeams(...lists: CrmTeam[][]): CrmTeam[] {
-  const byId = new Map<string, CrmTeam>();
-  for (const list of lists) {
-    for (const team of list) {
-      const next = normalizeTeam(team);
-      const prev = byId.get(next.id);
-      if (!prev) {
-        byId.set(next.id, next);
-        continue;
-      }
-      // Se a API zerar o gestor (apresentação), preserva o gestor conhecido localmente.
-      byId.set(next.id, {
-        ...prev,
-        ...next,
-        manager_user_id: next.manager_user_id ?? prev.manager_user_id,
-        parent_team_id:
-          next.parent_team_id !== undefined ? next.parent_team_id : prev.parent_team_id,
-        name: next.name || prev.name,
-      });
-    }
-  }
-  return Array.from(byId.values());
-}
-
-function readExtraTeamNames(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(EXTRA_TEAM_NAMES_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-      .map((item) => item.trim().slice(0, 120));
-  } catch {
-    return [];
-  }
-}
-
-/** Guarda nomes de times criados na UI para continuarem na lista de seleção. */
-export function rememberTeamName(name: string) {
-  const trimmed = name.trim().slice(0, 120);
-  if (!trimmed) return;
-  const predefined = PREDEFINED_TEAM_NAMES.some(
-    (item) => item.toLowerCase() === trimmed.toLowerCase(),
-  );
-  if (predefined) return;
-  const current = readExtraTeamNames();
-  if (current.some((item) => item.toLowerCase() === trimmed.toLowerCase())) return;
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(
-      EXTRA_TEAM_NAMES_STORAGE_KEY,
-      JSON.stringify([...current, trimmed]),
-    );
-  } catch {
-    /* ignore quota */
-  }
-}
-
-export function loadExtraTeamNames(): string[] {
-  return readExtraTeamNames();
+async function syncUserJobTitle(userId: string, teamName: string) {
+  const name = teamName.trim().slice(0, 120);
+  if (!userId || !name) return;
+  await api.patch(companyPath(`/users/${userId}`), { job_title: name }).catch(() => undefined);
+  const previous = getUserProfileExtras(userId);
+  saveUserProfileExtras(userId, { phone: previous?.phone ?? "", team: name });
 }
 
 export function teamNameOptions(existing: CrmTeam[] = [], extra: string[] = []): string[] {
@@ -312,15 +170,15 @@ export function teamNameOptions(existing: CrmTeam[] = [], extra: string[] = []):
     if (!byLower.has(key)) byLower.set(key, trimmed);
   };
 
-  for (const name of extra) add(name);
-  for (const name of readExtraTeamNames()) add(name);
   for (const team of existing) {
     if (team.is_active) add(team.name);
   }
+  for (const name of extra) add(name);
 
   const result: string[] = [];
   const used = new Set<string>();
   for (const name of PREDEFINED_TEAM_NAMES) {
+    if (!byLower.has(name.toLowerCase())) continue;
     result.push(name);
     used.add(name.toLowerCase());
   }
@@ -356,22 +214,19 @@ export async function fetchTeams(): Promise<CrmTeam[]> {
   return Array.isArray(data) ? data.map((team) => normalizeTeam(team)) : [];
 }
 
-/** Lista times. USER_NOT_FOUND vira lista vazia/cache — a árvore ainda mostra o owner. */
+/** Lista times da API. USER_NOT_FOUND vira lista vazia — a árvore ainda mostra o owner. */
 export async function fetchTeamsResilient(_ownerId?: string): Promise<{
   teams: CrmTeam[];
   recoveredFromConflict: boolean;
   listFailed: boolean;
 }> {
-  const remembered = readKnownTeams();
   try {
     const teams = await fetchTeams();
-    const merged = mergeTeams(teams, remembered);
-    for (const team of teams) rememberTeam(team);
-    return { teams: merged, recoveredFromConflict: false, listFailed: false };
+    return { teams, recoveredFromConflict: false, listFailed: false };
   } catch (error) {
     if (!isTeamsUserNotFound(error)) throw error;
     return {
-      teams: remembered,
+      teams: [],
       recoveredFromConflict: false,
       listFailed: true,
     };
@@ -384,9 +239,7 @@ export async function createTeam(payload: {
   manager_user_id?: string | null;
 }): Promise<CrmTeam> {
   const { data } = await api.post<CrmTeam>(companyPath("/teams"), payload);
-  const team = normalizeTeam(data);
-  rememberTeam(team);
-  return team;
+  return normalizeTeam(data);
 }
 
 export async function updateTeam(
@@ -399,26 +252,17 @@ export async function updateTeam(
   },
 ): Promise<CrmTeam> {
   const { data } = await api.patch<CrmTeam>(companyPath(`/teams/${teamId}`), payload);
-  const team = normalizeTeam(data);
-  rememberTeam(team);
-  return team;
+  return normalizeTeam(data);
 }
 
 export async function fetchTeamMembers(teamId: string): Promise<TeamMembersList> {
   try {
     const { data } = await api.get<unknown>(companyPath(`/teams/${teamId}/members`));
-    const parsed = parseTeamMembersPayload(data, teamId);
-    rememberMembers(teamId, parsed.items);
-    return parsed;
+    return parseTeamMembersPayload(data, teamId);
   } catch (error) {
     const parsed = getApiError(error);
     if (parsed.status === 404) {
-      rememberMembers(teamId, []);
       return { items: [], message: TEAM_NOT_REGISTERED_MEMBERS_MESSAGE };
-    }
-    if (parsed.status === 0) {
-      const cached = readOrgSnapshot()?.membersByTeamId[teamId] ?? [];
-      return { items: cached, message: null };
     }
     throw error;
   }
@@ -438,37 +282,19 @@ export async function upsertTeamMember(
     is_leader: Boolean(data?.is_leader ?? payload.is_leader),
     joined_at: data?.joined_at,
   };
-  const current = readOrgSnapshot()?.membersByTeamId[teamId] ?? [];
-  rememberMembers(
-    teamId,
-    mergeMembers(
-      [member],
-      current.filter((item) => item.user_id !== payload.user_id),
-    ),
-  );
   return member;
 }
 
 export async function removeTeamMember(teamId: string, userId: string): Promise<CrmTeamMember[]> {
-  const fallback = () => {
-    const members = (readOrgSnapshot()?.membersByTeamId[teamId] ?? []).filter(
-      (item) => item.user_id !== userId,
-    );
-    rememberMembers(teamId, members);
-    return members;
-  };
-
   try {
     const { data, status } = await api.delete<CrmTeamMember[] | null>(
       companyPath(`/teams/${teamId}/members/${userId}`),
     );
-    if (status === 204 || data == null) return fallback();
-    const members = Array.isArray(data) ? data : fallback();
-    rememberMembers(teamId, members);
-    return members;
+    if (status === 204 || data == null) return [];
+    return Array.isArray(data) ? data : [];
   } catch (error) {
     const parsed = getApiError(error);
-    if (parsed.status === 204 || parsed.status === 0) return fallback();
+    if (parsed.status === 204) return [];
     throw error;
   }
 }
@@ -498,6 +324,85 @@ export async function ensureRootTeam(ownerId: string): Promise<CrmTeam> {
   return root;
 }
 
+/**
+ * Monta membros da árvore a partir da lista já carregada (users + teams).
+ * Não dispara GET /teams/{id}/members.
+ */
+export function inferMembersFromUsers(
+  users: AppUser[],
+  teams: CrmTeam[],
+  snapshot: Record<string, CrmTeamMember[]> = {},
+): Record<string, CrmTeamMember[]> {
+  const result: Record<string, CrmTeamMember[]> = {};
+  const placed = new Set<string>();
+
+  for (const team of teams) {
+    const members = [...(snapshot[team.id] ?? [])];
+    result[team.id] = members;
+    for (const member of members) placed.add(member.user_id);
+  }
+
+  const add = (teamId: string, member: CrmTeamMember) => {
+    const current = result[teamId] ?? [];
+    if (current.some((item) => item.user_id === member.user_id)) return;
+    result[teamId] = [...current, member];
+    placed.add(member.user_id);
+  };
+
+  for (const team of teams) {
+    if (!team.manager_user_id) continue;
+    add(team.id, {
+      team_id: team.id,
+      user_id: team.manager_user_id,
+      is_leader: true,
+    });
+  }
+
+  const teamByName = new Map<string, CrmTeam>();
+  for (const team of teams) {
+    if (!team.is_active) continue;
+    const key = team.name.trim().toLowerCase();
+    if (key && !teamByName.has(key)) teamByName.set(key, team);
+  }
+
+  for (const user of users) {
+    if (user.status === "Inativo" || user.isOwner || placed.has(user.id)) continue;
+    const teamName = user.team.trim().toLowerCase();
+    if (!teamName) continue;
+    const team = teamByName.get(teamName);
+    if (!team) continue;
+    add(team.id, {
+      team_id: team.id,
+      user_id: user.id,
+      is_leader: user.role === "Gestor" || team.manager_user_id === user.id,
+    });
+  }
+
+  return result;
+}
+
+/** Preenche gestor a partir de GET /teams/{id}/members quando a listagem omite manager_user_id. */
+export function hydrateTeamManagers(
+  teams: CrmTeam[],
+  membersByTeamId: Record<string, CrmTeamMember[]>,
+): CrmTeam[] {
+  return teams.map((team) => {
+    if (team.manager_user_id) return team;
+    const leader = (membersByTeamId[team.id] ?? []).find((member) => member.is_leader);
+    if (!leader?.user_id) return team;
+    return { ...team, manager_user_id: leader.user_id };
+  });
+}
+
+/** Membros da API (+ inferência por cargo) — usado ao abrir a aba Árvore. */
+export function membersForOrgTree(
+  users: AppUser[],
+  teams: CrmTeam[],
+  membersByTeamId: Record<string, CrmTeamMember[]> = {},
+): Record<string, CrmTeamMember[]> {
+  return inferMembersFromUsers(users, teams, membersByTeamId);
+}
+
 export async function fetchTeamsWithMembers(ownerId?: string): Promise<{
   teams: CrmTeam[];
   membersByTeamId: Record<string, CrmTeamMember[]>;
@@ -505,14 +410,12 @@ export async function fetchTeamsWithMembers(ownerId?: string): Promise<{
   listFailed: boolean;
   recoveredFromConflict: boolean;
 }> {
-  const snapshot = readOrgSnapshot();
   const { teams, listFailed, recoveredFromConflict } = await fetchTeamsResilient(ownerId);
   const liveTeamIds = new Set(teams.map((team) => team.id));
-  const mergedTeams = mergeTeams(teams, snapshot?.teams ?? [], readKnownTeams()).filter(
-    (team) => team.is_active,
-  );
+  const visibleTeams = teams.filter((team) => team.is_active);
+  const teamsToLoad = listFailed ? visibleTeams : visibleTeams.filter((team) => liveTeamIds.has(team.id));
 
-  const memberLists = await mapWithConcurrency(mergedTeams, 3, async (team) => ({
+  const memberLists = await mapWithConcurrency(teamsToLoad, 3, async (team) => ({
     teamId: team.id,
     list: await fetchTeamMembers(team.id),
   }));
@@ -524,20 +427,8 @@ export async function fetchTeamsWithMembers(ownerId?: string): Promise<{
     if (item.list.message) messagesByTeamId[item.teamId] = item.list.message;
   }
 
-  const visibleTeams = mergedTeams.filter((team) => {
-    if (!isUnregisteredTeamMembersMessage(messagesByTeamId[team.id])) return true;
-    return liveTeamIds.has(team.id);
-  });
-
-  writeOrgSnapshot({
-    teams: visibleTeams,
-    membersByTeamId,
-    updatedAt: new Date().toISOString(),
-  });
-  writeKnownTeams(visibleTeams);
-
   return {
-    teams: visibleTeams,
+    teams: hydrateTeamManagers(visibleTeams, membersByTeamId),
     membersByTeamId,
     messagesByTeamId,
     listFailed,
@@ -645,11 +536,9 @@ async function resolveTeamByName(params: {
 }): Promise<CrmTeam> {
   const name = params.name.trim().slice(0, 120);
   const { teams } = await fetchTeamsResilient(params.ownerId);
-  const existing =
-    teams.find((team) => team.is_active && team.name.toLowerCase() === name.toLowerCase()) ??
-    readKnownTeams().find(
-      (team) => team.is_active && team.name.toLowerCase() === name.toLowerCase(),
-    );
+  const existing = teams.find(
+    (team) => team.is_active && team.name.toLowerCase() === name.toLowerCase(),
+  );
 
   if (existing) {
     return updateTeam(existing.id, {
@@ -727,8 +616,8 @@ export async function linkManagerToOrg(params: {
     user_id: params.manager.id,
     is_leader: true,
   }).catch(() => undefined);
+  await syncUserJobTitle(params.manager.id, team.name);
 
-  rememberTeam(team);
   return team;
 }
 
@@ -736,6 +625,7 @@ export async function assignCollaboratorToManager(params: {
   collaboratorId: string;
   managerTeamId: string;
   previousTeamId?: string | null;
+  teamName?: string;
 }): Promise<void> {
   if (params.previousTeamId && params.previousTeamId !== params.managerTeamId) {
     await removeTeamMember(params.previousTeamId, params.collaboratorId).catch(() => undefined);
@@ -744,6 +634,9 @@ export async function assignCollaboratorToManager(params: {
     user_id: params.collaboratorId,
     is_leader: false,
   });
+  if (params.teamName) {
+    await syncUserJobTitle(params.collaboratorId, params.teamName);
+  }
 }
 
 /** Move colaboradores de um time de gestor para outro gestor ou para o owner (time raiz). */
@@ -779,14 +672,34 @@ export async function transferManagerCollaborators(params: {
 export async function findManagedTeamForUser(
   userId: string,
   ownerId?: string,
+  cachedTeams?: CrmTeam[],
 ): Promise<{ team: CrmTeam; collaboratorIds: string[] } | null> {
-  const { teams, membersByTeamId } = await fetchTeamsWithMembers(ownerId);
-  const team = teams.find((item) => item.is_active && item.manager_user_id === userId);
-  if (!team) return null;
-  const collaboratorIds = (membersByTeamId[team.id] ?? [])
-    .filter((member) => member.user_id !== userId && !member.is_leader)
-    .map((member) => member.user_id);
-  return { team, collaboratorIds };
+  const teams = (cachedTeams ?? (await fetchTeamsResilient(ownerId)).teams).filter(
+    (item) => item.is_active,
+  );
+  const fromManagerId = teams.find((item) => item.manager_user_id === userId);
+  const inspect = async (team: CrmTeam) => {
+    const list = await fetchTeamMembers(team.id);
+    const collaboratorIds = list.items
+      .filter((member) => member.user_id !== userId && !member.is_leader)
+      .map((member) => member.user_id);
+    return { team, collaboratorIds, items: list.items };
+  };
+
+  if (fromManagerId) {
+    const found = await inspect(fromManagerId);
+    return { team: found.team, collaboratorIds: found.collaboratorIds };
+  }
+
+  const memberLists = await mapWithConcurrency(teams, 3, inspect);
+  const found = memberLists.find((entry) =>
+    entry.items.some((member) => member.user_id === userId && member.is_leader),
+  );
+  if (!found) return null;
+  return {
+    team: { ...found.team, manager_user_id: userId },
+    collaboratorIds: found.collaboratorIds,
+  };
 }
 
 /** Garante que um time com o nome exista (para o formulário de usuário). */

@@ -16,6 +16,9 @@ export type ApiErrorBody = {
   statusCode?: number;
   status_code?: number;
   message?: string;
+  error_code?: string;
+  error_message?: string;
+  error_details?: unknown;
 };
 
 export type HeaderGetter = {
@@ -87,14 +90,18 @@ function nestedError(payload: ApiErrorBody) {
 function messageFromBody(payload: ApiErrorBody, status: number): { message: string; details?: unknown } {
   const detail = payload.detail;
   const nested = nestedError(payload);
+  const details = nested?.details ?? payload.error_details ?? detail;
   if (nested?.message) {
-    return { message: nested.message, details: nested.details ?? detail };
+    return { message: nested.message, details };
+  }
+  if (typeof payload.error_message === "string" && payload.error_message.trim()) {
+    return { message: payload.error_message, details };
   }
   if (typeof payload.message === "string" && payload.message.trim()) {
-    return { message: payload.message, details: nested?.details ?? detail };
+    return { message: payload.message, details };
   }
   if (typeof detail === "string" && detail.trim()) {
-    return { message: detail };
+    return { message: detail, details };
   }
   if (Array.isArray(detail)) {
     const first = detail.find((item) => item && typeof item === "object" && "msg" in item) as
@@ -105,7 +112,7 @@ function messageFromBody(payload: ApiErrorBody, status: number): { message: stri
       details: detail,
     };
   }
-  return { message: defaultMessageForStatus(status), details: nested?.details ?? detail };
+  return { message: defaultMessageForStatus(status), details };
 }
 
 export function parseApiError(status: number, body: unknown, headers?: unknown): ParsedApiError {
@@ -116,6 +123,7 @@ export function parseApiError(status: number, body: unknown, headers?: unknown):
   const nested = nestedError(payload);
   const code =
     (typeof payload.error === "string" ? payload.error : nested?.code) ||
+    payload.error_code ||
     (status === 401 ? "AUTHENTICATION_FAILED" : "UNKNOWN");
   return {
     status,
@@ -157,6 +165,14 @@ function defaultMessageForStatus(status: number) {
   }
 }
 
+/** Campo apontado em `details.field` (ex.: VALIDATION_ERROR de CPF). */
+export function fieldFromError(error: ParsedApiError): string | undefined {
+  const details = error.details;
+  if (!details || typeof details !== "object" || Array.isArray(details)) return undefined;
+  const field = (details as { field?: unknown }).field;
+  return typeof field === "string" && field.trim() ? field.trim() : undefined;
+}
+
 export function featureKeyFromError(error: ParsedApiError): string | undefined {
   const details = error.details;
   if (details && typeof details === "object" && !Array.isArray(details) && "feature_key" in details) {
@@ -188,6 +204,8 @@ export function permissionKeyFromError(error: ParsedApiError): string | undefine
 const PERMISSION_KEY_LABELS: Record<string, string> = {
   "users.view": "a lista de usuários da empresa",
   "users.invite": "convidar usuários",
+  "users.update": "editar usuários",
+  "users.deactivate": "desativar usuários",
   "roles.view": "cargos e papéis",
   "leads.view": "os leads",
   "contracts.view": "os contratos",

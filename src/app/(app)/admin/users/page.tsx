@@ -74,12 +74,9 @@ import {
 } from "@/modules/admin/services";
 import {
   ensureTeamNamed,
-  fetchTeamsResilient,
   fetchTeamsWithMembers,
   findManagedTeamForUser,
-  loadExtraTeamNames,
   matchTeamName,
-  rememberTeamName,
   teamNameOptions,
   teamNamesInUse,
   updateTeam,
@@ -117,6 +114,10 @@ export default function UsersPage() {
   const features = session.data?.features;
   const planCode = session.data?.subscription.planCode;
   const isAdmin = session.data?.role === Role.Administrador;
+  const sessionPermissions = session.data?.permissions ?? [];
+  const canCreateUsers = isAdmin || sessionPermissions.includes("usuarios:criar");
+  const canEditUsers = isAdmin || sessionPermissions.includes("usuarios:editar");
+  const canDeactivateUsers = isAdmin || sessionPermissions.includes("usuarios:excluir");
   const hasAdvancedPermissions =
     hasFeature(features, "advanced_permissions") ||
     planCode === "PROFESSIONAL" ||
@@ -129,7 +130,7 @@ export default function UsersPage() {
   const [leadsReassignOpen, setLeadsReassignOpen] = useState(false);
   const [pendingManagerExit, setPendingManagerExit] = useState<PendingManagerExit | null>(null);
   const [teamSelectMode, setTeamSelectMode] = useState<"list" | "custom">("list");
-  const [extraTeamNames, setExtraTeamNames] = useState<string[]>(() => loadExtraTeamNames());
+  const [extraTeamNames, setExtraTeamNames] = useState<string[]>([]);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
   const [createdEmail, setCreatedEmail] = useState<string | null>(null);
   const [draftPermissions, setDraftPermissions] = useState<Permission[]>([]);
@@ -176,26 +177,34 @@ export default function UsersPage() {
         data?.find((user) => user.role === Role.Administrador)?.id ??
         meId ??
         undefined;
-      const result = await fetchTeamsResilient(ownerId);
-      return result.teams
-        .filter((team) => team.is_active)
-        .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+      const result = await fetchTeamsWithMembers(ownerId);
+      return {
+        teams: result.teams
+          .filter((team) => team.is_active)
+          .sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+        membersByTeamId: result.membersByTeamId,
+      };
     },
     enabled: Boolean(session.data),
+    staleTime: 0,
   });
 
-  const teamOptions = teamsQuery.data ?? [];
+  const teamOptions = teamsQuery.data?.teams ?? [];
+  const membersByTeamId = teamsQuery.data?.membersByTeamId ?? {};
   const teamNames = useMemo(
-    () => teamNameOptions(teamsQuery.data ?? [], extraTeamNames),
-    [teamsQuery.data, extraTeamNames],
+    () => teamNameOptions(teamOptions, extraTeamNames),
+    [teamOptions, extraTeamNames],
   );
 
   function commitTeamToList(name: string): string {
     const trimmed = name.trim();
     if (!trimmed) return "";
     const canonical = matchTeamName(trimmed, teamNames) ?? trimmed;
-    rememberTeamName(canonical);
-    setExtraTeamNames(loadExtraTeamNames());
+    setExtraTeamNames((current) =>
+      current.some((name) => name.toLowerCase() === canonical.toLowerCase())
+        ? current
+        : [...current, canonical],
+    );
     setTeamSelectMode("list");
     return canonical;
   }
@@ -206,8 +215,8 @@ export default function UsersPage() {
     meId ??
     undefined;
   const usedTeamNames = useMemo(
-    () => teamNamesInUse(teamsQuery.data ?? [], ownerIdForTeams),
-    [teamsQuery.data, ownerIdForTeams],
+    () => teamNamesInUse(teamOptions, ownerIdForTeams),
+    [teamOptions, ownerIdForTeams],
   );
   const activeUsers = useMemo(
     () => (data || []).filter((user) => user.status !== "Inativo"),
@@ -248,7 +257,7 @@ export default function UsersPage() {
       setTeamSelectMode("list");
       return;
     }
-    const names = teamNameOptions(teamsQuery.data ?? [], extraTeamNames);
+    const names = teamNameOptions(teamOptions, extraTeamNames);
     reset({
       name: editing.name,
       email: editing.email,
@@ -278,7 +287,6 @@ export default function UsersPage() {
         meId ??
         undefined;
       const teamName = values.team.trim();
-      if (teamName) rememberTeamName(teamName);
       const ensured = teamName
         ? await ensureTeamNamed({ name: teamName, ownerId }).catch(() => null)
         : null;
@@ -296,12 +304,23 @@ export default function UsersPage() {
             user_id: user.id,
             is_leader: values.role === Role.Gestor,
           }).catch(() => undefined);
+          if (values.role === Role.Gestor) {
+            const canTake =
+              !selectedTeam.manager_user_id ||
+              selectedTeam.manager_user_id === user.id ||
+              selectedTeam.manager_user_id === ownerId;
+            if (canTake) {
+              await updateTeam(selectedTeam.id, { manager_user_id: user.id }).catch(() => undefined);
+            }
+          }
         }
         if (
           editing.role === Role.Gestor &&
           (values.role !== Role.Gestor || values.status === "Inativo")
         ) {
-          const managed = await findManagedTeamForUser(editing.id, ownerId).catch(() => null);
+          const managed = await findManagedTeamForUser(editing.id, ownerId, teamOptions).catch(
+            () => null,
+          );
           if (managed && managed.collaboratorIds.length === 0) {
             await updateTeam(managed.team.id, { manager_user_id: null }).catch(() => undefined);
           }
@@ -314,13 +333,23 @@ export default function UsersPage() {
           user_id: created.id,
           is_leader: values.role === Role.Gestor,
         }).catch(() => undefined);
+        if (values.role === Role.Gestor) {
+          const canTake =
+            !selectedTeam.manager_user_id ||
+            selectedTeam.manager_user_id === created.id ||
+            selectedTeam.manager_user_id === ownerId;
+          if (canTake) {
+            await updateTeam(selectedTeam.id, { manager_user_id: created.id }).catch(() => undefined);
+          }
+        }
       }
       return { user: created, invitationToken: created.invitationToken };
     },
-    onSuccess: ({ invitationToken }, { values, syncPermissions }) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.users });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.teams });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.orgTree });
+    onSuccess: async ({ invitationToken }, { values, syncPermissions }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.users }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.teams }),
+      ]);
       if (editing) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.userPermissions(editing.id) });
         enqueueSnackbar(
@@ -359,13 +388,12 @@ export default function UsersPage() {
         data?.find((user) => user.role === Role.Administrador)?.id ??
         meId ??
         undefined;
-      const managed = await findManagedTeamForUser(params.userId, ownerId);
+      const managed = await findManagedTeamForUser(params.userId, ownerId, teamOptions);
       if (!managed || managed.collaboratorIds.length === 0) return false;
 
-      const org = await fetchTeamsWithMembers(ownerId);
       const treeUsers = (data || []).filter((user) => user.status !== "Inativo");
       const owner = treeUsers.find((user) => user.isOwner) ?? null;
-      const managers = org.teams
+      const managers = teamOptions
         .filter((team) => team.manager_user_id && team.manager_user_id !== owner?.id)
         .map((team) => {
           const manager = treeUsers.find((user) => user.id === team.manager_user_id);
@@ -420,7 +448,7 @@ export default function UsersPage() {
       data?.find((item) => item.role === Role.Administrador)?.id ??
       meId ??
       undefined;
-    const managed = await findManagedTeamForUser(user.id, ownerId);
+    const managed = await findManagedTeamForUser(user.id, ownerId, teamOptions);
     if (managed && managed.collaboratorIds.length > 0) {
       const blocked = await maybeRequireManagerExit({
         userId: user.id,
@@ -443,7 +471,6 @@ export default function UsersPage() {
     await queryClient.invalidateQueries({ queryKey: queryKeys.users });
     await queryClient.invalidateQueries({ queryKey: queryKeys.leads.all });
     await queryClient.invalidateQueries({ queryKey: queryKeys.kanban });
-    await queryClient.invalidateQueries({ queryKey: queryKeys.orgTree });
     await queryClient.invalidateQueries({ queryKey: queryKeys.teams });
     await refetch();
     setDeleteTarget(null);
@@ -491,11 +518,19 @@ export default function UsersPage() {
               : ""}
           </Typography>
         </Box>
-        <Tooltip title={atUserLimit ? "Limite de usuários do plano atingido" : ""}>
+        <Tooltip
+          title={
+            atUserLimit
+              ? "Limite de usuários do plano atingido"
+              : canCreateUsers
+                ? ""
+                : "Sem permissão para criar usuários"
+          }
+        >
           <span>
             <Button
               variant="contained"
-              disabled={atUserLimit}
+              disabled={atUserLimit || !canCreateUsers}
               onClick={() => {
                 setEditing(null);
                 setCreatedPassword(null);
@@ -545,7 +580,15 @@ export default function UsersPage() {
             onRetry={() => refetch()}
           />
         ) : (
-          <UserOrgTree users={activeUsers} canManage={isAdmin} />
+          <UserOrgTree
+            users={activeUsers}
+            teams={teamOptions}
+            membersByTeamId={membersByTeamId}
+            teamsLoading={teamsQuery.isLoading}
+            teamsError={teamsQuery.error}
+            onRetryTeams={() => void teamsQuery.refetch()}
+            canManage={isAdmin}
+          />
         )
       ) : isLoading ? (
         <Box py={8} display="flex" justifyContent="center">
@@ -630,7 +673,8 @@ export default function UsersPage() {
               ) : (
                 filteredUsers.map((user) => {
                 const isSelf = user.id === meId;
-                const canDeactivate = !isSelf && user.status === "Ativo" && !user.isOwner;
+                const canDeactivate =
+                  canDeactivateUsers && !isSelf && user.status === "Ativo" && !user.isOwner;
                 return (
                   <TableRow key={user.id} hover>
                     <TableCell>
@@ -665,7 +709,9 @@ export default function UsersPage() {
                                 ? "O proprietário da empresa não pode ser desativado"
                                 : user.status !== "Ativo"
                                   ? "Apenas usuários ativos podem ser desativados"
-                                  : "Desativar usuário"
+                                  : canDeactivateUsers
+                                    ? "Desativar usuário"
+                                    : "Sem permissão para desativar usuários"
                           }
                         >
                           <span>
@@ -684,17 +730,19 @@ export default function UsersPage() {
                       </Stack>
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={() => {
-                          setEditing(user);
-                          setCreatedPassword(null);
-                          setCreatedEmail(null);
-                          setOpen(true);
-                        }}
-                      >
-                        <EditOutlinedIcon fontSize="small" />
-                      </IconButton>
+                      {canEditUsers ? (
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setEditing(user);
+                            setCreatedPassword(null);
+                            setCreatedEmail(null);
+                            setOpen(true);
+                          }}
+                        >
+                          <EditOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      ) : null}
                       {canDeactivate ? (
                         <Tooltip title="Desativar">
                           <IconButton
@@ -863,7 +911,7 @@ export default function UsersPage() {
                               ? "Carregando times da empresa…"
                               : teamsQuery.isError
                                 ? "Não foi possível listar os times. Use um nome padrão ou adicione outro."
-                                : "Comercial, Gestor, Operação e Marketing — ou adicione outro time")
+                                : "Times cadastrados na empresa — ou adicione outro")
                           }
                         >
                           <MenuItem value="">
@@ -1027,7 +1075,6 @@ export default function UsersPage() {
           onCompleted={async () => {
             const next = pendingManagerExit;
             setPendingManagerExit(null);
-            await queryClient.invalidateQueries({ queryKey: queryKeys.orgTree });
             await queryClient.invalidateQueries({ queryKey: queryKeys.teams });
             if (next.after === "save" && next.savePayload) {
               save.mutate(next.savePayload);

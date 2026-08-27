@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Alert,
   Box,
   Button,
   Dialog,
@@ -18,7 +19,9 @@ import {
 } from "@mui/material";
 import { useSnackbar } from "notistack";
 import { useEffect, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { Controller, useForm, type FieldErrors } from "react-hook-form";
+import { getApiError } from "@/lib/api/client";
+import { fieldFromError, type ParsedApiError } from "@/lib/api/errors";
 import { CurrencyField } from "@/components/inputs/CurrencyField";
 import { formatCurrency } from "@/lib/utils/format";
 import { useSession } from "@/modules/auth/hooks";
@@ -35,13 +38,66 @@ type Props = {
 
 const steps = ["Dados pessoais", "Comercial", "Processo", "Revisão"];
 
+const API_FIELD_TO_FORM: Record<string, keyof LeadFormValues> = {
+  name: "name",
+  email: "email",
+  phone: "phone",
+  whatsapp: "whatsapp",
+  cpf: "cpf",
+  origin: "origin",
+  source: "origin",
+  campaign: "campaign",
+  channel: "channel",
+  owner_user_id: "ownerId",
+  ownerId: "ownerId",
+  priority: "priority",
+  status: "status",
+  tags: "tags",
+  observations: "observations",
+  total_value: "totalValue",
+  totalValue: "totalValue",
+};
+
+const FIELD_STEP: Record<keyof LeadFormValues, number> = {
+  name: 0,
+  email: 0,
+  phone: 0,
+  whatsapp: 0,
+  cpf: 0,
+  origin: 1,
+  campaign: 1,
+  channel: 1,
+  ownerId: 1,
+  priority: 1,
+  status: 1,
+  tags: 1,
+  totalValue: 2,
+  observations: 2,
+};
+
+function formFieldFromApi(apiField: string | undefined): keyof LeadFormValues | undefined {
+  if (!apiField) return undefined;
+  return API_FIELD_TO_FORM[apiField];
+}
+
+function stepForField(field: keyof LeadFormValues): number {
+  return FIELD_STEP[field] ?? 0;
+}
+
+function firstInvalidStep(formErrors: FieldErrors<LeadFormValues>): number {
+  const field = (Object.keys(FIELD_STEP) as Array<keyof LeadFormValues>).find((key) => formErrors[key]);
+  return field ? stepForField(field) : 0;
+}
+
 export function CreateLeadDialog({ open, onClose }: Props) {
   const [activeStep, setActiveStep] = useState(0);
+  const [submitError, setSubmitError] = useState<ParsedApiError | null>(null);
   const createLead = useCreateLead();
   const { enqueueSnackbar } = useSnackbar();
   const { data: session } = useSession();
   const isComercial = session?.role === Role.Comercial;
   const users = useUserDirectory(open && !isComercial);
+  const submitting = createLead.isPending;
 
   const {
     register,
@@ -50,6 +106,7 @@ export function CreateLeadDialog({ open, onClose }: Props) {
     trigger,
     watch,
     getValues,
+    setError,
     control,
     formState: { errors },
   } = useForm<LeadFormValues>({
@@ -58,6 +115,8 @@ export function CreateLeadDialog({ open, onClose }: Props) {
       name: "",
       email: "",
       phone: "",
+      whatsapp: "",
+      cpf: "",
       priority: "media",
       status: "Novo Lead",
       totalValue: 0,
@@ -71,12 +130,21 @@ export function CreateLeadDialog({ open, onClose }: Props) {
   useEffect(() => {
     if (!open) {
       setActiveStep(0);
+      setSubmitError(null);
     }
   }, [open]);
 
+  function closeDialog() {
+    if (submitting) return;
+    setSubmitError(null);
+    onClose();
+  }
+
   async function nextStep() {
+    if (submitting) return;
+    setSubmitError(null);
     if (activeStep === 0) {
-      const ok = await trigger(["name", "email", "phone"]);
+      const ok = await trigger(["name", "email", "phone", "cpf"]);
       if (!ok) return;
     }
     if (activeStep === 1) {
@@ -90,7 +158,19 @@ export function CreateLeadDialog({ open, onClose }: Props) {
     setActiveStep((s) => Math.min(s + 1, steps.length - 1));
   }
 
+  function applyApiError(error: unknown) {
+    const parsed = getApiError(error);
+    setSubmitError(parsed);
+    const formField = formFieldFromApi(fieldFromError(parsed));
+    if (formField) {
+      setError(formField, { type: "server", message: parsed.message });
+      setActiveStep(stepForField(formField));
+    }
+  }
+
   function submit(formValues: LeadFormValues) {
+    if (submitting) return;
+    setSubmitError(null);
     createLead.mutate(
       {
         name: formValues.name,
@@ -118,10 +198,16 @@ export function CreateLeadDialog({ open, onClose }: Props) {
           enqueueSnackbar("Lead criado", { variant: "success" });
           reset();
           setActiveStep(0);
+          setSubmitError(null);
           onClose();
         },
+        onError: applyApiError,
       },
     );
+  }
+
+  function onInvalid(formErrors: FieldErrors<LeadFormValues>) {
+    setActiveStep(firstInvalidStep(formErrors));
   }
 
   const ownerName = isComercial
@@ -130,7 +216,7 @@ export function CreateLeadDialog({ open, onClose }: Props) {
       "Regra de distribuição do admin";
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={closeDialog} fullWidth maxWidth="sm">
       <DialogTitle>Novo Lead</DialogTitle>
       <DialogContent>
         <Stepper activeStep={activeStep} alternativeLabel sx={{ my: 2 }}>
@@ -141,11 +227,17 @@ export function CreateLeadDialog({ open, onClose }: Props) {
           ))}
         </Stepper>
 
+        {submitError ? (
+          <Alert severity="error" sx={{ mb: 2 }} role="alert">
+            {submitError.message || "Não foi possível criar o lead."}
+          </Alert>
+        ) : null}
+
         <Stack
           spacing={2}
           component="form"
           id="create-lead-form"
-          onSubmit={handleSubmit(submit)}
+          onSubmit={handleSubmit(submit, onInvalid)}
         >
           {activeStep === 0 ? (
             <>
@@ -171,7 +263,13 @@ export function CreateLeadDialog({ open, onClose }: Props) {
                 fullWidth
               />
               <TextField label="WhatsApp" {...register("whatsapp")} fullWidth />
-              <TextField label="CPF" {...register("cpf")} fullWidth />
+              <TextField
+                label="CPF"
+                error={Boolean(errors.cpf)}
+                helperText={errors.cpf?.message}
+                {...register("cpf")}
+                fullWidth
+              />
             </>
           ) : null}
 
@@ -318,13 +416,24 @@ export function CreateLeadDialog({ open, onClose }: Props) {
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose}>Cancelar</Button>
+        <Button onClick={closeDialog} disabled={submitting}>
+          Cancelar
+        </Button>
         <Box flex={1} />
         {activeStep > 0 ? (
-          <Button onClick={() => setActiveStep((s) => s - 1)}>Voltar</Button>
+          <Button
+            onClick={() => {
+              if (submitting) return;
+              setSubmitError(null);
+              setActiveStep((s) => s - 1);
+            }}
+            disabled={submitting}
+          >
+            Voltar
+          </Button>
         ) : null}
         {activeStep < steps.length - 1 ? (
-          <Button variant="contained" onClick={() => void nextStep()}>
+          <Button variant="contained" onClick={() => void nextStep()} disabled={submitting}>
             Continuar
           </Button>
         ) : (
@@ -332,7 +441,8 @@ export function CreateLeadDialog({ open, onClose }: Props) {
             type="submit"
             form="create-lead-form"
             variant="contained"
-            disabled={createLead.isPending}
+            loading={submitting}
+            disabled={submitting}
           >
             Confirmar e criar
           </Button>

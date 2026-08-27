@@ -12,6 +12,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { key: "contratos", label: "Contratos", actions: ["visualizar", "criar", "editar"] },
   { key: "financeiro", label: "Financeiro", actions: ["visualizar", "editar"] },
   { key: "dashboard", label: "Dashboard", actions: ["visualizar"] },
+  { key: "usuarios", label: "Usuários", actions: ["visualizar", "criar", "editar", "excluir"] },
   { key: "admin", label: "Administração", actions: ["visualizar", "editar"] },
 ];
 

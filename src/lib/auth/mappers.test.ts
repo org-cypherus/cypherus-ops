@@ -12,6 +12,17 @@ describe("mapApiPermissions", () => {
       ]),
     ).toEqual(["crm:visualizar", "contratos:visualizar"]);
   });
+
+  it("maps users CRUD keys independently", () => {
+    expect(
+      mapApiPermissions([
+        { permission: "users.view", granted: true },
+        { permission: "users.invite", granted: true },
+        { permission: "users.update", granted: true },
+        { permission: "users.deactivate", granted: false },
+      ]),
+    ).toEqual(["usuarios:visualizar", "usuarios:criar", "usuarios:editar"]);
+  });
 });
 
 describe("mapApiFeatures", () => {

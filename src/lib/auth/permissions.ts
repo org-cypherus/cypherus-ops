@@ -14,6 +14,10 @@ export type Permission =
   | "financeiro:editar"
   | "dashboard:visualizar"
   | "relatorios:exportar"
+  | "usuarios:visualizar"
+  | "usuarios:criar"
+  | "usuarios:editar"
+  | "usuarios:excluir"
   | "admin:visualizar"
   | "admin:editar";
 
@@ -46,6 +50,10 @@ export const ALL_PERMISSIONS: Permission[] = [
   "financeiro:editar",
   "dashboard:visualizar",
   "relatorios:exportar",
+  "usuarios:visualizar",
+  "usuarios:criar",
+  "usuarios:editar",
+  "usuarios:excluir",
   "admin:visualizar",
   "admin:editar",
 ];
@@ -64,6 +72,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     "financeiro:visualizar",
     "dashboard:visualizar",
     "relatorios:exportar",
+    "usuarios:visualizar",
     "admin:visualizar",
   ],
   [Role.Comercial]: [

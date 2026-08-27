@@ -36,6 +36,7 @@ describe("canSeeAppRoute", () => {
   const essential = resolveFeatures("ESSENTIAL");
   const comercial = ROLE_PERMISSIONS[Role.Comercial];
   const financeiro = ROLE_PERMISSIONS[Role.Financeiro];
+  const gestor = ROLE_PERMISSIONS[Role.Gestor];
 
   it("hides contracts for comercial on Essential (no feature)", () => {
     const route = APP_NAV_ROUTES.find((item) => item.href === "/contracts")!;
@@ -48,9 +49,10 @@ describe("canSeeAppRoute", () => {
     expect(canSeeAppRoute({ permissions: financeiro, features: pro }, route)).toBe(true);
   });
 
-  it("hides admin routes without admin:visualizar", () => {
+  it("hides users management without usuarios:visualizar", () => {
     const users = APP_NAV_ROUTES.find((item) => item.href === "/admin/users")!;
     expect(canSeeAppRoute({ permissions: comercial, features: pro }, users)).toBe(false);
+    expect(canSeeAppRoute({ permissions: gestor, features: pro }, users)).toBe(true);
   });
 
   it("hides everything without a session", () => {

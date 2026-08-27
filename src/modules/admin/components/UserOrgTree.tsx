@@ -18,12 +18,11 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { getApiError } from "@/lib/api/client";
-import { isUserNotFound } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/query/keys";
 import type { AppUser } from "@/modules/admin/services";
 import { OrgPersonNode } from "@/modules/admin/components/OrgHierarchyChart";
@@ -35,21 +34,25 @@ import {
 import {
   assignCollaboratorToManager,
   buildOrgTree,
-  fetchTeamsWithMembers,
   linkManagerToOrg,
-  loadExtraTeamNames,
   matchTeamName,
-  rememberTeamName,
+  membersForOrgTree,
   removeTeamMember,
   teamNameOptions,
   teamNamesInUse,
   updateTeam,
   type CrmTeam,
+  type CrmTeamMember,
   type OrgTreeManagerNode,
 } from "@/modules/admin/teams";
 
 type Props = {
   users: AppUser[];
+  teams: CrmTeam[];
+  membersByTeamId?: Record<string, CrmTeamMember[]>;
+  teamsLoading?: boolean;
+  teamsError?: unknown;
+  onRetryTeams?: () => void;
   canManage: boolean;
 };
 
@@ -67,7 +70,15 @@ type PendingRemoveManager = {
 
 const CUSTOM_TEAM_VALUE = "__custom__";
 
-export function UserOrgTree({ users, canManage }: Props) {
+export function UserOrgTree({
+  users,
+  teams,
+  membersByTeamId = {},
+  teamsLoading = false,
+  teamsError,
+  onRetryTeams,
+  canManage,
+}: Props) {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const [dialog, setDialog] = useState<DialogMode>(null);
@@ -77,46 +88,29 @@ export function UserOrgTree({ users, canManage }: Props) {
   const [customTeamName, setCustomTeamName] = useState("");
   const [extraTeamNames, setExtraTeamNames] = useState<string[]>([]);
   const [pendingRemove, setPendingRemove] = useState<PendingRemoveManager | null>(null);
-
-  const ownerId =
-    users.find((user) => user.isOwner)?.id ??
-    users.find((user) => user.role === "Administrador" && user.status === "Ativo")?.id;
-
-  const orgQuery = useQuery({
-    queryKey: [...queryKeys.orgTree, ownerId ?? "none"] as const,
-    queryFn: () => fetchTeamsWithMembers(ownerId),
-    placeholderData: (previous) => previous,
-  });
+  const [orgEpoch, setOrgEpoch] = useState(0);
 
   const tree = useMemo(() => {
-    if (!orgQuery.data) {
-      return buildOrgTree(users, [], {});
-    }
-    return buildOrgTree(users, orgQuery.data.teams, orgQuery.data.membersByTeamId);
-  }, [orgQuery.data, users]);
+    const members = membersForOrgTree(users, teams, membersByTeamId);
+    return buildOrgTree(users, teams, members);
+  }, [users, teams, membersByTeamId, orgEpoch]);
 
   const teamOptions = useMemo(
-    () => teamNameOptions(orgQuery.data?.teams ?? [], extraTeamNames),
-    [orgQuery.data?.teams, extraTeamNames],
+    () => teamNameOptions(teams, extraTeamNames),
+    [teams, extraTeamNames],
   );
-
-  useEffect(() => {
-    setExtraTeamNames(loadExtraTeamNames());
-  }, [dialog]);
 
   const usedTeamNames = useMemo(
-    () => teamNamesInUse(orgQuery.data?.teams ?? [], tree.owner?.id),
-    [orgQuery.data?.teams, tree.owner?.id],
+    () => teamNamesInUse(teams, tree.owner?.id),
+    [teams, tree.owner?.id],
   );
-  const memberNotices = useMemo(() => {
-    const byTeam = orgQuery.data?.messagesByTeamId ?? {};
-    return Array.from(new Set(Object.values(byTeam).filter(Boolean)));
-  }, [orgQuery.data?.messagesByTeamId]);
 
   const invalidateOrg = async () => {
-    // Recarrega mesclando com o snapshot local — não deixa a UI “apagar” a árvore.
-    await queryClient.invalidateQueries({ queryKey: queryKeys.teams });
-    await queryClient.refetchQueries({ queryKey: [...queryKeys.orgTree, ownerId ?? "none"] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.teams }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.users }),
+    ]);
+    setOrgEpoch((n: number) => n + 1);
   };
 
   const resolvedTeamName =
@@ -148,16 +142,21 @@ export function UserOrgTree({ users, canManage }: Props) {
             collaboratorId,
             managerTeamId: dialog.manager.team.id,
             previousTeamId: null,
+            teamName: dialog.manager.team.name,
           });
         }
         return { kind: "ok" };
       }
       if (dialog.type === "move-collaborator") {
         if (!selectedUserId) throw new Error("Selecione o time/gestor de destino.");
+        const destination =
+          tree.managers.find((node) => node.team.id === selectedUserId) ??
+          (tree.rootTeam?.id === selectedUserId ? { team: tree.rootTeam } : null);
         await assignCollaboratorToManager({
           collaboratorId: dialog.userId,
           managerTeamId: selectedUserId,
           previousTeamId: dialog.fromTeamId,
+          teamName: destination?.team.name,
         });
         return { kind: "ok" };
       }
@@ -295,7 +294,7 @@ export function UserOrgTree({ users, canManage }: Props) {
         ? selectedCollaboratorIds.length > 0 && !mutation.isPending
         : Boolean(selectedUserId) && !mutation.isPending;
 
-  if (orgQuery.isLoading && !tree.owner) {
+  if (teamsLoading && teams.length === 0) {
     return (
       <Box py={6} display="flex" justifyContent="center">
         <CircularProgress />
@@ -303,12 +302,12 @@ export function UserOrgTree({ users, canManage }: Props) {
     );
   }
 
-  if (orgQuery.isError && !(tree.owner && isUserNotFound(getApiError(orgQuery.error)))) {
+  if (teamsError && teams.length === 0) {
     return (
       <ErrorState
-        error={orgQuery.error}
+        error={teamsError}
         resourceLabel="o organograma de times"
-        onRetry={() => orgQuery.refetch()}
+        onRetry={() => onRetryTeams?.()}
       />
     );
   }
@@ -336,12 +335,6 @@ export function UserOrgTree({ users, canManage }: Props) {
         ) : null}
       </Stack>
 
-      {memberNotices.map((notice) => (
-        <Alert key={notice} severity="info">
-          {notice}
-        </Alert>
-      ))}
-
       {!tree.owner ? (
         <Typography variant="body2" color="text.secondary">
           Nenhum administrador owner encontrado para a raiz do organograma.
@@ -349,7 +342,6 @@ export function UserOrgTree({ users, canManage }: Props) {
       ) : (
         <OrgTreeBlueprintView
           tree={tree}
-          hideEmptyHint={memberNotices.length > 0}
           actions={{
             canManage,
             onAddCollaborator: openAddCollaborator,
@@ -450,7 +442,7 @@ export function UserOrgTree({ users, canManage }: Props) {
                   label="Time"
                   value={selectedTeamName}
                   onChange={(e) => setSelectedTeamName(e.target.value)}
-                  helperText="Comercial, Gestor, Operação e Marketing — ou adicione outro time"
+                  helperText="Times cadastrados na empresa — ou adicione outro"
                 >
                   {teamOptions.map((name) => {
                     const inUse = usedTeamNames.has(name.toLowerCase());
@@ -477,8 +469,11 @@ export function UserOrgTree({ users, canManage }: Props) {
                         const next = customTeamName.trim();
                         if (!next) return;
                         const canonical = matchTeamName(next, teamOptions) ?? next;
-                        rememberTeamName(canonical);
-                        setExtraTeamNames(loadExtraTeamNames());
+                        setExtraTeamNames((current) =>
+                          current.some((name) => name.toLowerCase() === canonical.toLowerCase())
+                            ? current
+                            : [...current, canonical],
+                        );
                         setSelectedTeamName(canonical);
                         setCustomTeamName("");
                       }}
@@ -492,8 +487,11 @@ export function UserOrgTree({ users, canManage }: Props) {
                         const next = customTeamName.trim();
                         if (!next) return;
                         const canonical = matchTeamName(next, teamOptions) ?? next;
-                        rememberTeamName(canonical);
-                        setExtraTeamNames(loadExtraTeamNames());
+                        setExtraTeamNames((current) =>
+                          current.some((name) => name.toLowerCase() === canonical.toLowerCase())
+                            ? current
+                            : [...current, canonical],
+                        );
                         setSelectedTeamName(canonical);
                         setCustomTeamName("");
                       }}

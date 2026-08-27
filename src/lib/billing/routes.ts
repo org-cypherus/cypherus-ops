@@ -43,7 +43,7 @@ export const APP_NAV_ROUTES: AppRouteConfig[] = [
   {
     href: "/admin/users",
     label: "Usuários",
-    permission: "admin:visualizar",
+    permission: "usuarios:visualizar",
   },
   {
     href: "/admin",
