@@ -313,8 +313,8 @@ export function UserOrgTree({
   }
 
   return (
-    <Stack spacing={2.5}>
-      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={1.5}>
+    <Stack spacing={2} sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" gap={1.5} flexShrink={0}>
         <Box>
           <Typography variant="subtitle1" fontWeight={700}>
             Organograma
@@ -340,30 +340,32 @@ export function UserOrgTree({
           Nenhum administrador owner encontrado para a raiz do organograma.
         </Typography>
       ) : (
-        <OrgTreeBlueprintView
-          tree={tree}
-          actions={{
-            canManage,
-            onAddCollaborator: openAddCollaborator,
-            onChangeManager: (manager) => {
-              setSelectedUserId(manager.user.id);
-              setDialog({ type: "change-manager", manager });
-            },
-            onRemoveManager: (manager) => removeManagerMutation.mutate(manager),
-            onMoveCollaborator: (userId, fromTeamId) => {
-              setSelectedUserId("");
-              setDialog({ type: "move-collaborator", userId, fromTeamId });
-            },
-            onRemoveCollaborator: (teamId, userId) => removeMutation.mutate({ teamId, userId }),
-            removingMember: removeMutation.isPending,
-            removingManager: removeManagerMutation.isPending,
-          }}
-        />
+        <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <OrgTreeBlueprintView
+            tree={tree}
+            actions={{
+              canManage,
+              onAddCollaborator: openAddCollaborator,
+              onChangeManager: (manager) => {
+                setSelectedUserId(manager.user.id);
+                setDialog({ type: "change-manager", manager });
+              },
+              onRemoveManager: (manager) => removeManagerMutation.mutate(manager),
+              onMoveCollaborator: (userId, fromTeamId) => {
+                setSelectedUserId("");
+                setDialog({ type: "move-collaborator", userId, fromTeamId });
+              },
+              onRemoveCollaborator: (teamId, userId) => removeMutation.mutate({ teamId, userId }),
+              removingMember: removeMutation.isPending,
+              removingManager: removeManagerMutation.isPending,
+            }}
+          />
+        </Box>
       )}
 
       <Divider />
 
-      <Box>
+      <Box flexShrink={0} sx={{ maxHeight: { xs: 140, md: 180 }, overflowY: "auto" }}>
         <Typography variant="subtitle2" fontWeight={700} gutterBottom>
           Sem vínculo
         </Typography>
