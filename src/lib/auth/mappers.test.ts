@@ -42,9 +42,11 @@ describe("mapRoleCode", () => {
     expect(mapRoleCode("SALES")).toBe(Role.Comercial);
     expect(mapRoleCode("FINANCE")).toBe(Role.Financeiro);
     expect(mapRoleCode("LEGAL")).toBe(Role.Jurídico);
+    expect(mapRoleCode("JURIDICO")).toBe(Role.Jurídico);
     expect(mapRoleCode("Jurídico")).toBe(Role.Jurídico);
     expect(mapRoleCode("MANAGER", true)).toBe(Role.Gestor);
     expect(mapRoleCode(undefined, true)).toBe(Role.Administrador);
+    expect(mapRoleCode(undefined)).toBe(Role.Comercial);
   });
 });
 

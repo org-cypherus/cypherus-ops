@@ -6,6 +6,7 @@ import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
+import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
 import PeopleOutlineIcon from "@mui/icons-material/PeopleOutline";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
@@ -28,7 +29,7 @@ import { APP_NAV_ROUTES, canSeeAppRoute, getAppRouteByHref } from "@/lib/billing
 import { PLATFORM_NAV_ROUTES, isPlatformPath } from "@/lib/platform/routes";
 import { Role } from "@/lib/auth/permissions";
 import { prefetchNavHref } from "@/lib/query/prefetch-routes";
-import { useSession } from "@/modules/auth/hooks";
+import { useLogout, useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
 import { SidebarPerfFooter } from "./SidebarPerfFooter";
 
@@ -65,6 +66,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const { data: user } = useSession();
+  const logout = useLogout();
   const platformMode = Boolean(user?.isPlatformAdmin);
   const adminUsesAdminDash =
     user?.role === Role.Administrador &&
@@ -148,6 +150,32 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </List>
       <SidebarPerfFooter />
+      <List sx={{ px: 1.5, pb: 1.5, pt: 0, flexShrink: 0 }}>
+        <ListItemButton
+          onClick={() => {
+            onNavigate?.();
+            logout.mutate();
+          }}
+          disabled={logout.isPending}
+          aria-label="Sair"
+          sx={{
+            borderRadius: 2,
+            color: "error.main",
+            "& .MuiListItemIcon-root": { color: "error.main" },
+            "& .MuiListItemText-primary": { color: "inherit", fontWeight: 600 },
+            "&:hover": {
+              backgroundColor: "action.hover",
+              color: "error.dark",
+              "& .MuiListItemIcon-root": { color: "error.dark" },
+            },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <LogoutOutlinedIcon />
+          </ListItemIcon>
+          <ListItemText primary="Sair" />
+        </ListItemButton>
+      </List>
     </Box>
   );
 }

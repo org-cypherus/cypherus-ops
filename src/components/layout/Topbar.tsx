@@ -2,24 +2,21 @@
 
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
-import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
 import {
   AppBar,
   Avatar,
   Box,
-  Button,
   IconButton,
   Toolbar,
   Typography,
 } from "@mui/material";
-import { useLogout, useSession } from "@/modules/auth/hooks";
+import { useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
 import { DRAWER_WIDTH, TOPBAR_HEIGHT } from "./Sidebar";
 
 export function Topbar() {
   const { data: user } = useSession();
-  const logout = useLogout();
   const mode = useUIStore((s) => s.mode);
   const toggleMode = useUIStore((s) => s.toggleMode);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
@@ -79,24 +76,6 @@ export function Topbar() {
             </Typography>
           </Box>
         </Box>
-
-        <Button
-          color="inherit"
-          size="small"
-          startIcon={<LogoutOutlinedIcon />}
-          onClick={() => logout.mutate()}
-          disabled={logout.isPending}
-          aria-label="Sair"
-          sx={{
-            flexShrink: 0,
-            textTransform: "none",
-            fontWeight: 600,
-            color: "text.secondary",
-            "&:hover": { color: "text.primary", bgcolor: "action.hover" },
-          }}
-        >
-          Sair
-        </Button>
       </Toolbar>
     </AppBar>
   );

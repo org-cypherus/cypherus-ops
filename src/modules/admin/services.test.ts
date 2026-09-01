@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapCrmUserToAppUser } from "./services";
+import { assignedRoleFromPayload, mapCrmUserToAppUser } from "./services";
 
 describe("mapCrmUserToAppUser", () => {
   it("maps list payload without detail fields", () => {
@@ -58,5 +58,44 @@ describe("mapCrmUserToAppUser", () => {
       { code: "MANAGER", name: "Gestor" },
     );
     expect(mapped.role).toBe("Gestor");
+  });
+
+  it("prefers the CRM role code over a mismatched name", () => {
+    const mapped = mapCrmUserToAppUser(
+      {
+        id: "u5",
+        name: "Lia Nunes",
+        email: "lia@acme.com",
+        status: "ACTIVE",
+      },
+      { code: "LEGAL", name: "Comercial" },
+    );
+    expect(mapped.role).toBe("Jurídico");
+  });
+});
+
+describe("assignedRoleFromPayload", () => {
+  it("does not treat an empty assigned list as missing cargo when the user embeds roles", () => {
+    expect(
+      assignedRoleFromPayload(
+        { roles: [{ code: "LEGAL", name: "Jurídico" }] },
+        [],
+      ),
+    ).toEqual({ code: "LEGAL", name: "Jurídico" });
+  });
+
+  it("reads cargo from role_code when the list omits roles", () => {
+    expect(assignedRoleFromPayload({ role_code: "LEGAL" })).toBe("LEGAL");
+  });
+
+  it("returns undefined when the API omitted cargo so the caller can fetch /users/{id}/roles", () => {
+    expect(assignedRoleFromPayload({}, [])).toBeUndefined();
+    expect(assignedRoleFromPayload({ roles: [] })).toBeUndefined();
+  });
+
+  it("unwraps a nested roles envelope from GET /users/{id}/roles", () => {
+    expect(
+      assignedRoleFromPayload({}, { data: [{ code: "LEGAL", name: "Jurídico" }] }),
+    ).toEqual({ code: "LEGAL", name: "Jurídico" });
   });
 });

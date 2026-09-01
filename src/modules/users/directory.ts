@@ -4,6 +4,12 @@ import { companyPath } from "@/lib/auth/session";
 import { getQueryClient } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
 
+export type UserDirectoryRole = {
+  id?: string;
+  code: string;
+  name: string;
+};
+
 export type UserDirectoryEntry = {
   id: string;
   name: string;
@@ -13,8 +19,15 @@ export type UserDirectoryEntry = {
   created_at?: string | null;
   phone?: string | null;
   job_title?: string | null;
-  roles?: Array<{ id: string; code: string; name: string }>;
+  roles?: UserDirectoryRole[];
+  role?: string | UserDirectoryRole;
+  role_code?: string;
 };
+
+function directoryRoles(user: UserDirectoryEntry): UserDirectoryRole[] | undefined {
+  if (Array.isArray(user.roles) && user.roles.length > 0) return user.roles;
+  return undefined;
+}
 
 export async function fetchUserDirectory(): Promise<UserDirectoryEntry[]> {
   const { data } = await api.get<UserDirectoryEntry[]>(companyPath("/users"));
@@ -27,7 +40,9 @@ export async function fetchUserDirectory(): Promise<UserDirectoryEntry[]> {
     created_at: user.created_at,
     phone: user.phone,
     job_title: user.job_title,
-    roles: Array.isArray(user.roles) ? user.roles : undefined,
+    roles: directoryRoles(user),
+    role: user.role,
+    role_code: user.role_code,
   }));
   getQueryClient().setQueryData(queryKeys.userDirectory, list);
   return list;
@@ -70,6 +85,8 @@ export function seedUserDirectory(users: UserDirectoryEntry[]) {
       phone: user.phone,
       job_title: user.job_title,
       roles: user.roles,
+      role: user.role,
+      role_code: user.role_code,
     })),
   );
 }

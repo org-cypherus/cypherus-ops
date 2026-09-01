@@ -43,7 +43,9 @@ type CrmUser = {
   phone?: string | null;
   job_title?: string | null;
   created_at?: string | null;
-  roles?: CrmRole[];
+  roles?: AssignedRole[];
+  role?: string | AssignedRole;
+  role_code?: string;
 };
 
 export type OverrideEffect = "ALLOW" | "DENY";
@@ -82,14 +84,60 @@ async function roleIdFor(role: RoleName, roles: CrmRole[]) {
   );
 }
 
+function unwrapRoleList(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== "object") return [];
+  const record = data as Record<string, unknown>;
+  for (const key of ["data", "items", "roles"]) {
+    if (Array.isArray(record[key])) return record[key] as unknown[];
+  }
+  return [];
+}
+
+function asAssignedRole(value: unknown): string | AssignedRole | undefined {
+  if (typeof value === "string" && value.trim()) return value;
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const code =
+    (typeof record.code === "string" && record.code.trim()) ||
+    (typeof record.role_code === "string" && record.role_code.trim()) ||
+    "";
+  const name =
+    (typeof record.name === "string" && record.name.trim()) ||
+    (typeof record.role_name === "string" && record.role_name.trim()) ||
+    "";
+  if (code || name) return { code, name };
+  if (record.role === value) return undefined;
+  return asAssignedRole(record.role);
+}
+
+/** Cargo efetivo do payload da API. Lista vazia ≠ “Comercial”: significa que a lista omitiu o campo. */
+export function assignedRoleFromPayload(
+  user: Pick<CrmUser, "roles" | "role" | "role_code">,
+  assigned?: unknown,
+): string | AssignedRole | undefined {
+  for (const item of unwrapRoleList(assigned)) {
+    const role = asAssignedRole(item);
+    if (role) return role;
+  }
+  for (const item of unwrapRoleList(user.roles)) {
+    const role = asAssignedRole(item);
+    if (role) return role;
+  }
+  const singular = asAssignedRole(user.role);
+  if (singular) return singular;
+  if (typeof user.role_code === "string" && user.role_code.trim()) return user.role_code;
+  return undefined;
+}
+
 function roleFromAssigned(
   role?: string | AssignedRole,
   isOwner = false,
 ): RoleName {
   if (typeof role === "string") return mapRoleCode(role, isOwner);
   return (
-    resolveRoleName(role?.name) ??
     resolveRoleName(role?.code) ??
+    resolveRoleName(role?.name) ??
     mapRoleCode(undefined, isOwner)
   );
 }
@@ -114,19 +162,25 @@ export function mapCrmUserToAppUser(user: CrmUser, role?: string | AssignedRole)
 
 async function fetchAssignedRoles(userId: string): Promise<CrmRole[]> {
   const { data } = await api
-    .get<CrmRole[] | null>(companyPath(`/users/${userId}/roles`), { timeout: 8_000 })
+    .get<unknown>(companyPath(`/users/${userId}/roles`), { timeout: 8_000 })
     .catch(() => ({ data: [] as CrmRole[] }));
-  return Array.isArray(data) ? data : [];
+  return unwrapRoleList(data)
+    .map((item) => {
+      const role = asAssignedRole(item);
+      if (!role) return null;
+      if (typeof role === "string") return { id: "", code: role, name: role };
+      const record = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+      const id = typeof record.id === "string" ? record.id : "";
+      return { id, code: role.code, name: role.name };
+    })
+    .filter((item): item is CrmRole => Boolean(item));
 }
 
-async function toAppUser(user: CrmUser, assigned?: CrmRole[]): Promise<AppUser> {
-  const roles =
-    assigned !== undefined
-      ? assigned
-      : user.roles && user.roles.length > 0
-        ? user.roles
-        : await fetchAssignedRoles(user.id);
-  return mapCrmUserToAppUser(user, roles[0]);
+async function toAppUser(user: CrmUser, assigned?: unknown): Promise<AppUser> {
+  const embedded = assignedRoleFromPayload(user, assigned);
+  if (embedded) return mapCrmUserToAppUser(user, embedded);
+  const fetched = await fetchAssignedRoles(user.id);
+  return mapCrmUserToAppUser(user, assignedRoleFromPayload({ roles: fetched }, fetched));
 }
 
 export async function fetchUser(id: string): Promise<AppUser> {
@@ -142,39 +196,45 @@ export async function fetchUser(id: string): Promise<AppUser> {
       },
     });
   }
-  return toAppUser(
-    {
-      id: user.id,
-      name: user.name,
-      email: user.email ?? "",
-      status: user.status ?? "ACTIVE",
-      is_owner: user.is_owner,
-      phone: user.phone?.trim() || extras[user.id]?.phone,
-      job_title: user.job_title?.trim() || extras[user.id]?.team,
-      created_at: user.created_at,
-    },
-    user.roles,
-  );
+  return toAppUser(directoryEntryToCrmUser(user, extras));
+}
+
+function directoryEntryToCrmUser(
+  user: {
+    id: string;
+    name: string;
+    email?: string;
+    status?: string;
+    is_owner?: boolean;
+    phone?: string | null;
+    job_title?: string | null;
+    created_at?: string | null;
+    roles?: AssignedRole[];
+    role?: string | AssignedRole;
+    role_code?: string;
+  },
+  extras: ReturnType<typeof getAllUserProfileExtras>,
+  overrides?: Partial<Pick<CrmUser, "name" | "phone" | "job_title">>,
+): CrmUser {
+  return {
+    id: user.id,
+    name: overrides?.name ?? user.name,
+    email: user.email ?? "",
+    status: user.status ?? "ACTIVE",
+    is_owner: user.is_owner,
+    phone: overrides?.phone ?? (user.phone?.trim() || extras[user.id]?.phone),
+    job_title: overrides?.job_title ?? (user.job_title?.trim() || extras[user.id]?.team),
+    created_at: user.created_at,
+    roles: user.roles,
+    role: user.role,
+    role_code: user.role_code,
+  };
 }
 
 export async function fetchUsers() {
   const data = await fetchUserDirectory();
   const extras = getAllUserProfileExtras();
-  return mapWithConcurrency(data, 2, (user) =>
-    toAppUser(
-      {
-        id: user.id,
-        name: user.name,
-        email: user.email ?? "",
-        status: user.status ?? "ACTIVE",
-        is_owner: user.is_owner,
-        phone: user.phone?.trim() || extras[user.id]?.phone,
-        job_title: user.job_title?.trim() || extras[user.id]?.team,
-        created_at: user.created_at,
-      },
-      user.roles ?? [],
-    ),
-  );
+  return mapWithConcurrency(data, 2, (user) => toAppUser(directoryEntryToCrmUser(user, extras)));
 }
 
 export async function createUser(values: {
@@ -244,18 +304,11 @@ export async function updateUser(id: string, values: Partial<AppUser>) {
     });
   }
   return toAppUser(
-    {
-      id: user.id,
-      name: values.name ?? user.name,
-      email: user.email ?? "",
-      status: user.status ?? "ACTIVE",
-      is_owner: user.is_owner,
+    directoryEntryToCrmUser(user, { [id]: cached ?? { phone: "", team: "" } }, {
+      name: values.name,
       phone: values.phone ?? cached?.phone,
       job_title: values.team ?? cached?.team,
-      created_at: user.created_at,
-      roles: user.roles,
-    },
-    user.roles,
+    }),
   );
 }
 
