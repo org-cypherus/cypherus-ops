@@ -508,8 +508,15 @@ export default function UsersPage() {
   }
 
   return (
-    <Stack spacing={2.5}>
-      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={2}>
+    <Stack
+      spacing={2.5}
+      sx={{
+        flex: 1,
+        minHeight: 0,
+        ...(tab === "tree" ? { overflow: "hidden", height: "100%" } : { overflow: "auto" }),
+      }}
+    >
+      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={2} flexShrink={0}>
         <Box>
           <Typography variant="h4">Gestão de Usuários</Typography>
           <Typography variant="body2" color="text.secondary">
@@ -566,7 +573,7 @@ export default function UsersPage() {
       <Tabs
         value={tab}
         onChange={(_, value: UsersTab) => setTab(value)}
-        sx={{ borderBottom: 1, borderColor: "divider" }}
+        sx={{ borderBottom: 1, borderColor: "divider", flexShrink: 0 }}
       >
         <Tab value="list" label="Lista" />
         <Tab value="tree" label="Árvore" />
@@ -574,7 +581,7 @@ export default function UsersPage() {
 
       {tab === "tree" ? (
         isLoading ? (
-          <Box py={8} display="flex" justifyContent="center">
+          <Box py={8} display="flex" justifyContent="center" flex={1}>
             <CircularProgress />
           </Box>
         ) : isError ? (
@@ -584,15 +591,17 @@ export default function UsersPage() {
             onRetry={() => refetch()}
           />
         ) : (
-          <UserOrgTree
-            users={activeUsers}
-            teams={teamOptions}
-            membersByTeamId={membersByTeamId}
-            teamsLoading={teamsQuery.isLoading}
-            teamsError={teamsQuery.error}
-            onRetryTeams={() => void teamsQuery.refetch()}
-            canManage={isAdmin}
-          />
+          <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <UserOrgTree
+              users={activeUsers}
+              teams={teamOptions}
+              membersByTeamId={membersByTeamId}
+              teamsLoading={teamsQuery.isLoading}
+              teamsError={teamsQuery.error}
+              onRetryTeams={() => void teamsQuery.refetch()}
+              canManage={isAdmin}
+            />
+          </Box>
         )
       ) : isLoading ? (
         <Box py={8} display="flex" justifyContent="center">

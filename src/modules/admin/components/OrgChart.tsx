@@ -47,6 +47,8 @@ export const DEMO_ORG_CHART: OrgChartNode = {
 type OrgChartProps = {
   data?: OrgChartNode;
   renderActions?: (node: OrgChartNode) => ReactNode;
+  /** Sem borda/scroll próprio — o canvas de zoom envolve o gráfico. */
+  contained?: boolean;
 };
 
 function initials(name: string) {
@@ -222,18 +224,22 @@ function OrgTreeNode({
 }
 
 /** Organograma hierárquico (Flexbox + cards + conectores). Dados: `{ name, title, children[] }`. */
-export default function OrgChart({ data = DEMO_ORG_CHART, renderActions }: OrgChartProps) {
+export default function OrgChart({
+  data = DEMO_ORG_CHART,
+  renderActions,
+  contained = false,
+}: OrgChartProps) {
   return (
     <Box
       sx={{
-        width: "100%",
-        overflowX: "auto",
-        bgcolor: "background.default",
-        borderRadius: 2,
-        border: 1,
+        width: contained ? "max-content" : "100%",
+        overflow: contained ? "visible" : "auto",
+        bgcolor: contained ? "transparent" : "background.default",
+        borderRadius: contained ? 0 : 2,
+        border: contained ? 0 : 1,
         borderColor: "divider",
-        py: { xs: 2, sm: 3 },
-        px: { xs: 1, sm: 2 },
+        py: contained ? 1 : { xs: 2, sm: 3 },
+        px: contained ? 2 : { xs: 1, sm: 2 },
       }}
     >
       <Box
