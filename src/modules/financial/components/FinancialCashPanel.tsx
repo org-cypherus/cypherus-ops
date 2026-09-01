@@ -1,24 +1,52 @@
 "use client";
 
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
   Card,
   CardContent,
+  Chip,
   Grid2 as Grid,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   Typography,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { PieChart } from "@mui/x-charts/PieChart";
 import { pieChartLegendLayout } from "@/components/charts/pie-legend";
-import { useMemo } from "react";
-import { formatCurrency, formatPercent } from "@/lib/utils/format";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { StatusBadge } from "@/components/feedback/StatusBadge";
+import { formatCurrency, formatDate, formatPercent } from "@/lib/utils/format";
 import { humanizeEnumLabel } from "@/lib/utils/labels";
-import { buildCashPanelMetrics } from "../cash-metrics";
+import {
+  buildCashPanelMetrics,
+  listUpcomingReceivables,
+  upcomingReceivableDays,
+  type UpcomingDayFilter,
+} from "../cash-metrics";
 import type { Payment } from "../services";
 
 export function FinancialCashPanel({ payments }: { payments: Payment[] }) {
   const metrics = useMemo(() => buildCashPanelMetrics(payments), [payments]);
+  const [dayFilter, setDayFilter] = useState<UpcomingDayFilter>("week");
+  const today = useMemo(() => new Date(), []);
+  const days = useMemo(() => upcomingReceivableDays(today), [today]);
+  const upcoming = useMemo(
+    () => listUpcomingReceivables(payments, today, dayFilter),
+    [payments, today, dayFilter],
+  );
+  const weekCount = useMemo(
+    () => listUpcomingReceivables(payments, today, "week").length,
+    [payments, today],
+  );
 
   const agingHasData = metrics.aging.some((bucket) => bucket.amount > 0);
   const weeklyHasData = metrics.weeklyCash.length > 0;
@@ -153,6 +181,100 @@ export function FinancialCashPanel({ payments }: { payments: Payment[] }) {
                   Sem vencimentos abertos para projetar caixa.
                 </Typography>
               )}
+
+              <Accordion
+                disableGutters
+                elevation={0}
+                sx={{
+                  mt: 1,
+                  bgcolor: "transparent",
+                  "&:before": { display: "none" },
+                  borderTop: 1,
+                  borderColor: "divider",
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  aria-controls="pending-clients-content"
+                  id="pending-clients-header"
+                  sx={{ px: 0, minHeight: 48 }}
+                >
+                  <Stack>
+                    <Typography variant="subtitle1" fontWeight={700}>
+                      Clientes pendentes ({weekCount})
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Tabela por dia de vencimento — mesmo recorte do KPI Caixa 7 dias
+                    </Typography>
+                  </Stack>
+                </AccordionSummary>
+                <AccordionDetails sx={{ px: 0, pt: 0 }}>
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 1.5 }}>
+                    <Chip
+                      size="small"
+                      label="Semana"
+                      color={dayFilter === "week" ? "primary" : "default"}
+                      variant={dayFilter === "week" ? "filled" : "outlined"}
+                      onClick={() => setDayFilter("week")}
+                    />
+                    {days.map((day) => (
+                      <Chip
+                        key={day.key}
+                        size="small"
+                        label={`${day.weekday} ${day.label}`}
+                        color={dayFilter === day.key ? "primary" : "default"}
+                        variant={dayFilter === day.key ? "filled" : "outlined"}
+                        onClick={() => setDayFilter(day.key)}
+                      />
+                    ))}
+                  </Stack>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Cliente</TableCell>
+                        <TableCell>Vencimento</TableCell>
+                        <TableCell align="right">Valor</TableCell>
+                        <TableCell>Status</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {upcoming.length ? (
+                        upcoming.map((payment) => (
+                          <TableRow key={payment.id} hover>
+                            <TableCell>
+                              {payment.leadId ? (
+                                <Typography
+                                  component={Link}
+                                  href={`/leads/${payment.leadId}`}
+                                  variant="body2"
+                                  sx={{ color: "primary.main", textDecoration: "none", fontWeight: 600 }}
+                                >
+                                  {payment.leadName}
+                                </Typography>
+                              ) : (
+                                payment.leadName
+                              )}
+                            </TableCell>
+                            <TableCell>{formatDate(payment.dueDate)}</TableCell>
+                            <TableCell align="right">{formatCurrency(payment.amount)}</TableCell>
+                            <TableCell>
+                              <StatusBadge label={payment.status} />
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={4}>
+                            <Typography variant="body2" color="text.secondary" py={2} textAlign="center">
+                              Nenhum cliente pendente {dayFilter === "week" ? "nesta semana" : "neste dia"}.
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </AccordionDetails>
+              </Accordion>
             </CardContent>
           </Card>
         </Grid>

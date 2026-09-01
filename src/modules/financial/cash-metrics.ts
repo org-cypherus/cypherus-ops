@@ -162,3 +162,50 @@ export function buildCashPanelMetrics(
     weeklyCash,
   };
 }
+
+export type UpcomingReceivableDay = {
+  key: string;
+  label: string;
+  weekday: string;
+};
+
+/** `"week"` lista a janela de 7 dias; qualquer outro valor é `YYYY-MM-DD`. */
+export type UpcomingDayFilter = string;
+
+export function upcomingReceivableDays(today: Date = new Date(), count = 7): UpcomingReceivableDay[] {
+  const start = startOfDay(today);
+  const dateFmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
+  const weekdayFmt = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return {
+      key: dayKey(date),
+      label: dateFmt.format(date),
+      weekday: index === 0 ? "Hoje" : weekdayFmt.format(date).replace(/\.$/, ""),
+    };
+  });
+}
+
+/** Pendentes/atrasados com vencimento nos próximos 7 dias (mesmo recorte do KPI Caixa 7 dias). */
+export function listUpcomingReceivables(
+  payments: Payment[],
+  today: Date = new Date(),
+  day: UpcomingDayFilter = "week",
+): Payment[] {
+  const windowKeys = new Set(upcomingReceivableDays(today).map((item) => item.key));
+  return payments
+    .filter((payment) => {
+      if (!OPEN_STATUSES.has(payment.status || "")) return false;
+      const due = parseDay(payment.dueDate);
+      if (!due) return false;
+      const key = dayKey(due);
+      if (!windowKeys.has(key)) return false;
+      return day === "week" || key === day;
+    })
+    .sort((a, b) => {
+      const byDate = (a.dueDate || "").localeCompare(b.dueDate || "");
+      if (byDate !== 0) return byDate;
+      return a.leadName.localeCompare(b.leadName, "pt-BR");
+    });
+}
