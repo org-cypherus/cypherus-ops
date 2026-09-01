@@ -382,7 +382,13 @@ export const handlers = [
     });
   }),
 
-  http.get(`${API}/v1/companies/:companyId/users`, () => HttpResponse.json(mockUsers.map(toCrmUser))),
+  http.get(`${API}/v1/companies/:companyId/users`, ({ request }) => {
+    const includeInactive = new URL(request.url).searchParams.get("include_inactive") === "true";
+    const users = includeInactive
+      ? mockUsers
+      : mockUsers.filter((user) => user.status !== "Inativo");
+    return HttpResponse.json(users.map(toCrmUser));
+  }),
 
   http.get(`${API}/v1/companies/:companyId/users/:userId`, ({ params }) => {
     const user = mockUsers.find((item) => item.id === params.userId);
@@ -558,10 +564,8 @@ export const handlers = [
     const user = mockUsers[index];
     const check = canDeactivateUser(user.id, currentUser.id);
     if (!check.ok) return crmError(422, "VALIDATION_ERROR", check.message);
-    // Soft delete: some da listagem (igual CRM com deleted_at).
-    const snapshot = { ...toCrmUser(user), status: "INACTIVE" };
-    mockUsers.splice(index, 1);
-    return HttpResponse.json(snapshot);
+    user.status = "Inativo";
+    return HttpResponse.json({ ...toCrmUser(user), status: "INACTIVE" });
   }),
 
   http.get(`${API}/v1/companies/:companyId/roles`, () => HttpResponse.json(ROLES)),

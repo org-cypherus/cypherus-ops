@@ -9,7 +9,7 @@ import {
 import type { Permission, RoleName } from "@/lib/auth/permissions";
 import { companyPath } from "@/lib/auth/session";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
-import { fetchUserDirectory, seedUserDirectory } from "@/modules/users/directory";
+import { fetchUserDirectory } from "@/modules/users/directory";
 import { editablePermissions } from "./permission-modules";
 import { getAllUserProfileExtras, getUserProfileExtras, saveUserProfileExtras } from "./user-profile-extras";
 
@@ -232,7 +232,7 @@ function directoryEntryToCrmUser(
 }
 
 export async function fetchUsers() {
-  const data = await fetchUserDirectory();
+  const data = await fetchUserDirectory({ includeInactive: true });
   const extras = getAllUserProfileExtras();
   return mapWithConcurrency(data, 2, (user) => toAppUser(directoryEntryToCrmUser(user, extras)));
 }
@@ -288,8 +288,7 @@ export async function updateUser(id: string, values: Partial<AppUser>) {
   if (values.status === "Inativo") {
     await api.post(companyPath(`/users/${id}/deactivate`));
   }
-  const data = await fetchUserDirectory();
-  seedUserDirectory(data);
+  const data = await fetchUserDirectory({ includeInactive: true });
   const user = data.find((item) => item.id === id);
   const cached = getUserProfileExtras(id);
   if (!user) {

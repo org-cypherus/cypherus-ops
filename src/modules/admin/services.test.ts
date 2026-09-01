@@ -18,6 +18,14 @@ describe("mapCrmUserToAppUser", () => {
     });
   });
 
+  it("maps INACTIVE status to Inativo", () => {
+    const mapped = mapCrmUserToAppUser(
+      { id: "u-off", name: "Carla Dias", email: "carla@acme.com", status: "INACTIVE" },
+      "SALES",
+    );
+    expect(mapped.status).toBe("Inativo");
+  });
+
   it("maps created_at to createdAt", () => {
     const mapped = mapCrmUserToAppUser(
       {
