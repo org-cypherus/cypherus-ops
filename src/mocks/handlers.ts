@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 import { UI_TO_API_PERMISSION } from "@/lib/auth/mappers";
 import { ROLE_PERMISSIONS, type RoleName } from "@/lib/auth/permissions";
 import { uiPriorityToApi, uiStageToApiStatus } from "@/modules/leads/adapters";
+import { parseLeadsCsv } from "@/modules/leads/import-csv";
 import {
   buildKanban,
   buildSessionUser,
@@ -97,8 +98,11 @@ const CONTRACT_UI_TO_STATUS: Record<string, string> = {
   Arquivado: "ARCHIVED",
 };
 
-function crmError(status: number, code: string, message: string) {
-  return HttpResponse.json({ error: { code, message }, request_id: "mock" }, { status });
+function crmError(status: number, code: string, message: string, details?: Record<string, unknown>) {
+  return HttpResponse.json(
+    { error: { code, message, details }, request_id: "mock" },
+    { status },
+  );
 }
 
 const ROLES = [
@@ -624,6 +628,53 @@ export const handlers = [
       address: { cep: "", street: "", number: "", neighborhood: "", city: "", state: "" },
     });
     return HttpResponse.json(toCrmLead(lead), { status: 201 });
+  }),
+
+  http.post(`${API}/v1/companies/:companyId/leads/import`, async ({ request }) => {
+    const form = await request.formData();
+    const file = form.get("file");
+    if (!(file instanceof Blob)) {
+      return crmError(422, "VALIDATION_ERROR", "O arquivo CSV está vazio.", { field: "file" });
+    }
+    const rows = parseLeadsCsv(await file.text());
+    if (!rows.length) {
+      return crmError(422, "VALIDATION_ERROR", "O arquivo não contém linhas de lead.", { field: "file" });
+    }
+    const created: Lead[] = [];
+    for (const [index, row] of rows.entries()) {
+      const line = index + 2;
+      const ownerId = row.ownerRef?.trim() ?? "";
+      if (!ownerId) {
+        return crmError(422, "VALIDATION_ERROR", `Linha ${line}: owner_user_id inválido.`, {
+          row: line,
+          field: "owner_user_id",
+        });
+      }
+      created.push(
+        createLead({
+          name: row.name,
+          email: row.email,
+          cpf: row.cpf || "",
+          ownerId,
+          phone: row.phone || "",
+          whatsapp: row.phone || "",
+          origin: row.origin || "Importação",
+          campaign: "",
+          channel: "",
+          ownerName: "",
+          createdAt: new Date().toISOString(),
+          status: "Novo Lead",
+          priority: "media",
+          tags: [],
+          process: { totalValue: row.process.totalValue },
+          daysInStage: 0,
+          timeline: [],
+          attachments: [],
+          address: { cep: "", street: "", number: "", neighborhood: "", city: "", state: "" },
+        }),
+      );
+    }
+    return HttpResponse.json(created.map(toCrmLead), { status: 201 });
   }),
 
   http.patch(`${API}/v1/companies/:companyId/leads/:leadId`, async ({ params, request }) => {

@@ -5,6 +5,7 @@ import { queryKeys } from "@/lib/query/keys";
 import { downloadApiFile, fetchApiBlob } from "@/lib/utils/download";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
 import { fetchOwnerMap } from "@/modules/users/directory";
+import { buildImportCsv } from "./import-csv";
 import type { Attachment, KanbanBoard, Lead, LegalStage, PipelineStage } from "./types";
 import {
   leadToCreateRequest,
@@ -202,26 +203,8 @@ export async function createLead(payload: Partial<Lead> & { name: string; email:
 }
 
 export async function importLeads(rows: Array<Partial<Lead> & { name: string; email: string }>) {
-  const fallbackOwner = rows.find((row) => row.ownerId)?.ownerId || "";
-  const csvLines = ["name,cpf,owner_user_id,email,phone,source,process"];
-  for (const row of rows) {
-    const owner = row.ownerId || fallbackOwner;
-    const process = JSON.stringify({
-      potential_value: row.process?.totalValue ?? 0,
-      value: row.process?.totalValue ?? 0,
-    });
-    const fields = [
-      row.name,
-      row.cpf || "",
-      owner,
-      row.email,
-      row.phone || "",
-      row.origin || "",
-      process,
-    ];
-    csvLines.push(fields.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(","));
-  }
-  const file = new File([csvLines.join("\n")], "leads.csv", { type: "text/csv" });
+  const csv = buildImportCsv(rows);
+  const file = new File([csv], "leads.csv", { type: "text/csv" });
   const form = new FormData();
   form.append("file", file);
   const { data } = await api.post<CrmLead[]>(companyPath("/leads/import"), form);
