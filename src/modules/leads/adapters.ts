@@ -1,6 +1,15 @@
-import type { Attachment, KanbanBoard, Lead, LeadPriority, PipelineStage } from "./types";
+import type { Attachment, KanbanBoard, Lead, LeadPriority, PipelineStage, TimelineEvent } from "./types";
 import { PIPELINE_STAGES } from "./types";
 import { timelineEventLabel } from "./timeline-labels";
+
+function timelineTime(iso?: string) {
+  const t = iso ? new Date(iso).getTime() : Number.NaN;
+  return Number.isFinite(t) ? t : 0;
+}
+
+export function sortTimelineNewestFirst<T extends { createdAt?: string }>(events: T[]): T[] {
+  return [...events].sort((a, b) => timelineTime(b.createdAt) - timelineTime(a.createdAt));
+}
 
 export type CrmLead = {
   id: string;
@@ -224,7 +233,7 @@ export function toUiLead(
     tags: lead.tags ?? [],
     process: processValue(process),
     daysInStage: daysSince(lead.updated_at || lead.created_at),
-    timeline: [...eventTimeline, ...contactTimeline],
+    timeline: sortTimelineNewestFirst<TimelineEvent>([...eventTimeline, ...contactTimeline]),
     attachments: extras?.attachments ?? [],
     observations: String(process.observations ?? process.observacoes ?? "") || undefined,
   };

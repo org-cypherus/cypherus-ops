@@ -67,6 +67,24 @@ describe("daysSince / toUiLead", () => {
 });
 
 describe("timeline events", () => {
+  it("orders events from newest to oldest", () => {
+    const ui = toUiLead(baseLead, "João", {
+      events: [
+        {
+          type: "LEAD_CREATED",
+          payload: { actor_name: "Sistema" },
+          created_at: "2026-08-01T12:00:00.000Z",
+        },
+        {
+          type: "CONTRACT_CREATED",
+          payload: { actor_name: "Sistema" },
+          created_at: "2026-08-20T12:00:00.000Z",
+        },
+      ],
+    });
+    expect(ui.timeline.map((item) => item.type)).toEqual(["CONTRACT_CREATED", "LEAD_CREATED"]);
+  });
+
   it("maps timeline event labels in the description fallback", () => {
     const ui = toUiLead(baseLead, "João", {
       events: [

@@ -34,8 +34,10 @@ import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { CurrencyField } from "@/components/inputs/CurrencyField";
 import { IntegerField } from "@/components/inputs/IntegerField";
+import { getApiError } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
-import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils/format";
+import { roundCents } from "@/lib/utils/installment-reduction";
 import { ScheduleFromLeadDialog } from "@/modules/calendar/components/ScheduleFromLeadDialog";
 import { UpcomingLeadEvents } from "@/modules/calendar/components/UpcomingLeadEvents";
 import { useCanAccess, useSession } from "@/modules/auth/hooks";
@@ -50,6 +52,7 @@ import {
 import type { Lead, TimelineContactType } from "../types";
 import { PIPELINE_STAGES, TIMELINE_CONTACT_TYPES } from "../types";
 import { timelineEventLabel } from "../timeline-labels";
+import { InstallmentReductionCard } from "./InstallmentReductionCard";
 import { LeadAttachments } from "./LeadAttachments";
 
 const CONTACT_META: Record<
@@ -715,7 +718,13 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                       size="small"
                       value={Number(draft.installments || 0)}
                       onChange={(installments) =>
-                        setDraft((d) => ({ ...d, installments }))
+                        setDraft((d) => ({
+                          ...d,
+                          installments,
+                          totalValue: roundCents(
+                            Number(installments || 0) * Number(d.installmentValue || 0),
+                          ),
+                        }))
                       }
                     />
                     <CurrencyField
@@ -723,7 +732,13 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                       size="small"
                       value={Number(draft.installmentValue || 0)}
                       onChange={(installmentValue) =>
-                        setDraft((d) => ({ ...d, installmentValue }))
+                        setDraft((d) => ({
+                          ...d,
+                          installmentValue,
+                          totalValue: roundCents(
+                            Number(d.installments || 0) * Number(installmentValue || 0),
+                          ),
+                        }))
                       }
                     />
                     <CurrencyField
@@ -738,6 +753,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                       label="Valor total"
                       size="small"
                       value={Number(draft.totalValue || 0)}
+                      helperText="Preenchido com parcela × quantidade. Você pode ajustar."
                       onChange={(totalValue) =>
                         setDraft((d) => ({ ...d, totalValue }))
                       }
@@ -834,6 +850,32 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 )}
               </CardContent>
             </Card>
+
+            <InstallmentReductionCard
+              lead={lead}
+              applying={updateLead.isPending}
+              onApply={(installmentValue) => {
+                updateLead.mutate(
+                  {
+                    process: {
+                      ...lead.process,
+                      installmentValue,
+                    },
+                  },
+                  {
+                    onSuccess: () => {
+                      enqueueSnackbar("Parcela atualizada", { variant: "success" });
+                    },
+                    onError: (err) => {
+                      enqueueSnackbar(
+                        getApiError(err).message || "Não foi possível atualizar a parcela",
+                        { variant: "error" },
+                      );
+                    },
+                  },
+                );
+              }}
+            />
 
             <Card variant="outlined">
               <CardContent>
@@ -1003,7 +1045,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                               variant="caption"
                               color="text.secondary"
                             >
-                              {event.userName} · {formatDate(event.createdAt)}
+                              {event.userName} · {formatDateTime(event.createdAt)}
                             </Typography>
                           </Box>
                         </Stack>
