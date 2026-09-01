@@ -76,3 +76,5 @@ Abra [http://localhost:3000](http://localhost:3000).
 Comece por [`specs/00-product.md`](./specs/00-product.md).
 
 Fan-out de GETs no CRM (o que mudar neste repo): [`docs/crm-request-fanout.md`](./docs/crm-request-fanout.md).
+
+WhatsApp (V2, sem código nesta onda): [`docs/whatsapp-integration.md`](./docs/whatsapp-integration.md).
