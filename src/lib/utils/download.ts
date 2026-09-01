@@ -82,26 +82,4 @@ export function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-export function parseLeadsCsv(text: string) {
-  const lines = text
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
-  return lines.slice(1).map((line) => {
-    const cols = line.split(",").map((c) => c.trim());
-    const row: Record<string, string> = {};
-    headers.forEach((h, i) => {
-      row[h] = cols[i] || "";
-    });
-    return {
-      name: row.nome || row.name || "Lead importado",
-      email: row.email || `${Date.now()}@import.local`,
-      phone: row.telefone || row.phone || "",
-      cpf: row.cpf || "",
-      origin: row.origem || row.origin || "Importação",
-      process: { totalValue: Number(row.valor || row.value || 0) },
-    };
-  });
-}
+export { parseLeadsCsv } from "@/modules/leads/import-csv";

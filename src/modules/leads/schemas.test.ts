@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { parseLeadsCsv } from "@/lib/utils/download";
 import { leadFormSchema } from "./schemas";
 
 describe("leadFormSchema", () => {
@@ -28,13 +27,3 @@ describe("leadFormSchema", () => {
   });
 });
 
-describe("parseLeadsCsv", () => {
-  it("parses portuguese headers", () => {
-    const rows = parseLeadsCsv(
-      ["nome,email,telefone,cpf,origem,valor", "Ana,ana@x.com,1199,111,Google Ads,15000"].join("\n"),
-    );
-    expect(rows).toHaveLength(1);
-    expect(rows[0].name).toBe("Ana");
-    expect(rows[0].process.totalValue).toBe(15000);
-  });
-});
