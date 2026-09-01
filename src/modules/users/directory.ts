@@ -29,8 +29,16 @@ function directoryRoles(user: UserDirectoryEntry): UserDirectoryRole[] | undefin
   return undefined;
 }
 
-export async function fetchUserDirectory(): Promise<UserDirectoryEntry[]> {
-  const { data } = await api.get<UserDirectoryEntry[]>(companyPath("/users"));
+function isInactiveStatus(status?: string) {
+  return String(status ?? "ACTIVE").toUpperCase() === "INACTIVE";
+}
+
+export async function fetchUserDirectory(options?: {
+  includeInactive?: boolean;
+}): Promise<UserDirectoryEntry[]> {
+  const { data } = await api.get<UserDirectoryEntry[]>(companyPath("/users"), {
+    params: options?.includeInactive ? { include_inactive: true } : undefined,
+  });
   const list = (data ?? []).map((user) => ({
     id: user.id,
     name: user.name,
@@ -44,7 +52,10 @@ export async function fetchUserDirectory(): Promise<UserDirectoryEntry[]> {
     role: user.role,
     role_code: user.role_code,
   }));
-  getQueryClient().setQueryData(queryKeys.userDirectory, list);
+  const directory = options?.includeInactive
+    ? list.filter((user) => !isInactiveStatus(user.status))
+    : list;
+  getQueryClient().setQueryData(queryKeys.userDirectory, directory);
   return list;
 }
 

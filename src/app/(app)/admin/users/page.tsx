@@ -139,6 +139,7 @@ export default function UsersPage() {
   const [nameFilter, setNameFilter] = useState("");
   const [emailFilter, setEmailFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "Ativo" | "Inativo">("all");
   const editingRef = useRef<AppUser | null>(null);
   editingRef.current = editing;
 
@@ -225,14 +226,17 @@ export default function UsersPage() {
   const filteredUsers = useMemo(() => {
     const name = nameFilter.trim().toLowerCase();
     const email = emailFilter.trim().toLowerCase();
-    return activeUsers.filter((user) => {
+    return (data || []).filter((user) => {
+      if (statusFilter !== "all" && user.status !== statusFilter) return false;
       if (name && !user.name.toLowerCase().includes(name)) return false;
       if (email && !user.email.toLowerCase().includes(email)) return false;
       if (roleFilter && user.role !== roleFilter) return false;
       return true;
     });
-  }, [activeUsers, nameFilter, emailFilter, roleFilter]);
-  const hasActiveUserFilters = Boolean(nameFilter.trim() || emailFilter.trim() || roleFilter);
+  }, [data, nameFilter, emailFilter, roleFilter, statusFilter]);
+  const hasActiveUserFilters = Boolean(
+    nameFilter.trim() || emailFilter.trim() || roleFilter || statusFilter !== "all",
+  );
 
   const permissionsQuery = useQuery({
     queryKey: queryKeys.userPermissions(editing?.id ?? ""),
@@ -635,6 +639,18 @@ export default function UsersPage() {
                 </MenuItem>
               ))}
             </TextField>
+            <TextField
+              select
+              size="small"
+              label="Status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as "all" | "Ativo" | "Inativo")}
+              sx={{ minWidth: 140 }}
+            >
+              <MenuItem value="all">Todos</MenuItem>
+              <MenuItem value="Ativo">Ativo</MenuItem>
+              <MenuItem value="Inativo">Inativo</MenuItem>
+            </TextField>
             {hasActiveUserFilters ? (
               <Button
                 size="small"
@@ -642,6 +658,7 @@ export default function UsersPage() {
                   setNameFilter("");
                   setEmailFilter("");
                   setRoleFilter("");
+                  setStatusFilter("all");
                 }}
               >
                 Limpar filtros
@@ -676,7 +693,11 @@ export default function UsersPage() {
                 const canDeactivate =
                   canDeactivateUsers && !isSelf && user.status === "Ativo" && !user.isOwner;
                 return (
-                  <TableRow key={user.id} hover>
+                  <TableRow
+                    key={user.id}
+                    hover
+                    sx={user.status === "Inativo" ? { opacity: 0.72 } : undefined}
+                  >
                     <TableCell>
                       {user.name}
                       {isSelf ? (
