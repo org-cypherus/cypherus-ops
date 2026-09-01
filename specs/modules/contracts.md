@@ -14,8 +14,13 @@ Selecionar Lead → Selecionar Modelo → Preencher dados → Gerar PDF → Envi
 
 ## Modelos (Templates)
 
-- Cadastro de templates (ex.: Contrato Pessoa Física, Pessoa Jurídica, Contrato Premium)
-- Placeholders: `{{nome}}`, `{{cpf}}`, `{{valor}}`, `{{parcelas}}`, entre outros definidos por template
+- Cadastro de templates (ex.: Contrato Pessoa Física, Pessoa Jurídica, Contrato Premium, Proposta de redução)
+- Cada modelo tem um **`kind`**: `contract` (gera contrato jurídico) ou `reduction` (PDF da calculadora no lead, **não** cria contrato)
+- Placeholders **dinâmicos**: `{{nome}}`, `{{cpf}}`, `{{valor}}`, `{{parcelas}}`, mais as chaves que existirem no arquivo. O CRM extrai `{{...}}` e devolve `placeholders[]`; a UI pode acrescentar
+- Upload de **PDF/DOCX** com as variáveis no arquivo (logo/texto da empresa). Template só texto (`body`) continua válido até a migração
+- Contrato de API (pedido ao CRM, o front não inventa path): [`docs/document-templates-api.md`](../../docs/document-templates-api.md)
+
+## Telas
 
 ## Telas
 
@@ -31,7 +36,12 @@ POST  /contracts
 GET   /contracts
 PATCH /contracts/:id
 POST  /contracts/:id/sign
+POST  /contracts/:id/generate
+GET   /contract-templates
+POST  /contract-templates
 ```
+
+Paths e `kind` definitivos: [`docs/document-templates-api.md`](../../docs/document-templates-api.md) — só entram no client depois do CRM atualizar `contrato-api-frontend.md`.
 
 ## Regras
 

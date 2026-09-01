@@ -29,6 +29,7 @@ Grupos de dados:
 - **Listagem em tabela** (`/leads?view=table`): alternativa tabular com colunas configuráveis
 - **Detalhe do Lead** (`/leads/:id`): ver estrutura completa em [`../02-front-end.md`](../02-front-end.md#3-tela-do-lead)
   - Inclui CTA **Agendar retorno** e seção de próximos eventos (módulo Agenda — [`calendar.md`](./calendar.md))
+  - **Calculadora de redução** (números na tela). O PDF da simulação usa modelo `kind=reduction` e vira **anexo do lead**, não um contrato — ver [`document-templates-api.md`](../../docs/document-templates-api.md)
 
 ## Pipeline padrão
 
