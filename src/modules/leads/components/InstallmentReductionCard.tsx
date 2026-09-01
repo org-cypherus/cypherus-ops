@@ -1,11 +1,13 @@
 "use client";
 
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
   Grid2 as Grid,
   Slider,
   Stack,
@@ -67,10 +69,34 @@ export function InstallmentReductionCard({ lead, applying, onApply }: Props) {
   }
 
   return (
-    <Card variant="outlined">
-      <CardContent>
+    <Accordion
+      disableGutters
+      variant="outlined"
+      sx={{
+        "&:before": { display: "none" },
+        borderRadius: 1,
+        overflow: "hidden",
+      }}
+    >
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon />}
+        aria-controls="installment-calculator-content"
+        id="installment-calculator-header"
+        sx={{
+          px: 2,
+          "& .MuiAccordionSummary-content": { my: 1.5, flexDirection: "column" },
+        }}
+      >
         <Typography variant="h6">Calculadora de redução</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          Abra para simular a redução de parcela quando precisar
+        </Typography>
+      </AccordionSummary>
+      <AccordionDetails
+        id="installment-calculator-content"
+        sx={{ px: 2, pb: 2, pt: 0 }}
+      >
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Informe o percentual de redução estimado. A nova parcela e o parecer são
           calculados na hora — gerar o PDF com o modelo da análise vem depois.
         </Typography>
@@ -151,7 +177,7 @@ export function InstallmentReductionCard({ lead, applying, onApply }: Props) {
             Aplicar nova parcela
           </Button>
         </PermissionGate>
-      </CardContent>
-    </Card>
+      </AccordionDetails>
+    </Accordion>
   );
 }

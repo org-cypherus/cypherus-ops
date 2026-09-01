@@ -36,7 +36,8 @@ import { CurrencyField } from "@/components/inputs/CurrencyField";
 import { IntegerField } from "@/components/inputs/IntegerField";
 import { getApiError } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
-import { formatCurrency, formatDate } from "@/lib/utils/format";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils/format";
+import { roundCents } from "@/lib/utils/installment-reduction";
 import { ScheduleFromLeadDialog } from "@/modules/calendar/components/ScheduleFromLeadDialog";
 import { UpcomingLeadEvents } from "@/modules/calendar/components/UpcomingLeadEvents";
 import { useCanAccess, useSession } from "@/modules/auth/hooks";
@@ -717,7 +718,13 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                       size="small"
                       value={Number(draft.installments || 0)}
                       onChange={(installments) =>
-                        setDraft((d) => ({ ...d, installments }))
+                        setDraft((d) => ({
+                          ...d,
+                          installments,
+                          totalValue: roundCents(
+                            Number(installments || 0) * Number(d.installmentValue || 0),
+                          ),
+                        }))
                       }
                     />
                     <CurrencyField
@@ -725,7 +732,13 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                       size="small"
                       value={Number(draft.installmentValue || 0)}
                       onChange={(installmentValue) =>
-                        setDraft((d) => ({ ...d, installmentValue }))
+                        setDraft((d) => ({
+                          ...d,
+                          installmentValue,
+                          totalValue: roundCents(
+                            Number(d.installments || 0) * Number(installmentValue || 0),
+                          ),
+                        }))
                       }
                     />
                     <CurrencyField
@@ -740,6 +753,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                       label="Valor total"
                       size="small"
                       value={Number(draft.totalValue || 0)}
+                      helperText="Preenchido com parcela × quantidade. Você pode ajustar."
                       onChange={(totalValue) =>
                         setDraft((d) => ({ ...d, totalValue }))
                       }
@@ -1031,7 +1045,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                               variant="caption"
                               color="text.secondary"
                             >
-                              {event.userName} · {formatDate(event.createdAt)}
+                              {event.userName} · {formatDateTime(event.createdAt)}
                             </Typography>
                           </Box>
                         </Stack>
