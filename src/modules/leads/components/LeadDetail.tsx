@@ -34,6 +34,7 @@ import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { CurrencyField } from "@/components/inputs/CurrencyField";
 import { IntegerField } from "@/components/inputs/IntegerField";
+import { getApiError } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { ScheduleFromLeadDialog } from "@/modules/calendar/components/ScheduleFromLeadDialog";
@@ -50,6 +51,7 @@ import {
 import type { Lead, TimelineContactType } from "../types";
 import { PIPELINE_STAGES, TIMELINE_CONTACT_TYPES } from "../types";
 import { timelineEventLabel } from "../timeline-labels";
+import { InstallmentReductionCard } from "./InstallmentReductionCard";
 import { LeadAttachments } from "./LeadAttachments";
 
 const CONTACT_META: Record<
@@ -834,6 +836,32 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 )}
               </CardContent>
             </Card>
+
+            <InstallmentReductionCard
+              process={lead.process}
+              applying={updateLead.isPending}
+              onApply={(installmentValue) => {
+                updateLead.mutate(
+                  {
+                    process: {
+                      ...lead.process,
+                      installmentValue,
+                    },
+                  },
+                  {
+                    onSuccess: () => {
+                      enqueueSnackbar("Parcela atualizada", { variant: "success" });
+                    },
+                    onError: (err) => {
+                      enqueueSnackbar(
+                        getApiError(err).message || "Não foi possível atualizar a parcela",
+                        { variant: "error" },
+                      );
+                    },
+                  },
+                );
+              }}
+            />
 
             <Card variant="outlined">
               <CardContent>
