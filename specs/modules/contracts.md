@@ -22,8 +22,6 @@ Selecionar Lead → Selecionar Modelo → Preencher dados → Gerar PDF → Envi
 
 ## Telas
 
-## Telas
-
 - Wizard de geração de contrato (stepper: Lead → Modelo → Dados → PDF → Envio)
 - Listagem de contratos (status: Rascunho, Enviado, Assinado, Arquivado)
 - Detalhe do contrato (dados, PDF gerado, histórico de envio/assinatura)
