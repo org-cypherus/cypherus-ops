@@ -5,28 +5,112 @@ import { uiPriorityToApi, uiStageToApiStatus } from "@/modules/leads/adapters";
 import {
   buildKanban,
   buildSessionUser,
+  canDeactivateUser,
   createLead,
+  COMPANY_IDS,
   currentUser,
   deleteLead,
   getCompanyById,
   getSubscriptionByCompanyId,
   mockCompanies,
+  mockCommissionRules,
+  mockCommissions,
+  mockContracts,
   mockFeatureCatalog,
   mockFeatureOverrides,
   mockLeads,
+  mockPayments,
   mockPlans,
+  mockTemplates,
   mockUsers,
   patchLead,
   resolveMockCompanyFeatures,
   toCompanyResponse,
   updateLeadStatus,
+  type Contract as MockContract,
+  type ContractTemplate as MockTemplate,
 } from "./data";
 import type { Lead } from "@/modules/leads/types";
 
 const API = "/api/bff";
 
+type MockTeam = {
+  id: string;
+  company_id: string;
+  parent_team_id: string | null;
+  name: string;
+  manager_user_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type MockTeamMember = {
+  team_id: string;
+  user_id: string;
+  is_leader: boolean;
+  joined_at: string;
+};
+
+const mockTeams: MockTeam[] = [
+  {
+    id: "team-root",
+    company_id: COMPANY_IDS.enterprise,
+    parent_team_id: null,
+    name: "Empresa",
+    manager_user_id: "u1",
+    is_active: true,
+    created_at: "2026-01-15T12:00:00.000Z",
+    updated_at: "2026-01-15T12:00:00.000Z",
+  },
+  {
+    id: "team-gestor",
+    company_id: COMPANY_IDS.enterprise,
+    parent_team_id: "team-root",
+    name: "Time Carla Mendes",
+    manager_user_id: "u3",
+    is_active: true,
+    created_at: "2026-01-15T12:00:00.000Z",
+    updated_at: "2026-01-15T12:00:00.000Z",
+  },
+];
+
+const mockTeamMembers: MockTeamMember[] = [
+  {
+    team_id: "team-gestor",
+    user_id: "u2",
+    is_leader: false,
+    joined_at: "2026-01-16T12:00:00.000Z",
+  },
+  {
+    team_id: "team-gestor",
+    user_id: "u4",
+    is_leader: false,
+    joined_at: "2026-01-16T12:00:00.000Z",
+  },
+];
+
+const CONTRACT_UI_TO_STATUS: Record<string, string> = {
+  Rascunho: "DRAFT",
+  Enviado: "GENERATED",
+  Assinado: "SIGNED",
+  Arquivado: "ARCHIVED",
+};
+
 function crmError(status: number, code: string, message: string) {
   return HttpResponse.json({ error: { code, message }, request_id: "mock" }, { status });
+}
+
+const ROLES = [
+  { id: "role-admin", code: "ADMIN", name: "Administrador" },
+  { id: "role-manager", code: "MANAGER", name: "Gestor" },
+  { id: "role-sales", code: "SALES", name: "Comercial" },
+  { id: "role-finance", code: "FINANCE", name: "Financeiro" },
+  { id: "role-legal", code: "LEGAL", name: "Jurídico" },
+];
+
+function roleForUser(user: { role?: string } | undefined) {
+  return ROLES.find((item) => item.name === user?.role) ?? ROLES[2];
 }
 
 function toCrmUser(user: (typeof mockUsers)[number]) {
@@ -41,8 +125,9 @@ function toCrmUser(user: (typeof mockUsers)[number]) {
     timezone: "America/Sao_Paulo",
     mfa_enabled: false,
     last_login_at: null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    created_at: user.createdAt || "2026-01-15T12:00:00.000Z",
+    updated_at: user.createdAt || "2026-01-15T12:00:00.000Z",
+    roles: [roleForUser(user)],
   };
 }
 
@@ -70,10 +155,49 @@ function toCrmLead(lead: Lead) {
     status: uiStageToApiStatus(lead.status) ?? "NEW",
     priority: uiPriorityToApi(lead.priority) ?? "MEDIUM",
     tags: lead.tags,
-    process: lead.process,
+    process: {
+      ...lead.process,
+      potential_value: lead.process.totalValue,
+      value: lead.process.totalValue,
+    },
     pipeline_stage_id: null,
     created_at: lead.createdAt,
-    updated_at: lead.createdAt,
+    updated_at: lead.updatedAt || lead.createdAt,
+  };
+}
+
+function toCrmContract(contract: MockContract) {
+  const version = contract.pdfId ? 1 : 0;
+  return {
+    id: contract.id,
+    company_id: currentUser.companyId,
+    lead_id: contract.leadId,
+    template_id: contract.templateId,
+    title: contract.templateName,
+    status: CONTRACT_UI_TO_STATUS[contract.status] ?? "DRAFT",
+    data: { valor: String(contract.value), value: String(contract.value) },
+    current_version: version,
+    signed_attachment_id: contract.signedPdfId ?? null,
+    created_at: contract.createdAt,
+    updated_at: contract.createdAt,
+    signed_at: contract.signedAt ?? null,
+    archived_at: null,
+    versions: contract.pdfId
+      ? [{ version: 1, attachment_id: contract.pdfId, created_at: contract.createdAt }]
+      : [],
+  };
+}
+
+function toCrmTemplate(template: MockTemplate) {
+  return {
+    id: template.id,
+    company_id: currentUser.companyId,
+    name: template.name,
+    body: template.body,
+    placeholders: template.placeholders.map((key) => key.replace(/^\{\{\s*|\s*\}\}$/g, "")),
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 }
 
@@ -100,13 +224,6 @@ function mePayload(user = currentUser) {
       .map((permission) => ({ permission, granted: true, scope: "COMPANY", source: "ROLE" })),
   };
 }
-
-const ROLES = [
-  { id: "role-admin", code: "ADMIN", name: "Administrador" },
-  { id: "role-manager", code: "MANAGER", name: "Gestor" },
-  { id: "role-sales", code: "SALES", name: "Comercial" },
-  { id: "role-finance", code: "FINANCE", name: "Financeiro" },
-];
 
 export const handlers = [
   http.post(`${API}/v1/auth/login`, async ({ request }) => {
@@ -273,10 +390,178 @@ export const handlers = [
     return HttpResponse.json({ ...toCrmUser(user), phone: user.phone, job_title: user.team });
   }),
 
+  http.patch(`${API}/v1/companies/:companyId/users/:userId`, async ({ params, request }) => {
+    const user = mockUsers.find((item) => item.id === params.userId);
+    if (!user) return crmError(404, "USER_NOT_FOUND", "Usuário não encontrado.");
+    const body = (await request.json()) as {
+      name?: string;
+      phone?: string | null;
+      job_title?: string | null;
+    };
+    if (typeof body.name === "string" && body.name.trim()) user.name = body.name.trim();
+    if (typeof body.phone === "string") user.phone = body.phone;
+    if (typeof body.job_title === "string") user.team = body.job_title;
+    return HttpResponse.json({ ...toCrmUser(user), phone: user.phone, job_title: user.team });
+  }),
+
   http.get(`${API}/v1/companies/:companyId/users/:userId/roles`, ({ params }) => {
     const user = mockUsers.find((item) => item.id === params.userId);
-    const role = ROLES.find((item) => item.name === user?.role) ?? ROLES[2];
+    const role = roleForUser(user);
     return HttpResponse.json([role]);
+  }),
+
+  http.put(`${API}/v1/companies/:companyId/users/:userId/roles`, async ({ params, request }) => {
+    const body = (await request.json()) as { role_id?: string };
+    const user = mockUsers.find((item) => item.id === params.userId);
+    const role = ROLES.find((item) => item.id === body.role_id);
+    if (user && role) {
+      user.role = role.name as RoleName;
+    }
+    return HttpResponse.json(role ? [role] : []);
+  }),
+
+  http.get(`${API}/v1/companies/:companyId/users/:userId/permissions`, ({ params }) => {
+    const user = mockUsers.find((item) => item.id === params.userId);
+    const permissions = ROLE_PERMISSIONS[(user?.role as RoleName) ?? "Comercial"] ?? [];
+    return HttpResponse.json(
+      permissions
+        .map((permission) => UI_TO_API_PERMISSION[permission])
+        .filter(Boolean)
+        .map((permission) => ({
+          permission,
+          granted: true,
+          scope: "COMPANY",
+          source: "ROLE",
+        })),
+    );
+  }),
+
+  http.get(`${API}/v1/companies/:companyId/teams`, ({ params }) => {
+    const companyId = String(params.companyId);
+    return HttpResponse.json(mockTeams.filter((team) => team.company_id === companyId && team.is_active));
+  }),
+
+  http.post(`${API}/v1/companies/:companyId/teams`, async ({ params, request }) => {
+    const companyId = String(params.companyId);
+    const body = (await request.json()) as {
+      name?: string;
+      parent_team_id?: string | null;
+      manager_user_id?: string | null;
+    };
+    if (!body.name?.trim()) return crmError(400, "VALIDATION_ERROR", "Nome do time é obrigatório.");
+    const now = new Date().toISOString();
+    const team: MockTeam = {
+      id: `team-${Date.now()}`,
+      company_id: companyId,
+      parent_team_id: body.parent_team_id ?? null,
+      name: body.name.trim(),
+      manager_user_id: body.manager_user_id ?? null,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    };
+    mockTeams.push(team);
+    return HttpResponse.json(team, { status: 201 });
+  }),
+
+  http.patch(`${API}/v1/companies/:companyId/teams/:teamId`, async ({ params, request }) => {
+    const team = mockTeams.find((item) => item.id === params.teamId && item.company_id === params.companyId);
+    if (!team) return crmError(404, "TEAM_NOT_FOUND", "Time não encontrado.");
+    const body = (await request.json()) as {
+      name?: string;
+      parent_team_id?: string | null;
+      manager_user_id?: string | null;
+      is_active?: boolean;
+    };
+    if (body.name !== undefined) team.name = body.name;
+    if (body.parent_team_id !== undefined) team.parent_team_id = body.parent_team_id;
+    if (body.manager_user_id !== undefined) team.manager_user_id = body.manager_user_id;
+    if (body.is_active !== undefined) team.is_active = body.is_active;
+    team.updated_at = new Date().toISOString();
+    return HttpResponse.json(team);
+  }),
+
+  http.get(`${API}/v1/companies/:companyId/teams/:teamId/members`, ({ params }) => {
+    const team = mockTeams.find((item) => item.id === params.teamId && item.company_id === params.companyId);
+    if (!team) {
+      return HttpResponse.json({
+        items: [],
+        message:
+          "Este time não está cadastrado ou foi removido. Cadastre um time e vincule gestores, supervisores e funcionários.",
+      });
+    }
+    const items = mockTeamMembers.filter((member) => member.team_id === team.id);
+    return HttpResponse.json({
+      items,
+      message: items.length
+        ? null
+        : "Este time ainda não possui gestores, supervisores ou funcionários. Vincule usuários para começar.",
+    });
+  }),
+
+  http.put(`${API}/v1/companies/:companyId/teams/:teamId/members`, async ({ params, request }) => {
+    const team = mockTeams.find((item) => item.id === params.teamId && item.company_id === params.companyId);
+    if (!team) return crmError(404, "TEAM_NOT_FOUND", "Time não encontrado.");
+    const body = (await request.json()) as { user_id?: string; is_leader?: boolean };
+    if (!body.user_id) return crmError(400, "VALIDATION_ERROR", "user_id é obrigatório.");
+    const existing = mockTeamMembers.find(
+      (member) => member.team_id === team.id && member.user_id === body.user_id,
+    );
+    if (existing) {
+      existing.is_leader = Boolean(body.is_leader);
+      return HttpResponse.json(existing);
+    }
+    const member: MockTeamMember = {
+      team_id: team.id,
+      user_id: body.user_id,
+      is_leader: Boolean(body.is_leader),
+      joined_at: new Date().toISOString(),
+    };
+    mockTeamMembers.push(member);
+    return HttpResponse.json(member, { status: 201 });
+  }),
+
+  http.delete(`${API}/v1/companies/:companyId/teams/:teamId/members/:userId`, ({ params }) => {
+    const team = mockTeams.find((item) => item.id === params.teamId && item.company_id === params.companyId);
+    if (!team) return crmError(404, "TEAM_NOT_FOUND", "Time não encontrado.");
+    const index = mockTeamMembers.findIndex(
+      (member) => member.team_id === team.id && member.user_id === params.userId,
+    );
+    if (index < 0) return crmError(404, "MEMBER_NOT_FOUND", "Membro não encontrado.");
+    mockTeamMembers.splice(index, 1);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get(`${API}/v1/companies/:companyId/users/:userId/overrides`, () => HttpResponse.json([])),
+
+  http.put(`${API}/v1/companies/:companyId/users/:userId/overrides`, async ({ params, request }) => {
+    const body = (await request.json()) as {
+      permission_key?: string;
+      effect?: "ALLOW" | "DENY";
+      scope?: string | null;
+      reason?: string | null;
+    };
+    return HttpResponse.json({
+      user_id: params.userId,
+      permission_key: body.permission_key ?? "leads.view",
+      effect: body.effect ?? "ALLOW",
+      scope: body.scope ?? "COMPANY",
+      reason: body.reason ?? null,
+      expires_at: null,
+      created_at: new Date().toISOString(),
+    });
+  }),
+
+  http.post(`${API}/v1/companies/:companyId/users/:userId/deactivate`, ({ params }) => {
+    const index = mockUsers.findIndex((item) => item.id === params.userId);
+    if (index < 0) return crmError(404, "USER_NOT_FOUND", "Usuário não encontrado.");
+    const user = mockUsers[index];
+    const check = canDeactivateUser(user.id, currentUser.id);
+    if (!check.ok) return crmError(422, "VALIDATION_ERROR", check.message);
+    // Soft delete: some da listagem (igual CRM com deleted_at).
+    const snapshot = { ...toCrmUser(user), status: "INACTIVE" };
+    mockUsers.splice(index, 1);
+    return HttpResponse.json(snapshot);
   }),
 
   http.get(`${API}/v1/companies/:companyId/roles`, () => HttpResponse.json(ROLES)),
@@ -289,7 +574,13 @@ export const handlers = [
     return HttpResponse.json(keys.map((permission_key) => ({ permission_key, scope: "COMPANY" })));
   }),
 
-  http.get(`${API}/v1/companies/:companyId/leads`, () => HttpResponse.json(mockLeads.map(toCrmLead))),
+  http.get(`${API}/v1/companies/:companyId/leads`, ({ request }) => {
+    const url = new URL(request.url);
+    const ownerId = url.searchParams.get("owner_user_id");
+    let items = mockLeads;
+    if (ownerId) items = items.filter((lead) => lead.ownerId === ownerId);
+    return HttpResponse.json({ items: items.map(toCrmLead), next_cursor: null });
+  }),
 
   http.get(`${API}/v1/companies/:companyId/leads/:leadId`, ({ params }) => {
     const lead = mockLeads.find((item) => item.id === params.leadId);
@@ -299,7 +590,11 @@ export const handlers = [
 
   http.get(`${API}/v1/companies/:companyId/leads/:leadId/events`, () => HttpResponse.json([])),
   http.get(`${API}/v1/companies/:companyId/leads/:leadId/attachments`, () => HttpResponse.json([])),
-  http.get(`${API}/v1/companies/:companyId/leads/:leadId/contracts`, () => HttpResponse.json([])),
+  http.get(`${API}/v1/companies/:companyId/leads/:leadId/contracts`, ({ params }) =>
+    HttpResponse.json(
+      mockContracts.filter((item) => item.leadId === params.leadId).map(toCrmContract),
+    ),
+  ),
 
   http.post(`${API}/v1/companies/:companyId/leads`, async ({ request }) => {
     const body = (await request.json()) as { name: string; email: string; cpf: string; owner_user_id: string };
@@ -334,6 +629,19 @@ export const handlers = [
       email: body.email as string | undefined,
       phone: body.phone as string | undefined,
       observations: (body.process as { observations?: string } | undefined)?.observations,
+    });
+    if (!lead) return crmError(404, "LEAD_NOT_FOUND", "Lead não encontrado.");
+    return HttpResponse.json(toCrmLead(lead));
+  }),
+
+  http.patch(`${API}/v1/companies/:companyId/leads/:leadId/assign`, async ({ params, request }) => {
+    const body = (await request.json()) as { owner_user_id?: string };
+    if (!body.owner_user_id) return crmError(400, "VALIDATION_ERROR", "owner_user_id é obrigatório.");
+    const owner = mockUsers.find((item) => item.id === body.owner_user_id);
+    if (!owner) return crmError(404, "USER_NOT_FOUND", "Usuário não encontrado.");
+    const lead = patchLead(String(params.leadId), {
+      ownerId: owner.id,
+      ownerName: owner.name,
     });
     if (!lead) return crmError(404, "LEAD_NOT_FOUND", "Lead não encontrado.");
     return HttpResponse.json(toCrmLead(lead));
@@ -382,6 +690,7 @@ export const handlers = [
         status: uiStageToApiStatus(column.status),
         lead_count: column.count,
         potential_value: column.potentialValue,
+        has_more: false,
         leads: column.leads.map(toCrmLead),
       })),
     });
@@ -391,32 +700,128 @@ export const handlers = [
     HttpResponse.json({
       leads_in_period: mockLeads.length,
       converted_count: 1,
-      conversion_rate: 0.1,
+      conversion_rate: 10,
       funnel: buildKanban().columns.map((column) => ({
         name: column.status,
         lead_count: column.count,
         potential_value: column.potentialValue,
       })),
-      performance: [],
+      performance: [
+        {
+          owner_user_id: mockUsers[0]?.id ?? "u1",
+          lead_count: 5,
+          converted_count: 2,
+          conversion_rate: 40,
+          potential_value: 12000,
+        },
+        {
+          owner_user_id: mockUsers[1]?.id ?? "u2",
+          lead_count: 3,
+          converted_count: 1,
+          conversion_rate: 33.33,
+          potential_value: 4500,
+        },
+      ],
     }),
   ),
 
   http.get(`${API}/v1/companies/:companyId/dashboard/admin`, () =>
     HttpResponse.json({
+      from: "2026-07-22",
+      to: "2026-08-21",
       leads_received: mockLeads.length,
       leads_by_origin: [{ source: "Google", lead_count: mockLeads.length }],
       contracts_signed: 1,
       contracts_pending: 0,
-      revenue: 0,
-      ticket_average: 0,
+      overdue_count: 0,
+      overdue_amount: 0,
+      revenue: 2000,
+      revenue_by_month: [
+        { month: "2026-07", amount: 500, count: 1 },
+        { month: "2026-08", amount: 1500, count: 2 },
+      ],
+      ticket_average: 1000,
+      active_users: 1,
+      performance: [
+        {
+          owner_user_id: mockUsers[0]?.id ?? "u1",
+          lead_count: 5,
+          converted_count: 2,
+          conversion_rate: 40,
+          potential_value: 12000,
+        },
+        {
+          owner_user_id: mockUsers[1]?.id ?? "u2",
+          lead_count: 3,
+          converted_count: 1,
+          conversion_rate: 33.33,
+          potential_value: 4500,
+        },
+      ],
     }),
   ),
 
-  http.get(`${API}/v1/companies/:companyId/payments`, () => HttpResponse.json([])),
-  http.get(`${API}/v1/companies/:companyId/commissions`, () => HttpResponse.json([])),
-  http.get(`${API}/v1/companies/:companyId/commission-rules`, () => HttpResponse.json([])),
-  http.get(`${API}/v1/companies/:companyId/contracts`, () => HttpResponse.json([])),
-  http.get(`${API}/v1/companies/:companyId/contract-templates`, () => HttpResponse.json([])),
+  http.get(`${API}/v1/companies/:companyId/payments`, () =>
+    HttpResponse.json(
+      mockPayments.map((payment) => ({
+        id: payment.id,
+        company_id: currentUser.companyId,
+        contract_id: payment.contractId,
+        lead_id: payment.leadId,
+        amount: payment.amount,
+        due_date: payment.dueDate.slice(0, 10),
+        status:
+          payment.status === "Recebido"
+            ? "CONFIRMED"
+            : payment.status === "Atrasado"
+              ? "OVERDUE"
+              : "PENDING",
+        paid_at: payment.paidAt ?? null,
+        created_at: payment.dueDate,
+        commission_id: payment.id === "p1" ? "cm1" : null,
+      })),
+    ),
+  ),
+  http.get(`${API}/v1/companies/:companyId/commissions`, () =>
+    HttpResponse.json(
+      mockCommissions.map((commission) => ({
+        id: commission.id,
+        company_id: currentUser.companyId,
+        payment_id: commission.paymentId || "p1",
+        contract_id: "c1",
+        beneficiary_user_id: commission.userId,
+        kind: commission.status === "Fixa" ? "FIXED" : "PERCENT",
+        base_amount: commission.amount * 10,
+        rate: commission.status === "Fixa" ? null : 10,
+        amount: commission.amount,
+        created_at: `${commission.period || "2026-07"}-15T12:00:00.000Z`,
+      })),
+    ),
+  ),
+  http.get(`${API}/v1/companies/:companyId/commission-rules`, () =>
+    HttpResponse.json(
+      mockCommissionRules.map((rule) => ({
+        id: rule.id,
+        company_id: currentUser.companyId,
+        name: rule.plan,
+        kind: rule.type === "taxa" ? "FIXED" : "PERCENT",
+        rate: rule.type === "taxa" ? null : rule.value,
+        amount: rule.type === "taxa" ? rule.value : null,
+        is_active: Boolean(rule.active),
+      })),
+    ),
+  ),
+  http.get(`${API}/v1/companies/:companyId/contracts`, () =>
+    HttpResponse.json(mockContracts.map(toCrmContract)),
+  ),
+  http.get(`${API}/v1/companies/:companyId/contracts/:contractId`, ({ params }) => {
+    const contract = mockContracts.find((item) => item.id === params.contractId);
+    if (!contract) return crmError(404, "CONTRACT_NOT_FOUND", "Contrato não encontrado.");
+    return HttpResponse.json(toCrmContract(contract));
+  }),
+  http.get(`${API}/v1/companies/:companyId/contract-templates`, () =>
+    HttpResponse.json(mockTemplates.map(toCrmTemplate)),
+  ),
   http.get(`${API}/v1/companies/:companyId/distribution/rules`, () => HttpResponse.json([])),
 
   http.post(`${API}/v1/companies`, async ({ request }) => {
@@ -432,15 +837,25 @@ export const handlers = [
     );
   }),
 
-  http.post(`${API}/v1/auth/invitations/accept`, () =>
-    HttpResponse.json({
-      access_token: "mock-access",
-      refresh_token: "mock-refresh",
-      token_type: "bearer",
-      expires_in: 3600,
-      user: mePayload().user,
-    }),
-  ),
+  http.post(`${API}/v1/auth/invitations/accept`, async ({ request }) => {
+    const body = (await request.json()) as { token?: string; password?: string };
+    if (!body.token?.trim()) {
+      return crmError(401, "AUTHENTICATION_FAILED", "Token de convite inválido ou expirado.");
+    }
+    if (!body.password || body.password.length < 8) {
+      return crmError(422, "VALIDATION_ERROR", "A senha deve ter no mínimo 8 caracteres.");
+    }
+    return HttpResponse.json(
+      {
+        access_token: "mock-access",
+        refresh_token: "mock-refresh",
+        token_type: "bearer",
+        expires_in: 3600,
+        user: mePayload().user,
+      },
+      { status: 201 },
+    );
+  }),
 
   http.get(`${API}/v1/health/live`, () => HttpResponse.json({ status: "ok", service: "saas-crm" })),
 ];

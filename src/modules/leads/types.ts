@@ -66,6 +66,8 @@ export type Lead = {
   ownerId: string;
   ownerName: string;
   createdAt: string;
+  updatedAt?: string;
+  pipelineStageId?: string;
   status: PipelineStage;
   priority: LeadPriority;
   tags: string[];
@@ -90,6 +92,8 @@ export type KanbanColumn = {
   status: PipelineStage;
   count: number;
   potentialValue: number;
+  /** Coluna truncada no board (CRM `has_more`); totais da coluna ainda são globais. */
+  hasMore?: boolean;
   leads: Lead[];
 };
 

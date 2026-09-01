@@ -6,6 +6,7 @@ import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
 import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
+import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
 import PeopleOutlineIcon from "@mui/icons-material/PeopleOutline";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
@@ -22,12 +23,15 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { canAccess } from "@/lib/billing/access";
-import { APP_NAV_ROUTES } from "@/lib/billing/routes";
+import { APP_NAV_ROUTES, canSeeAppRoute, getAppRouteByHref } from "@/lib/billing/routes";
 import { PLATFORM_NAV_ROUTES, isPlatformPath } from "@/lib/platform/routes";
 import { Role } from "@/lib/auth/permissions";
-import { useSession } from "@/modules/auth/hooks";
+import { prefetchNavHref } from "@/lib/query/prefetch-routes";
+import { useLogout, useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
+import { SidebarPerfFooter } from "./SidebarPerfFooter";
 
 export const DRAWER_WIDTH = 248;
 export const TOPBAR_HEIGHT = 64;
@@ -53,37 +57,38 @@ const paperSx = {
   color: "text.primary",
   borderRight: "1px solid",
   borderColor: "divider",
+  display: "flex",
+  flexDirection: "column" as const,
+  height: "100%",
 };
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const { data: user } = useSession();
+  const logout = useLogout();
   const platformMode = Boolean(user?.isPlatformAdmin);
   const adminUsesAdminDash =
     user?.role === Role.Administrador &&
     canAccess(user?.features, user?.permissions, "dashboard_advanced", "dashboard:visualizar");
 
-  const tenantItems = APP_NAV_ROUTES.filter((item) => {
-    if (item.feature) {
-      return canAccess(user?.features, user?.permissions, item.feature, item.permission);
-    }
-    return Boolean(user?.permissions.includes(item.permission));
-  }).map((item) =>
+  const tenantItems = APP_NAV_ROUTES.filter((item) => canSeeAppRoute(user, item)).map((item) =>
     item.href === "/dashboard" && adminUsesAdminDash
       ? { ...item, href: "/dashboard/admin", label: "Dashboard" }
       : item,
   );
 
-  const visibleItems = platformMode
-    ? [
-        ...PLATFORM_NAV_ROUTES,
-        { href: "/leads", label: "CRM da empresa" },
-      ]
-    : tenantItems;
+  const crmNav = getAppRouteByHref("/leads");
+  const platformCrm =
+    crmNav && canSeeAppRoute(user, crmNav)
+      ? [{ href: "/leads", label: "CRM da empresa" }]
+      : [];
+
+  const visibleItems = platformMode ? [...PLATFORM_NAV_ROUTES, ...platformCrm] : tenantItems;
 
   return (
-    <>
-      <Toolbar sx={{ px: 2.5 }}>
+    <Box display="flex" flexDirection="column" height="100%" minHeight={0}>
+      <Toolbar sx={{ px: 2.5, flexShrink: 0 }}>
         <Box>
           <Typography
             variant="h6"
@@ -96,7 +101,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           </Typography>
         </Box>
       </Toolbar>
-      <List sx={{ px: 1.5, pt: 1 }}>
+      <List sx={{ px: 1.5, pt: 1, flex: 1, overflowY: "auto", minHeight: 0 }}>
         {visibleItems.map((item) => {
           const selected =
             pathname === item.href ||
@@ -117,6 +122,12 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
               href={item.href}
               selected={selected}
               onClick={onNavigate}
+              onMouseEnter={() => {
+                void prefetchNavHref(queryClient, item.href);
+              }}
+              onFocus={() => {
+                void prefetchNavHref(queryClient, item.href);
+              }}
               sx={{
                 mb: 0.5,
                 borderRadius: 2,
@@ -138,7 +149,34 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           );
         })}
       </List>
-    </>
+      <SidebarPerfFooter />
+      <List sx={{ px: 1.5, pb: 1.5, pt: 0, flexShrink: 0 }}>
+        <ListItemButton
+          onClick={() => {
+            onNavigate?.();
+            logout.mutate();
+          }}
+          disabled={logout.isPending}
+          aria-label="Sair"
+          sx={{
+            borderRadius: 2,
+            color: "error.main",
+            "& .MuiListItemIcon-root": { color: "error.main" },
+            "& .MuiListItemText-primary": { color: "inherit", fontWeight: 600 },
+            "&:hover": {
+              backgroundColor: "action.hover",
+              color: "error.dark",
+              "& .MuiListItemIcon-root": { color: "error.dark" },
+            },
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <LogoutOutlinedIcon />
+          </ListItemIcon>
+          <ListItemText primary="Sair" />
+        </ListItemButton>
+      </List>
+    </Box>
   );
 }
 

@@ -16,7 +16,7 @@ import { fetchRoleCatalog, fetchRolePermissions } from "@/modules/admin/services
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
 
 export default function RolesPage() {
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.roles.withPermissions,
     queryFn: async () => {
       const roles = await fetchRoleCatalog();
@@ -42,7 +42,7 @@ export default function RolesPage() {
           <CircularProgress />
         </Box>
       ) : isError ? (
-        <ErrorState onRetry={() => refetch()} />
+        <ErrorState error={error} resourceLabel="cargos e papéis" onRetry={() => refetch()} />
       ) : (
         <Grid container spacing={2}>
           {(data || []).map((role) => (

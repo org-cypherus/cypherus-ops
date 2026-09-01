@@ -1,5 +1,6 @@
 import type { Attachment, KanbanBoard, Lead, LeadPriority, PipelineStage } from "./types";
 import { PIPELINE_STAGES } from "./types";
+import { timelineEventLabel } from "./timeline-labels";
 
 export type CrmLead = {
   id: string;
@@ -54,6 +55,7 @@ export type CrmPipelineBoard = {
     status?: string | null;
     lead_count: number;
     potential_value: string | number;
+    has_more?: boolean;
     leads: CrmLead[];
   }>;
 };
@@ -98,13 +100,17 @@ function asNumber(value: unknown, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/** Valor do funil/board no CRM: `potential_value` ou `value` (contrato saas-crm). */
+export function processPotentialValue(process: Record<string, unknown> | undefined) {
+  if (!process) return 0;
+  for (const key of ["potential_value", "value", "totalValue", "total_value", "valor"] as const) {
+    if (process[key] == null || process[key] === "") continue;
+    return asNumber(process[key]);
+  }
+  return 0;
+}
+
 function processValue(process: Record<string, unknown> | undefined) {
-  const total =
-    process?.totalValue ??
-    process?.total_value ??
-    process?.potential_value ??
-    process?.valor ??
-    0;
   return {
     bank: String(process?.bank ?? process?.banco ?? "") || undefined,
     installments: process?.installments != null ? asNumber(process.installments) : undefined,
@@ -116,9 +122,44 @@ function processValue(process: Record<string, unknown> | undefined) {
       process?.financedValue != null || process?.financed_value != null
         ? asNumber(process?.financedValue ?? process?.financed_value)
         : undefined,
-    totalValue: asNumber(total),
+    totalValue: processPotentialValue(process),
     contractType: String(process?.contractType ?? process?.contract_type ?? "") || undefined,
     notes: String(process?.notes ?? process?.observacoes ?? "") || undefined,
+  };
+}
+
+/** Aproximação: dias desde `updated_at` (CRM não envia days_in_stage). */
+export function daysSince(iso?: string | null, today = new Date()) {
+  if (!iso) return 0;
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return 0;
+  const start = Date.UTC(then.getUTCFullYear(), then.getUTCMonth(), then.getUTCDate());
+  const end = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  return Math.max(0, Math.floor((end - start) / 86_400_000));
+}
+
+export function unwrapLeadList(data: unknown): CrmLead[] {
+  if (Array.isArray(data)) return data as CrmLead[];
+  if (data && typeof data === "object" && Array.isArray((data as { items?: unknown }).items)) {
+    return (data as { items: CrmLead[] }).items;
+  }
+  return [];
+}
+
+export function nextLeadCursor(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const cursor = (data as { next_cursor?: string | null }).next_cursor;
+  return cursor ?? null;
+}
+
+function toProcessPayload(process?: Lead["process"], observations?: string) {
+  const total = process?.totalValue;
+  return {
+    ...(process ?? {}),
+    // CRM agrega board por potential_value | value — espelha o total da UI.
+    potential_value: total ?? 0,
+    value: total ?? 0,
+    observations,
   };
 }
 
@@ -135,7 +176,9 @@ export function toUiLead(
   const eventTimeline = (extras?.events ?? []).map((event, index) => ({
     id: `event-${index}`,
     type: event.type,
-    description: String(event.payload?.description ?? event.payload?.message ?? event.type),
+    description: String(
+      event.payload?.description ?? event.payload?.message ?? timelineEventLabel(event.type),
+    ),
     createdAt: event.created_at,
     userName: String(event.payload?.actor_name ?? "Sistema"),
   }));
@@ -172,13 +215,15 @@ export function toUiLead(
     campaign: lead.campaign || "",
     channel: lead.channel || "",
     ownerId: lead.owner_user_id,
-    ownerName: ownerName || "",
+    ownerName: ownerName?.trim() || "Sem responsável",
     createdAt: lead.created_at,
+    updatedAt: lead.updated_at,
+    pipelineStageId: lead.pipeline_stage_id ?? undefined,
     status,
     priority: PRIORITY_TO_UI[lead.priority] ?? "media",
     tags: lead.tags ?? [],
     process: processValue(process),
-    daysInStage: 0,
+    daysInStage: daysSince(lead.updated_at || lead.created_at),
     timeline: [...eventTimeline, ...contactTimeline],
     attachments: extras?.attachments ?? [],
     observations: String(process.observations ?? process.observacoes ?? "") || undefined,
@@ -195,8 +240,10 @@ export function toKanbanBoard(board: CrmPipelineBoard, owners: Record<string, st
         PIPELINE_STAGES[0];
       return {
         status,
+        // Totais da coluna vêm do CRM (incluem leads além do slice `leads[]`).
         count: column.lead_count,
         potentialValue: asNumber(column.potential_value),
+        hasMore: Boolean(column.has_more),
         leads,
       };
     }),
@@ -227,10 +274,7 @@ export function leadToCreateRequest(payload: Partial<Lead> & { name: string; ema
     status: payload.status ? uiStageToApiStatus(payload.status) : "NEW",
     priority: uiPriorityToApi(payload.priority) ?? "MEDIUM",
     tags: payload.tags ?? [],
-    process: {
-      ...(payload.process ?? {}),
-      observations: payload.observations,
-    },
+    process: toProcessPayload(payload.process, payload.observations),
   };
 }
 
@@ -258,10 +302,7 @@ export function leadToUpdateRequest(payload: Partial<Lead>) {
   if (payload.priority !== undefined) body.priority = uiPriorityToApi(payload.priority);
   if (payload.tags !== undefined) body.tags = payload.tags;
   if (payload.process !== undefined || payload.observations !== undefined) {
-    body.process = {
-      ...(payload.process ?? {}),
-      observations: payload.observations,
-    };
+    body.process = toProcessPayload(payload.process, payload.observations);
   }
   return body;
 }

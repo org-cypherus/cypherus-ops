@@ -4,6 +4,8 @@ export const queryKeys = {
     all: ["leads"] as const,
     list: (params?: Record<string, unknown>) => ["leads", "list", params] as const,
     detail: (id: string) => ["leads", "detail", id] as const,
+    attachment: (leadId: string, attachmentId: string) =>
+      ["leads", "detail", leadId, "attachment", attachmentId] as const,
   },
   kanban: ["kanban"] as const,
   defaultPipeline: ["pipelines", "default"] as const,
@@ -12,6 +14,8 @@ export const queryKeys = {
     list: (params?: Record<string, unknown>) => ["contracts", "list", params] as const,
     detail: (id: string) => ["contracts", "detail", id] as const,
     templates: ["contracts", "templates"] as const,
+    version: (id: string, version: number) => ["contracts", "version", id, version] as const,
+    signed: (id: string) => ["contracts", "signed", id] as const,
   },
   legalKanban: ["legal", "kanban"] as const,
   calendar: {
@@ -33,6 +37,11 @@ export const queryKeys = {
   reports: (params?: Record<string, unknown>) => ["reports", params] as const,
   users: ["users"] as const,
   userDirectory: ["users", "directory"] as const,
+  userDetail: (userId: string) => ["users", "detail", userId] as const,
+  userPermissions: (userId: string) => ["users", userId, "permissions"] as const,
+  teams: ["teams"] as const,
+  teamMembers: (teamId: string) => ["teams", teamId, "members"] as const,
+  orgTree: ["teams", "org-tree"] as const,
   leadNames: ["lead-names"] as const,
   plans: ["plans"] as const,
   roles: {

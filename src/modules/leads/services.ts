@@ -2,14 +2,18 @@ import { api, type Paginated } from "@/lib/api/client";
 import { companyPath } from "@/lib/auth/session";
 import { getQueryClient, PIPELINE_STALE_TIME_MS } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
+import { downloadApiFile, fetchApiBlob } from "@/lib/utils/download";
+import { mapWithConcurrency } from "@/lib/utils/concurrency";
 import { fetchOwnerMap } from "@/modules/users/directory";
 import type { Attachment, KanbanBoard, Lead, LegalStage, PipelineStage } from "./types";
 import {
   leadToCreateRequest,
   leadToUpdateRequest,
+  nextLeadCursor,
   toKanbanBoard,
   toUiLead,
   uiStageToApiStatus,
+  unwrapLeadList,
   type CrmLead,
   type CrmPipeline,
   type CrmPipelineBoard,
@@ -28,24 +32,47 @@ export type LeadFilters = {
   to?: string;
 };
 
+/** YYYY-MM-DD — compara datas de filtro sem deslocar por timezone do ISO. */
+export function dayKey(value?: string) {
+  return value?.slice(0, 10) || "";
+}
+
+function hasClientFilters(filters?: LeadFilters) {
+  if (!filters) return false;
+  return Boolean(
+    filters.q?.trim() ||
+      filters.ownerId ||
+      filters.origin ||
+      filters.priority ||
+      filters.tag ||
+      filters.from ||
+      filters.to ||
+      filters.status,
+  );
+}
+
 export function filterKanbanBoard(board: KanbanBoard, filters?: LeadFilters): KanbanBoard {
-  if (!filters) return board;
-  const q = filters.q?.trim().toLowerCase();
+  if (!hasClientFilters(filters)) return board;
+  const q = filters!.q?.trim().toLowerCase();
+  const from = dayKey(filters!.from);
+  const to = dayKey(filters!.to);
   return {
     columns: board.columns.map((column) => {
       const leads = column.leads.filter((lead) => {
         if (q && !`${lead.name} ${lead.email} ${lead.phone}`.toLowerCase().includes(q)) return false;
-        if (filters.ownerId && lead.ownerId !== filters.ownerId) return false;
-        if (filters.origin && lead.origin !== filters.origin) return false;
-        if (filters.priority && lead.priority !== filters.priority) return false;
-        if (filters.tag && !lead.tags.includes(filters.tag)) return false;
-        if (filters.from && lead.createdAt < filters.from) return false;
-        if (filters.to && lead.createdAt > filters.to) return false;
+        if (filters!.ownerId && lead.ownerId !== filters!.ownerId) return false;
+        if (filters!.origin && lead.origin !== filters!.origin) return false;
+        if (filters!.priority && lead.priority !== filters!.priority) return false;
+        if (filters!.tag && !lead.tags.includes(filters!.tag)) return false;
+        const created = dayKey(lead.createdAt);
+        if (from && created && created < from) return false;
+        if (to && created && created > to) return false;
         return true;
       });
       return {
         ...column,
         leads,
+        // Com filtro client-side, totais refletem só o slice carregado no board.
         count: leads.length,
         potentialValue: leads.reduce((sum, lead) => sum + lead.process.totalValue, 0),
       };
@@ -71,13 +98,26 @@ async function enrichLeads(leads: CrmLead[]): Promise<Lead[]> {
   return leads.map((lead) => toUiLead(lead, owners[lead.owner_user_id]));
 }
 
+async function fetchAllCrmLeads(query: Record<string, string> = {}, maxPages = 20): Promise<CrmLead[]> {
+  const items: CrmLead[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < maxPages; page += 1) {
+    const params = { ...query, limit: "100", ...(cursor ? { cursor } : {}) };
+    const { data } = await api.get<unknown>(companyPath("/leads"), { params });
+    items.push(...unwrapLeadList(data));
+    cursor = nextLeadCursor(data);
+    if (!cursor) break;
+  }
+  return items;
+}
+
 export async function fetchLeadNameMap(): Promise<Record<string, string>> {
   return getQueryClient().ensureQueryData({
     queryKey: queryKeys.leadNames,
     staleTime: PIPELINE_STALE_TIME_MS,
     queryFn: async () => {
-      const { data } = await api.get<Array<{ id: string; name: string }>>(companyPath("/leads"));
-      return Object.fromEntries((data ?? []).map((lead) => [lead.id, lead.name]));
+      const leads = await fetchAllCrmLeads();
+      return Object.fromEntries(leads.map((lead) => [lead.id, lead.name]));
     },
   });
 }
@@ -95,10 +135,20 @@ export async function fetchLeads(params?: LeadFilters) {
   if (params?.ownerId) query.owner_user_id = params.ownerId;
   if (params?.origin) query.source = params.origin;
   if (params?.status) query.status = uiStageToApiStatus(params.status) ?? params.status;
-  const { data } = await api.get<CrmLead[]>(companyPath("/leads"), { params: query });
-  let leads = await enrichLeads(data);
+  const raw = await fetchAllCrmLeads(query);
+  let leads = await enrichLeads(raw);
   if (params?.priority) leads = leads.filter((lead) => lead.priority === params.priority);
   if (params?.tag) leads = leads.filter((lead) => lead.tags.includes(params.tag!));
+  const from = dayKey(params?.from);
+  const to = dayKey(params?.to);
+  if (from || to) {
+    leads = leads.filter((lead) => {
+      const created = dayKey(lead.createdAt);
+      if (from && created && created < from) return false;
+      if (to && created && created > to) return false;
+      return true;
+    });
+  }
   return paginate(leads, params);
 }
 
@@ -108,22 +158,41 @@ export async function fetchLead(id: string) {
     api.get<Array<{ type: string; payload?: Record<string, unknown>; created_at: string; actor_user_id?: string | null }>>(
       companyPath(`/leads/${id}/events`),
     ).catch(() => ({ data: [] })),
-    api.get<Array<{ id: string; filename: string; content_type?: string; size_bytes?: number; created_at: string }>>(
-      companyPath(`/leads/${id}/attachments`),
-    ).catch(() => ({ data: [] })),
+    api.get<Array<{
+      id: string;
+      filename: string;
+      mime_type?: string;
+      content_type?: string;
+      size_bytes?: number;
+      created_at: string;
+    }>>(companyPath(`/leads/${id}/attachments`)).catch(() => ({ data: [] })),
   ]);
   const owners = await fetchOwnerMap();
   return toUiLead(lead, owners[lead.owner_user_id], {
     events: events.data,
-    attachments: attachments.data.map((item) => ({
-      id: item.id,
-      name: item.filename,
-      type: item.content_type || "application/octet-stream",
-      size: item.size_bytes || 0,
-      url: companyPath(`/leads/${id}/attachments/${item.id}/content`),
-      createdAt: item.created_at,
-    })),
+    attachments: attachments.data.map((item) => mapLeadAttachment(id, item)),
   });
+}
+
+export function mapLeadAttachment(
+  leadId: string,
+  item: {
+    id: string;
+    filename: string;
+    mime_type?: string;
+    content_type?: string;
+    size_bytes?: number;
+    created_at: string;
+  },
+): Attachment {
+  return {
+    id: item.id,
+    name: item.filename,
+    type: item.mime_type || item.content_type || "application/octet-stream",
+    size: item.size_bytes || 0,
+    url: companyPath(`/leads/${leadId}/attachments/${item.id}/content`),
+    createdAt: item.created_at,
+  };
 }
 
 export async function createLead(payload: Partial<Lead> & { name: string; email: string }) {
@@ -137,7 +206,10 @@ export async function importLeads(rows: Array<Partial<Lead> & { name: string; em
   const csvLines = ["name,cpf,owner_user_id,email,phone,source,process"];
   for (const row of rows) {
     const owner = row.ownerId || fallbackOwner;
-    const process = JSON.stringify({ totalValue: row.process?.totalValue ?? 0 });
+    const process = JSON.stringify({
+      potential_value: row.process?.totalValue ?? 0,
+      value: row.process?.totalValue ?? 0,
+    });
     const fields = [
       row.name,
       row.cpf || "",
@@ -206,6 +278,19 @@ export async function updateLead(id: string, payload: Partial<Lead>) {
   return toUiLead(data, owners[data.owner_user_id]);
 }
 
+export async function assignLeadOwner(leadId: string, ownerUserId: string) {
+  await api.patch(companyPath(`/leads/${leadId}/assign`), { owner_user_id: ownerUserId });
+}
+
+/** Reatribui vários leads (mapa leadId → novo owner). Atualiza `owner_user_id` no CRM. */
+export async function assignLeadsOwners(assignments: Record<string, string>) {
+  const entries = Object.entries(assignments).filter(([, ownerId]) => Boolean(ownerId));
+  await mapWithConcurrency(entries, 4, async ([leadId, ownerId]) => {
+    await assignLeadOwner(leadId, ownerId);
+  });
+  return { ok: true as const, affected: entries.length };
+}
+
 export async function distributeLeads(payload: {
   strategy: string;
   leadIds?: string[];
@@ -214,9 +299,7 @@ export async function distributeLeads(payload: {
 }) {
   const ids = payload.leadIds ?? [];
   if (payload.strategy === "manual" && payload.ownerId) {
-    await Promise.all(
-      ids.map((leadId) => api.patch(companyPath(`/leads/${leadId}/assign`), { owner_user_id: payload.ownerId })),
-    );
+    await Promise.all(ids.map((leadId) => assignLeadOwner(leadId, payload.ownerId!)));
     return { ok: true, affected: ids.length };
   }
   if (payload.strategy === "redistribute") {
@@ -234,19 +317,34 @@ export async function distributeLeads(payload: {
 
 export async function addLeadAttachment(
   leadId: string,
-  attachment: Omit<Attachment, "id" | "createdAt"> & { id?: string; file?: File },
+  file: File,
+  onProgress?: (percent: number) => void,
 ) {
   const form = new FormData();
-  if (attachment.file) {
-    form.append("file", attachment.file);
-  } else if (attachment.url?.startsWith("data:")) {
-    const blob = await (await fetch(attachment.url)).blob();
-    form.append("file", blob, attachment.name);
-  } else {
-    throw new Error("Envie um arquivo para anexar ao lead.");
-  }
-  await api.post(companyPath(`/leads/${leadId}/attachments`), form);
+  form.append("file", file);
+  await api.post(companyPath(`/leads/${leadId}/attachments`), form, {
+    onUploadProgress: (event: { loaded: number; total?: number }) => {
+      if (!onProgress) return;
+      if (!event.total) {
+        onProgress(0);
+        return;
+      }
+      onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    },
+  });
+  onProgress?.(100);
   return fetchLead(leadId);
+}
+
+export async function downloadLeadAttachment(leadId: string, attachmentId: string, fileName: string) {
+  return downloadApiFile(
+    companyPath(`/leads/${leadId}/attachments/${attachmentId}/content`),
+    fileName,
+  );
+}
+
+export async function fetchLeadAttachmentBlob(leadId: string, attachmentId: string) {
+  return fetchApiBlob(companyPath(`/leads/${leadId}/attachments/${attachmentId}/content`));
 }
 
 export async function removeLeadAttachment(leadId: string, attachmentId: string) {
@@ -276,19 +374,30 @@ export async function addLeadTimelineEntry(
 }
 
 export async function fetchLeadContracts(leadId: string) {
+  const statusLabel: Record<string, string> = {
+    DRAFT: "Rascunho",
+    GENERATED: "Enviado",
+    SIGNED: "Assinado",
+    ARCHIVED: "Arquivado",
+  };
   const { data } = await api.get<Array<{
     id: string;
     title?: string;
     status: string;
     template_id?: string | null;
-    data?: Record<string, string>;
-  }>>(companyPath(`/leads/${leadId}/contracts`));
-  return data.map((item) => ({
-    id: item.id,
-    templateName: item.title || "Contrato",
-    status: item.status,
-    value: Number(item.data?.value ?? item.data?.valor ?? 0),
-  }));
+    data?: Record<string, string> | null;
+  }> | null>(companyPath(`/leads/${leadId}/contracts`));
+  const list = Array.isArray(data) ? data : [];
+  return list.map((item) => {
+    const raw = item.data?.valor ?? item.data?.value ?? "0";
+    const value = Number(raw);
+    return {
+      id: item.id,
+      templateName: item.title || "Contrato",
+      status: statusLabel[item.status] ?? item.status,
+      value: Number.isFinite(value) ? value : 0,
+    };
+  });
 }
 
 export type LegalKanbanBoard = {
@@ -304,6 +413,6 @@ export async function fetchLegalKanban(): Promise<LegalKanbanBoard> {
   return { columns: [] };
 }
 
-export async function moveLegalLead(_leadId?: string, _status?: LegalStage) {
+export async function moveLegalLead(): Promise<LegalKanbanBoard> {
   return fetchLegalKanban();
 }

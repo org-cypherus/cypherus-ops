@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { createRequire } from "node:module";
 import { API_REQUEST_TIMEOUT_MS } from "@/lib/api/config";
+import { correlationFromBody, correlationFromHeaders, firstNonEmpty } from "@/lib/api/errors";
 
 export const CRM_ACCESS_COOKIE = "cypher_crm_access";
 export const CRM_REFRESH_COOKIE = "cypher_crm_refresh";
@@ -104,7 +105,7 @@ type GatewayTokenEnvelope = {
   access_token?: string;
 };
 
-export async function getGatewayAccessToken(): Promise<string> {
+export async function getGatewayAccessToken(requestId?: string): Promise<string> {
   const store = await cookies();
   const cached = store.get(GW_ACCESS_COOKIE)?.value;
   if (cached && isFresh(cached)) return cached;
@@ -115,11 +116,17 @@ export async function getGatewayAccessToken(): Promise<string> {
   }
 
   const tokenUrl = `${config.url}/api/auth/token`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  if (requestId) headers["X-Request-ID"] = requestId;
+
   let response: Response;
   try {
     response = await gatewayFetch(tokenUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers,
       body: JSON.stringify({
         client_id: config.clientId,
         client_secret: config.clientSecret,
@@ -127,16 +134,22 @@ export async function getGatewayAccessToken(): Promise<string> {
       }),
     });
   } catch (error) {
-    throw new GatewayRequestError(502, describeGatewayFetchError(error, tokenUrl), null);
+    throw new GatewayRequestError(502, describeGatewayFetchError(error, tokenUrl), null, requestId);
   }
 
   const body = (await response.json().catch(() => ({}))) as GatewayTokenEnvelope;
   const token = body.data?.access_token || body.access_token;
+  const fromHeaders = correlationFromHeaders(response.headers);
+  const fromBody = correlationFromBody(body);
+  const responseRequestId = firstNonEmpty(fromBody.requestId, fromHeaders.requestId, requestId);
+  const responseTraceId = firstNonEmpty(fromBody.traceId, fromHeaders.traceId);
   if (!response.ok || !token) {
     throw new GatewayRequestError(
       response.status || 502,
       "Não foi possível emitir o token do gateway.",
       body,
+      responseRequestId,
+      responseTraceId,
     );
   }
 
@@ -153,6 +166,8 @@ export class GatewayRequestError extends Error {
     public status: number,
     message: string,
     public body: unknown,
+    public requestId?: string,
+    public traceId?: string,
   ) {
     super(message);
   }
@@ -167,20 +182,32 @@ export function describeGatewayFetchError(error: unknown, url: string): string {
   const cause = "cause" in err ? err.cause : undefined;
   const causeCode =
     cause && typeof cause === "object" && "code" in cause ? String((cause as { code?: string }).code) : "";
+  const causeMessage = cause instanceof Error ? cause.message : "";
   let host = url;
   try {
     host = new URL(url).host;
   } catch {
     /* keep raw url */
   }
+  const refused =
+    causeCode === "ECONNREFUSED" ||
+    causeCode === "UND_ERR_SOCKET" ||
+    /ECONNREFUSED|connection refused/i.test(`${err.message} ${causeMessage}`);
+  if (refused) {
+    return `Conexão recusada em ${host}. No Docker, localhost é o container — o gateway do host precisa ser alcançável (network_mode: host, ou GATEWAY_URL apontando para o host).`;
+  }
   if (
     err.name === "TimeoutError" ||
     err.name === "AbortError" ||
     err.message.includes("aborted") ||
     causeCode === "UND_ERR_CONNECT_TIMEOUT" ||
-    err.message === "fetch failed"
+    causeCode === "UND_ERR_HEADERS_TIMEOUT" ||
+    causeCode === "UND_ERR_BODY_TIMEOUT"
   ) {
     return `Timeout ao conectar em ${host} (${API_REQUEST_TIMEOUT_MS / 1000}s). Verifique VPN/firewall e a allowlist de IP do gateway.`;
   }
-  return cause instanceof Error ? `${err.message}: ${cause.message}` : err.message;
+  if (err.message === "fetch failed") {
+    return causeMessage ? `Falha ao conectar em ${host}: ${causeMessage}` : `Falha ao conectar em ${host}.`;
+  }
+  return causeMessage ? `${err.message}: ${causeMessage}` : err.message;
 }

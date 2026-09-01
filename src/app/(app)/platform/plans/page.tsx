@@ -60,7 +60,7 @@ export default function PlatformPlansPage() {
   }
 
   if (plans.isError) {
-    return <ErrorState onRetry={() => plans.refetch()} />;
+    return <ErrorState error={plans.error} onRetry={() => plans.refetch()} />;
   }
 
   return (

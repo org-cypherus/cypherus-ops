@@ -10,11 +10,14 @@ type UIState = {
   notificationsOpen: boolean;
   /** Quando false, valores monetários dos dashboards ficam mascarados. */
   moneyVisible: boolean;
+  /** Painel de métricas de carga na sidebar (default: oculto, só ícone visualizar). */
+  perfMetricsVisible: boolean;
   toggleMode: () => void;
   setSidebarOpen: (open: boolean) => void;
   setSearchOpen: (open: boolean) => void;
   setNotificationsOpen: (open: boolean) => void;
   toggleMoneyVisible: () => void;
+  togglePerfMetricsVisible: () => void;
 };
 
 export const useUIStore = create<UIState>()(
@@ -25,15 +28,23 @@ export const useUIStore = create<UIState>()(
       searchOpen: false,
       notificationsOpen: false,
       moneyVisible: false,
+      perfMetricsVisible: false,
       toggleMode: () => set({ mode: get().mode === "light" ? "dark" : "light" }),
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       setSearchOpen: (searchOpen) => set({ searchOpen }),
       setNotificationsOpen: (notificationsOpen) => set({ notificationsOpen }),
       toggleMoneyVisible: () => set({ moneyVisible: !get().moneyVisible }),
+      togglePerfMetricsVisible: () => set({ perfMetricsVisible: !get().perfMetricsVisible }),
     }),
     {
       name: "cypher-ops-ui",
-      partialize: (state) => ({ mode: state.mode, moneyVisible: state.moneyVisible }),
+      // Evita rehydrate antes do React hidratar (mismatch #418: tema/valores do localStorage).
+      skipHydration: true,
+      partialize: (state) => ({
+        mode: state.mode,
+        moneyVisible: state.moneyVisible,
+        perfMetricsVisible: state.perfMetricsVisible,
+      }),
     },
   ),
 );

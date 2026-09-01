@@ -20,7 +20,7 @@ import {
 } from "@/lib/auth/session";
 import { getQueryClient, PLANS_STALE_TIME_MS } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
-import type { LoginFormValues, SignupFormValues } from "./schemas";
+import type { AcceptInvitationFormValues, LoginFormValues, SignupFormValues } from "./schemas";
 import { onlyDigits } from "@/lib/utils/document";
 
 type CrmUser = {
@@ -83,13 +83,66 @@ async function loadPlansCatalog() {
   });
 }
 
-async function hydrateSession(user: CrmUser, companyId: string, permissions: PermissionAccess[]): Promise<SessionUser> {
+export type HydrateSessionProgress = (partial: SessionUser) => void;
+
+function buildSessionUser(input: {
+  user: CrmUser;
+  companyId: string;
+  permissions: PermissionAccess[];
+  company: CompanyResponse;
+  features: FeatureAccess[];
+  role: SessionUser["role"];
+  subscription: SessionUser["subscription"];
+}): SessionUser {
+  return {
+    id: input.user.id,
+    name: input.user.name,
+    email: input.user.email,
+    role: input.role,
+    permissions: mapApiPermissions(input.permissions),
+    companyId: input.companyId,
+    company: {
+      id: input.company.id,
+      name: input.company.name,
+      status: mapCompanyStatus(input.company.status),
+    },
+    subscription: input.subscription,
+    features: mapApiFeatures(input.features),
+    isPlatformAdmin: isPlatformAdminEmail(input.user.email),
+  };
+}
+
+/**
+ * Onda 1: company + features (gates de rota) → publica parcial.
+ * Onda 2: roles + subscription + plans (enriquecimento) → não precisa bloquear o shell.
+ */
+async function hydrateSession(
+  user: CrmUser,
+  companyId: string,
+  permissions: PermissionAccess[],
+  onPartial?: HydrateSessionProgress,
+): Promise<SessionUser> {
   setCompanyId(companyId);
 
   const [{ data: company }, { data: features }] = await Promise.all([
     api.get<CompanyResponse>(`/v1/companies/${companyId}`),
     api.get<FeatureAccess[]>(`/v1/companies/${companyId}/features`),
   ]);
+
+  const partial = buildSessionUser({
+    user,
+    companyId,
+    permissions,
+    company,
+    features,
+    role: mapRoleCode(undefined, user.is_owner),
+    subscription: {
+      planCode: mapPlanCode(undefined),
+      status: mapSubscriptionStatus(undefined),
+    },
+  });
+  onPartial?.(partial);
+
   const [{ data: roles }, subscriptionRes] = await Promise.all([
     api
       .get<RoleResponse[]>(`/v1/companies/${companyId}/users/${user.id}/roles`)
@@ -100,27 +153,19 @@ async function hydrateSession(user: CrmUser, companyId: string, permissions: Per
 
   const subscription = subscriptionRes?.data;
   const plan = plans.find((item) => item.id === subscription?.plan_id);
-  const role = mapRoleCode(roles[0]?.code, user.is_owner);
 
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role,
-    permissions: mapApiPermissions(permissions),
+  return buildSessionUser({
+    user,
     companyId,
-    company: {
-      id: company.id,
-      name: company.name,
-      status: mapCompanyStatus(company.status),
-    },
+    permissions,
+    company,
+    features,
+    role: mapRoleCode(roles[0]?.code, user.is_owner),
     subscription: {
       planCode: mapPlanCode(plan?.code),
       status: mapSubscriptionStatus(subscription?.status),
     },
-    features: mapApiFeatures(features),
-    isPlatformAdmin: isPlatformAdminEmail(user.email),
-  };
+  });
 }
 
 export async function loginRequest(values: LoginFormValues) {
@@ -133,9 +178,22 @@ export async function loginRequest(values: LoginFormValues) {
   return fetchMe();
 }
 
-export async function fetchMe() {
+export async function acceptInvitationRequest(values: AcceptInvitationFormValues) {
+  const { data } = await api.post<{
+    access_token?: string;
+    user?: CrmUser;
+  }>("/v1/auth/invitations/accept", {
+    token: values.token,
+    password: values.password,
+  });
+  if (isMockMode() && data.access_token) setAccessToken(data.access_token);
+  if (data.user?.company_id) setCompanyId(data.user.company_id);
+  return fetchMe();
+}
+
+export async function fetchMe(onPartial?: HydrateSessionProgress) {
   const { data } = await api.get<MeResponse>("/v1/me");
-  return hydrateSession(data.user, data.company_id, data.permissions);
+  return hydrateSession(data.user, data.company_id, data.permissions, onPartial);
 }
 
 export async function logoutRequest() {

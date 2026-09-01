@@ -50,7 +50,7 @@ export type Payment = {
   leadId?: string;
   amount: number;
   dueDate: string;
-  status: "Recebido" | "Pendente" | "Inadimplente";
+  status: "Recebido" | "Pendente" | "Atrasado";
   paidAt?: string;
 };
 
@@ -59,18 +59,16 @@ export type Commission = {
   userId: string;
   userName: string;
   amount: number;
-  period: string;
-  status: "A pagar" | "Pago";
+  period?: string;
+  status: string;
   paymentId?: string;
 };
 
 export type CommissionRule = {
   id: string;
   plan: string;
-  type: "percentual" | "taxa" | "percentual_meta";
+  type: "percentual" | "taxa";
   value: number;
-  /** Meta mínima acumulada no período. Em percentual_meta, % sobre o total se ≥ meta. */
-  threshold?: number;
   /** Quando true, usada no cálculo automático ao confirmar pagamento */
   active?: boolean;
 };
@@ -87,6 +85,7 @@ export type AppUser = {
   /** Senha mock (padrão: último sobrenome + ano atual) */
   password: string;
   mustChangePassword: boolean;
+  createdAt?: string;
 };
 
 export type MockCompany = CompanySummary & {
@@ -789,7 +788,7 @@ export const mockPayments: Payment[] = [
     leadName: "Carlos Eduardo Silva",
     amount: 18500,
     dueDate: daysAgo(10),
-    status: "Inadimplente",
+    status: "Atrasado",
   },
 ];
 
@@ -800,7 +799,7 @@ export const mockCommissions: Commission[] = [
     userName: "Bruno Lima",
     amount: 2295,
     period: "2026-07",
-    status: "A pagar",
+    status: "Percentual",
     paymentId: "p1",
   },
   {
@@ -809,17 +808,16 @@ export const mockCommissions: Commission[] = [
     userName: "Carla Mendes",
     amount: 4120,
     period: "2026-07",
-    status: "A pagar",
+    status: "Fixa",
   },
 ];
 
 export const mockCommissionRules: CommissionRule[] = [
   {
     id: "r0",
-    plan: "Meta mínima 10k (vigente)",
-    type: "percentual_meta",
+    plan: "Comissão padrão 10%",
+    type: "percentual",
     value: 10,
-    threshold: 10000,
     active: true,
   },
   { id: "r1", plan: "Plano A", type: "percentual", value: 15, active: false },

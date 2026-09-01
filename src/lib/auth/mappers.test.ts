@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapApiFeatures, mapApiPermissions, mapRoleCode } from "./mappers";
+import { mapApiFeatures, mapApiPermissions, mapRoleCode, roleCodeFromUi } from "./mappers";
 import { Role } from "./permissions";
 
 describe("mapApiPermissions", () => {
@@ -11,6 +11,17 @@ describe("mapApiPermissions", () => {
         { permission: "contracts.view", granted: true },
       ]),
     ).toEqual(["crm:visualizar", "contratos:visualizar"]);
+  });
+
+  it("maps users CRUD keys independently", () => {
+    expect(
+      mapApiPermissions([
+        { permission: "users.view", granted: true },
+        { permission: "users.invite", granted: true },
+        { permission: "users.update", granted: true },
+        { permission: "users.deactivate", granted: false },
+      ]),
+    ).toEqual(["usuarios:visualizar", "usuarios:criar", "usuarios:editar"]);
   });
 });
 
@@ -30,6 +41,21 @@ describe("mapRoleCode", () => {
   it("maps owner and API codes", () => {
     expect(mapRoleCode("SALES")).toBe(Role.Comercial);
     expect(mapRoleCode("FINANCE")).toBe(Role.Financeiro);
-    expect(mapRoleCode("MANAGER", true)).toBe(Role.Administrador);
+    expect(mapRoleCode("LEGAL")).toBe(Role.Jurídico);
+    expect(mapRoleCode("JURIDICO")).toBe(Role.Jurídico);
+    expect(mapRoleCode("Jurídico")).toBe(Role.Jurídico);
+    expect(mapRoleCode("MANAGER", true)).toBe(Role.Gestor);
+    expect(mapRoleCode(undefined, true)).toBe(Role.Administrador);
+    expect(mapRoleCode(undefined)).toBe(Role.Comercial);
+  });
+});
+
+describe("roleCodeFromUi", () => {
+  it("writes the CRM code stored for each cargo", () => {
+    expect(roleCodeFromUi(Role.Administrador)).toBe("ADMIN");
+    expect(roleCodeFromUi(Role.Gestor)).toBe("MANAGER");
+    expect(roleCodeFromUi(Role.Comercial)).toBe("SALES");
+    expect(roleCodeFromUi(Role.Financeiro)).toBe("FINANCE");
+    expect(roleCodeFromUi(Role.Jurídico)).toBe("LEGAL");
   });
 });

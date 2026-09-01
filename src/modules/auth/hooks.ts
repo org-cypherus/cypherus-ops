@@ -6,21 +6,34 @@ import { homePathForSession } from "@/lib/auth/access";
 import type { Permission } from "@/lib/auth/permissions";
 import { canAccess, getFeatureLimit, hasFeature } from "@/lib/billing/access";
 import type { FeatureKey } from "@/lib/billing/types";
-import { hasSession } from "@/lib/auth/session";
-import { SESSION_STALE_TIME_MS } from "@/lib/query/client";
+import {
+  getCachedSessionUser,
+  hasSession,
+  setCachedSessionUser,
+} from "@/lib/auth/session";
+import { SESSION_STALE_TIME_MS, getQueryClient } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
-import { fetchMe, loginRequest, logoutRequest } from "./services";
-import type { LoginFormValues } from "./schemas";
+import { acceptInvitationRequest, fetchMe, loginRequest, logoutRequest } from "./services";
+import type { AcceptInvitationFormValues, LoginFormValues } from "./schemas";
 
 export { homePathForRole, homePathForSession } from "@/lib/auth/access";
 
 export function useSession() {
   return useQuery({
     queryKey: queryKeys.me,
-    queryFn: fetchMe,
+    queryFn: async () => {
+      const user = await fetchMe((partial) => {
+        setCachedSessionUser(partial);
+        getQueryClient().setQueryData(queryKeys.me, partial);
+      });
+      setCachedSessionUser(user);
+      return user;
+    },
     enabled: typeof window !== "undefined" && hasSession(),
     staleTime: SESSION_STALE_TIME_MS,
     retry: false,
+    // Snapshot: shell/gates na hora no F5; hydrate refetch em background.
+    placeholderData: () => getCachedSessionUser(),
   });
 }
 
@@ -57,6 +70,20 @@ export function useLogin() {
   return useMutation({
     mutationFn: (values: LoginFormValues) => loginRequest(values),
     onSuccess: (user) => {
+      setCachedSessionUser(user);
+      queryClient.setQueryData(queryKeys.me, user);
+      router.replace(homePathForSession(user));
+    },
+  });
+}
+
+export function useAcceptInvitation() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (values: AcceptInvitationFormValues) => acceptInvitationRequest(values),
+    onSuccess: (user) => {
+      setCachedSessionUser(user);
       queryClient.setQueryData(queryKeys.me, user);
       router.replace(homePathForSession(user));
     },

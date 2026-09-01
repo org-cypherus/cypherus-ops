@@ -3,6 +3,7 @@
 import {
   Box,
   Button,
+  CircularProgress,
   Drawer,
   List,
   ListItemButton,
@@ -34,7 +35,7 @@ export function NotificationsDrawer() {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: queryKeys.notifications,
     queryFn: async () => {
       const { data } = await api.get<{ data: NotificationItem[] }>("/notifications");
@@ -61,6 +62,15 @@ export function NotificationsDrawer() {
             Marcar todas
           </Button>
         </Stack>
+        {isLoading ? (
+          <Box display="flex" justifyContent="center" py={4}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : !(data || []).length ? (
+          <Typography variant="body2" color="text.secondary">
+            Nenhuma notificação.
+          </Typography>
+        ) : (
         <List>
           {(data || []).map((item) => (
             <ListItemButton
@@ -86,6 +96,7 @@ export function NotificationsDrawer() {
             </ListItemButton>
           ))}
         </List>
+        )}
       </Box>
     </Drawer>
   );

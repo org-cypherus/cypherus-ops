@@ -65,4 +65,26 @@ describe("filterKanbanBoard", () => {
     expect(filtered.columns[0].count).toBe(1);
     expect(filtered.columns[0].potentialValue).toBe(10);
   });
+
+  it("keeps CRM column totals when no client filters are active", () => {
+    const withTotals: KanbanBoard = {
+      columns: [
+        {
+          ...board.columns[0],
+          count: 99,
+          potentialValue: 999,
+          hasMore: true,
+        },
+      ],
+    };
+    const filtered = filterKanbanBoard(withTotals, { q: "", ownerId: undefined });
+    expect(filtered.columns[0].count).toBe(99);
+    expect(filtered.columns[0].potentialValue).toBe(999);
+    expect(filtered.columns[0].hasMore).toBe(true);
+  });
+
+  it("filters by calendar day of createdAt", () => {
+    const filtered = filterKanbanBoard(board, { from: "2026-02-01", to: "2026-02-01" });
+    expect(filtered.columns[0].leads.map((lead) => lead.id)).toEqual(["2"]);
+  });
 });

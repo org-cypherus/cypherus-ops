@@ -11,13 +11,12 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material";
-import { useLogout, useSession } from "@/modules/auth/hooks";
+import { useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
 import { DRAWER_WIDTH, TOPBAR_HEIGHT } from "./Sidebar";
 
 export function Topbar() {
   const { data: user } = useSession();
-  const logout = useLogout();
   const mode = useUIStore((s) => s.mode);
   const toggleMode = useUIStore((s) => s.toggleMode);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
@@ -38,7 +37,7 @@ export function Topbar() {
     >
       <Toolbar
         sx={{
-          gap: { xs: 1, sm: 2 },
+          gap: { xs: 1, sm: 1.5 },
           minHeight: `${TOPBAR_HEIGHT}px !important`,
           height: TOPBAR_HEIGHT,
           px: { xs: 1.5, lg: 3 },
@@ -58,22 +57,21 @@ export function Topbar() {
         <IconButton onClick={toggleMode} aria-label="Alternar tema">
           {mode === "light" ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
         </IconButton>
-        <Box
-          display="flex"
-          alignItems="center"
-          gap={1.25}
-          sx={{ cursor: "pointer" }}
-          onClick={() => logout.mutate()}
-          title="Sair"
-        >
-          <Avatar sx={{ width: 36, height: 36, bgcolor: "primary.main" }}>
+
+        <Box display="flex" alignItems="center" gap={1} minWidth={0}>
+          <Avatar sx={{ width: 36, height: 36, bgcolor: "primary.main", flexShrink: 0 }}>
             {user?.name?.charAt(0) || "U"}
           </Avatar>
-          <Box display={{ xs: "none", md: "block" }}>
-            <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+          <Box minWidth={0} display={{ xs: "none", sm: "block" }}>
+            <Typography
+              variant="body2"
+              noWrap
+              sx={{ fontWeight: 600, lineHeight: 1.2, maxWidth: 160 }}
+              title={user?.name || "Usuário"}
+            >
               {user?.name || "Usuário"}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" noWrap display="block">
               {user?.isPlatformAdmin ? "Plataforma" : user?.role || "—"}
             </Typography>
           </Box>

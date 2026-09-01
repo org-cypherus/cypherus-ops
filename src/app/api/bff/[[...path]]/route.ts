@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isGatewayUpstreamTimeout, parseApiError } from "@/lib/api/errors";
+import {
+  correlationFromBody,
+  correlationFromHeaders,
+  firstNonEmpty,
+  isGatewayUpstreamTimeout,
+  parseApiError,
+} from "@/lib/api/errors";
 import { GATEWAY_UPSTREAM_RETRY_DELAY_MS } from "@/lib/api/config";
 import {
   clearAuthCookies,
@@ -13,6 +19,7 @@ import {
   readCrmTokens,
   setAuthCookies,
 } from "@/lib/server/gateway";
+import { isNullBodyStatus } from "@/lib/server/null-body-status";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +41,16 @@ const TOKEN_RESPONSE_PATHS = new Set([
   "v1/auth/refresh",
   "v1/auth/invitations/accept",
 ]);
+
+const TRACE_PASS_HEADERS = [
+  "content-type",
+  "content-disposition",
+  "x-request-id",
+  "x-trace-id",
+  "x-correlation-id",
+  "traceparent",
+  "tracestate",
+];
 
 function joinPath(parts: string[] | undefined) {
   return (parts ?? []).join("/");
@@ -71,30 +88,64 @@ function decodeErrorBody(buffer: ArrayBuffer): unknown {
   }
 }
 
-async function proxy(request: NextRequest, path: string) {
+function bffError(
+  status: number,
+  code: string,
+  message: string,
+  ids: { requestId: string; traceId?: string },
+  details?: unknown,
+) {
+  const headers = new Headers();
+  headers.set("x-request-id", ids.requestId);
+  if (ids.traceId) headers.set("x-trace-id", ids.traceId);
+  return NextResponse.json(
+    {
+      error: { code, message, details: details ?? undefined },
+      request_id: ids.requestId,
+      trace_id: ids.traceId,
+    },
+    { status, headers },
+  );
+}
+
+function idsFromUpstream(upstream: Response, fallbackRequestId: string, body?: unknown) {
+  const fromHeaders = correlationFromHeaders(upstream.headers);
+  const fromBody = correlationFromBody(body);
+  return {
+    requestId: firstNonEmpty(fromBody.requestId, fromHeaders.requestId, fallbackRequestId) ?? fallbackRequestId,
+    traceId: firstNonEmpty(fromBody.traceId, fromHeaders.traceId),
+  };
+}
+
+function copyUpstreamHeaders(upstream: Headers, fallbackRequestId: string) {
+  const responseHeaders = new Headers();
+  for (const name of TRACE_PASS_HEADERS) {
+    const value = upstream.get(name);
+    if (value) responseHeaders.set(name, value);
+  }
+  if (!responseHeaders.has("x-request-id")) responseHeaders.set("x-request-id", fallbackRequestId);
+  return responseHeaders;
+}
+
+async function proxy(request: NextRequest, path: string, requestId: string) {
   const config = gatewayConfig();
   if (!config.url) {
-    return NextResponse.json(
-      { error: { code: "GATEWAY_NOT_CONFIGURED", message: "GATEWAY_URL não configurado." } },
-      { status: 503 },
-    );
+    return bffError(503, "GATEWAY_NOT_CONFIGURED", "GATEWAY_URL não configurado.", { requestId });
   }
 
   let gatewayToken: string;
   try {
-    gatewayToken = await getGatewayAccessToken();
+    gatewayToken = await getGatewayAccessToken(requestId);
   } catch (error) {
     if (error instanceof GatewayConfigError) {
-      return NextResponse.json(
-        { error: { code: "GATEWAY_NOT_CONFIGURED", message: error.message } },
-        { status: 503 },
-      );
+      return bffError(503, "GATEWAY_NOT_CONFIGURED", error.message, { requestId });
     }
     if (error instanceof GatewayRequestError) {
-      return NextResponse.json(
-        { error: { code: "GATEWAY_TOKEN_FAILED", message: error.message } },
-        { status: error.status },
-      );
+      const ids = {
+        requestId: error.requestId || requestId,
+        traceId: error.traceId,
+      };
+      return bffError(error.status, "GATEWAY_TOKEN_FAILED", error.message, ids, error.body);
     }
     throw error;
   }
@@ -102,7 +153,6 @@ async function proxy(request: NextRequest, path: string) {
   const crm = await readCrmTokens();
   const search = request.nextUrl.search;
   const upstreamUrl = `${config.url}/api/${path}${search}`;
-  const requestId = request.headers.get("x-request-id") || newRequestId();
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${gatewayToken}`);
   headers.set("Accept", request.headers.get("accept") || "application/json");
@@ -129,10 +179,7 @@ async function proxy(request: NextRequest, path: string) {
         }
       }
       if (!refresh) {
-        return NextResponse.json(
-          { error: { code: "AUTHENTICATION_FAILED", message: "Refresh token ausente." } },
-          { status: 401 },
-        );
+        return bffError(401, "AUTHENTICATION_FAILED", "Refresh token ausente.", { requestId });
       }
       headers.set("Content-Type", "application/json");
       body = JSON.stringify({ refresh_token: refresh });
@@ -163,13 +210,19 @@ async function proxy(request: NextRequest, path: string) {
       redirect: "manual",
     });
   } catch (error) {
-    throw new GatewayRequestError(502, describeGatewayFetchError(error, upstreamUrl), null);
+    throw new GatewayRequestError(
+      502,
+      describeGatewayFetchError(error, upstreamUrl),
+      null,
+      requestId,
+    );
   }
 
   if (!upstream.ok && shouldRetryAfterGatewayTimeout(request.method, path)) {
     const timeoutBody = decodeErrorBody(await upstream.clone().arrayBuffer());
     if (isGatewayUpstreamTimeout(parseApiError(upstream.status, timeoutBody))) {
-      await sleep(GATEWAY_UPSTREAM_RETRY_DELAY_MS);
+      const delayMs = GATEWAY_UPSTREAM_RETRY_DELAY_MS;
+      await sleep(delayMs);
       try {
         upstream = await gatewayFetch(upstreamUrl, {
           method: request.method,
@@ -178,7 +231,12 @@ async function proxy(request: NextRequest, path: string) {
           redirect: "manual",
         });
       } catch (error) {
-        throw new GatewayRequestError(502, describeGatewayFetchError(error, upstreamUrl), null);
+        throw new GatewayRequestError(
+          502,
+          describeGatewayFetchError(error, upstreamUrl),
+          null,
+          requestId,
+        );
       }
     }
   }
@@ -188,13 +246,7 @@ async function proxy(request: NextRequest, path: string) {
     return new NextResponse(null, { status: upstream.status === 204 ? 204 : upstream.status });
   }
 
-  const responseHeaders = new Headers();
-  const passHeaders = ["content-type", "content-disposition", "x-request-id"];
-  for (const name of passHeaders) {
-    const value = upstream.headers.get(name);
-    if (value) responseHeaders.set(name, value);
-  }
-  if (!responseHeaders.has("x-request-id")) responseHeaders.set("x-request-id", requestId);
+  const responseHeaders = copyUpstreamHeaders(upstream.headers, requestId);
 
   if (TOKEN_RESPONSE_PATHS.has(path) && upstream.ok) {
     const payload = (await upstream.json()) as {
@@ -218,33 +270,43 @@ async function proxy(request: NextRequest, path: string) {
   }
 
   const buffer = await upstream.arrayBuffer();
+  if (!upstream.ok) {
+    const parsedBody = decodeErrorBody(buffer);
+    const ids = idsFromUpstream(upstream, requestId, parsedBody);
+    if (ids.traceId && !responseHeaders.has("x-trace-id")) {
+      responseHeaders.set("x-trace-id", ids.traceId);
+    }
+  }
+  // Fetch/NextResponse forbid any body on 204/205/304 — even an empty ArrayBuffer throws
+  // TypeError, which the catch below turns into 502 while the CRM already applied the write
+  // (e.g. DELETE attachment → CRM 204, UI “falha ao excluir”).
+  if (isNullBodyStatus(upstream.status)) {
+    responseHeaders.delete("content-type");
+    return new NextResponse(null, { status: upstream.status, headers: responseHeaders });
+  }
   return new NextResponse(buffer, { status: upstream.status, headers: responseHeaders });
 }
 
 async function handle(request: NextRequest, context: { params: Promise<{ path?: string[] }> }) {
   const { path } = await context.params;
   const joined = joinPath(path);
+  const requestId = request.headers.get("x-request-id") || newRequestId();
   if (!joined) {
-    return NextResponse.json(
-      { error: { code: "NOT_FOUND", message: "Rota BFF inválida." } },
-      { status: 404 },
-    );
+    return bffError(404, "NOT_FOUND", "Rota BFF inválida.", { requestId });
   }
   try {
-    return await proxy(request, joined);
+    return await proxy(request, joined, requestId);
   } catch (error) {
     if (error instanceof GatewayRequestError) {
-      return NextResponse.json(
-        { error: { code: "BFF_PROXY_ERROR", message: error.message } },
-        { status: error.status },
-      );
+      const ids = {
+        requestId: error.requestId || requestId,
+        traceId: error.traceId,
+      };
+      return bffError(error.status, "BFF_PROXY_ERROR", error.message, ids, error.body);
     }
     const config = gatewayConfig();
     const message = describeGatewayFetchError(error, config.url || "GATEWAY_URL");
-    return NextResponse.json(
-      { error: { code: "BFF_PROXY_ERROR", message } },
-      { status: 502 },
-    );
+    return bffError(502, "BFF_PROXY_ERROR", message, { requestId });
   }
 }
 

@@ -1,5 +1,5 @@
 import type { CompanyStatus, FeatureKey, PlanCode, ResolvedFeatures, SubscriptionStatus } from "@/lib/billing/types";
-import { Role, type Permission, type RoleName } from "./permissions";
+import { Role, ROLE_NAMES, type Permission, type RoleName } from "./permissions";
 
 export const API_TO_UI_PERMISSION: Record<string, Permission> = {
   "leads.view": "crm:visualizar",
@@ -18,10 +18,11 @@ export const API_TO_UI_PERMISSION: Record<string, Permission> = {
   "commissions.manage": "financeiro:editar",
   "dashboard.view": "dashboard:visualizar",
   "dashboard.advanced.view": "dashboard:visualizar",
-  "users.view": "admin:visualizar",
-  "users.invite": "admin:editar",
-  "users.update": "admin:editar",
-  "users.deactivate": "admin:editar",
+  "users.view": "usuarios:visualizar",
+  "users.invite": "usuarios:criar",
+  "users.update": "usuarios:editar",
+  "users.deactivate": "usuarios:excluir",
+  "roles.view": "admin:visualizar",
   "roles.create": "admin:editar",
   "roles.update": "admin:editar",
   "permissions.override": "admin:editar",
@@ -41,8 +42,12 @@ export const UI_TO_API_PERMISSION: Partial<Record<Permission, string>> = {
   "financeiro:visualizar": "invoices.view",
   "financeiro:editar": "payments.register",
   "dashboard:visualizar": "dashboard.view",
-  "admin:visualizar": "users.view",
-  "admin:editar": "users.invite",
+  "usuarios:visualizar": "users.view",
+  "usuarios:criar": "users.invite",
+  "usuarios:editar": "users.update",
+  "usuarios:excluir": "users.deactivate",
+  "admin:visualizar": "roles.view",
+  "admin:editar": "permissions.override",
 };
 
 const FEATURE_ALIAS: Record<string, FeatureKey> = {
@@ -54,10 +59,33 @@ const FEATURE_ALIAS: Record<string, FeatureKey> = {
 const ROLE_CODE_MAP: Record<string, RoleName> = {
   OWNER: Role.Administrador,
   ADMIN: Role.Administrador,
+  ADMINISTRATOR: Role.Administrador,
+  ADMINISTRADOR: Role.Administrador,
   MANAGER: Role.Gestor,
+  GESTOR: Role.Gestor,
   SALES: Role.Comercial,
+  COMERCIAL: Role.Comercial,
   FINANCE: Role.Financeiro,
+  FINANCEIRO: Role.Financeiro,
+  LEGAL: Role.Jurídico,
+  JURIDICO: Role.Jurídico,
 };
+
+function normalizeRoleToken(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+/** Resolve code/nome gravado no CRM para o cargo da UI. Sem match → undefined. */
+export function resolveRoleName(codeOrName?: string | null): RoleName | undefined {
+  if (!codeOrName?.trim()) return undefined;
+  const token = normalizeRoleToken(codeOrName);
+  return ROLE_CODE_MAP[token] ?? ROLE_NAMES.find((name) => normalizeRoleToken(name) === token);
+}
 
 export type PermissionAccess = {
   permission: string;
@@ -96,9 +124,7 @@ export function mapApiFeatures(items: FeatureAccess[] | undefined): ResolvedFeat
 }
 
 export function mapRoleCode(code: string | undefined, isOwner = false): RoleName {
-  if (isOwner) return Role.Administrador;
-  if (!code) return Role.Comercial;
-  return ROLE_CODE_MAP[code.toUpperCase()] ?? Role.Comercial;
+  return resolveRoleName(code) ?? (isOwner ? Role.Administrador : Role.Comercial);
 }
 
 export function mapPlanCode(code: string | undefined): PlanCode {
@@ -135,6 +161,8 @@ export function roleCodeFromUi(role: RoleName): string {
       return "MANAGER";
     case Role.Financeiro:
       return "FINANCE";
+    case Role.Jurídico:
+      return "LEGAL";
     default:
       return "SALES";
   }

@@ -1,18 +1,24 @@
-import { api, type Paginated } from "@/lib/api/client";
+import { api, getApiError, type Paginated } from "@/lib/api/client";
 import { companyPath } from "@/lib/auth/session";
+import { downloadApiFile, fetchApiBlob } from "@/lib/utils/download";
+import { fetchLeadNameMap } from "@/modules/leads/services";
 
 export type Contract = {
   id: string;
   leadId: string;
   leadName: string;
+  title: string;
   templateId: string;
   templateName: string;
   status: "Rascunho" | "Enviado" | "Assinado" | "Arquivado";
   value: number;
   createdAt: string;
+  updatedAt?: string;
   signedAt?: string;
+  archivedAt?: string;
   pdfId?: string;
   signedPdfId?: string;
+  currentVersion: number;
 };
 
 export type ContractTemplate = {
@@ -23,25 +29,22 @@ export type ContractTemplate = {
   body: string;
 };
 
-export type StoredFile = {
+/** Espelha ContractResponse do saas-crm (contrato-api-frontend.md). */
+export type CrmContract = {
   id: string;
-  name: string;
-  mime: string;
-  dataUrl: string;
-};
-
-type CrmContract = {
-  id: string;
+  company_id?: string;
   lead_id: string;
   template_id?: string | null;
   title: string;
   status: string;
-  data?: Record<string, string>;
+  data?: Record<string, string> | null;
   current_version?: number;
   signed_attachment_id?: string | null;
   created_at: string;
+  updated_at?: string | null;
   signed_at?: string | null;
-  versions?: Array<{ version: number; attachment_id: string }>;
+  archived_at?: string | null;
+  versions?: Array<{ version: number; attachment_id: string; created_at?: string }>;
 };
 
 type CrmTemplate = {
@@ -66,57 +69,161 @@ const UI_TO_STATUS: Record<string, string> = {
   Arquivado: "ARCHIVED",
 };
 
-function toUiContract(item: CrmContract, leadName?: string, templateName?: string): Contract {
-  const latest = item.versions?.[item.versions.length - 1];
+/** YYYY-MM-DD — filtros de data sem deslocar timezone do ISO. */
+export function dayKey(value?: string) {
+  return value?.slice(0, 10) || "";
+}
+
+/** CRM interpola `{{valor}}`; aceita também `value` legado na UI. */
+export function contractDataValue(data?: Record<string, string> | null) {
+  if (!data) return 0;
+  for (const key of ["valor", "value"] as const) {
+    const raw = data[key];
+    if (raw == null || raw === "") continue;
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
+}
+
+function versionAttachment(item: CrmContract) {
+  const version = item.current_version ?? 0;
+  if (version < 1) return undefined;
+  const match = item.versions?.find((row) => row.version === version);
+  return match?.attachment_id ?? item.versions?.at(-1)?.attachment_id;
+}
+
+/** Placeholders do CRM vêm sem `{{}}`; a UI edita com chaves. */
+export function toUiPlaceholders(keys: string[] | undefined) {
+  return (keys ?? []).map((key) => {
+    const bare = key.replace(/^\{\{\s*|\s*\}\}$/g, "");
+    return bare ? `{{${bare}}}` : key;
+  });
+}
+
+export function mapContract(
+  item: CrmContract,
+  extras?: { leadName?: string; templateName?: string },
+): Contract {
   return {
     id: item.id,
     leadId: item.lead_id,
-    leadName: leadName || "",
+    leadName: extras?.leadName || "",
+    title: item.title,
     templateId: item.template_id || "",
-    templateName: templateName || item.title,
+    templateName: extras?.templateName || item.title,
     status: STATUS_TO_UI[item.status] ?? "Rascunho",
-    value: Number(item.data?.value ?? item.data?.valor ?? 0),
+    value: contractDataValue(item.data),
     createdAt: item.created_at,
+    updatedAt: item.updated_at ?? undefined,
     signedAt: item.signed_at ?? undefined,
-    pdfId: latest?.attachment_id,
+    archivedAt: item.archived_at ?? undefined,
+    pdfId: versionAttachment(item),
     signedPdfId: item.signed_attachment_id ?? undefined,
+    currentVersion: item.current_version ?? 0,
   };
 }
 
-import { fetchLeadNameMap } from "@/modules/leads/services";
+export function filterContracts(
+  contracts: Contract[],
+  filters: { lead: string; status: string; template: string; from: string; to: string },
+) {
+  const leadQ = filters.lead.trim().toLowerCase();
+  const templateQ = filters.template.trim().toLowerCase();
+  return contracts.filter((contract) => {
+    if (
+      leadQ &&
+      !`${contract.leadName} ${contract.title}`.toLowerCase().includes(leadQ)
+    ) {
+      return false;
+    }
+    if (filters.status && contract.status !== filters.status) return false;
+    if (
+      templateQ &&
+      !`${contract.templateName} ${contract.title}`.toLowerCase().includes(templateQ)
+    ) {
+      return false;
+    }
+    const created = dayKey(contract.createdAt);
+    if (filters.from && created && created < filters.from) return false;
+    if (filters.to && created && created > filters.to) return false;
+    return true;
+  });
+}
+
+function emptyPage(): Paginated<Contract> {
+  return { data: [], total: 0, page: 1, pageSize: 0 };
+}
 
 async function leadNameMap() {
   return fetchLeadNameMap().catch(() => ({} as Record<string, string>));
 }
 
+async function templateNameMap(): Promise<Record<string, string>> {
+  try {
+    const templates = await fetchTemplates();
+    return Object.fromEntries(templates.map((item) => [item.id, item.name]));
+  } catch {
+    return {};
+  }
+}
+
+function contractDataPayload(value: number) {
+  const asText = String(value);
+  // `valor` é o placeholder do CRM; `value` mantém leitura legado.
+  return { valor: asText, value: asText };
+}
+
 export async function fetchContracts(params?: { leadId?: string }) {
-  const path = params?.leadId
-    ? companyPath(`/leads/${params.leadId}/contracts`)
-    : companyPath("/contracts");
-  const { data } = await api.get<CrmContract[]>(path);
-  const names = await leadNameMap();
-  const mapped = data.map((item) => toUiContract(item, names[item.lead_id], item.title));
-  return {
-    data: mapped,
-    total: mapped.length,
-    page: 1,
-    pageSize: mapped.length,
-  } satisfies Paginated<Contract>;
+  try {
+    const path = params?.leadId
+      ? companyPath(`/leads/${params.leadId}/contracts`)
+      : companyPath("/contracts");
+    const [{ data }, names, templates] = await Promise.all([
+      api.get<CrmContract[] | null>(path),
+      leadNameMap(),
+      templateNameMap(),
+    ]);
+    const list = Array.isArray(data) ? data : [];
+    const mapped = list.map((item) =>
+      mapContract(item, {
+        leadName: names[item.lead_id],
+        templateName: item.template_id ? templates[item.template_id] : undefined,
+      }),
+    );
+    return {
+      data: mapped,
+      total: mapped.length,
+      page: 1,
+      pageSize: mapped.length,
+    } satisfies Paginated<Contract>;
+  } catch (error) {
+    const status = getApiError(error).status;
+    if (status === 404 || status === 204) return emptyPage();
+    throw error;
+  }
 }
 
 export async function fetchContract(id: string) {
-  const { data } = await api.get<CrmContract>(companyPath(`/contracts/${id}`));
-  const names = await leadNameMap();
-  return toUiContract(data, names[data.lead_id], data.title);
+  const [{ data }, names, templates] = await Promise.all([
+    api.get<CrmContract>(companyPath(`/contracts/${id}`)),
+    leadNameMap(),
+    templateNameMap(),
+  ]);
+  return mapContract(data, {
+    leadName: names[data.lead_id],
+    templateName: data.template_id ? templates[data.template_id] : undefined,
+  });
 }
 
 export async function fetchTemplates() {
-  const { data } = await api.get<CrmTemplate[]>(companyPath("/contract-templates"));
-  return data.map((item) => ({
+  const { data } = await api.get<CrmTemplate[] | null>(companyPath("/contract-templates"));
+  const list = Array.isArray(data) ? data : [];
+  return list.map((item) => ({
     id: item.id,
     name: item.name,
     description: "",
-    placeholders: item.placeholders ?? [],
+    placeholders: toUiPlaceholders(item.placeholders),
     body: item.body,
   }));
 }
@@ -131,7 +238,7 @@ export async function createTemplate(payload: Omit<ContractTemplate, "id">) {
     id: data.id,
     name: data.name,
     description: payload.description,
-    placeholders: data.placeholders ?? [],
+    placeholders: toUiPlaceholders(data.placeholders),
     body: data.body,
   };
 }
@@ -145,7 +252,7 @@ export async function updateTemplate(id: string, payload: Partial<ContractTempla
     id: data.id,
     name: data.name,
     description: payload.description || "",
-    placeholders: data.placeholders ?? [],
+    placeholders: toUiPlaceholders(data.placeholders),
     body: data.body,
   };
 }
@@ -159,65 +266,73 @@ export async function createContract(payload: {
   leadId: string;
   templateId: string;
   value: number;
+  title?: string;
 }) {
+  const templates = await templateNameMap();
+  const templateName = templates[payload.templateId] || "Contrato";
   const { data } = await api.post<CrmContract>(companyPath(`/leads/${payload.leadId}/contracts`), {
     template_id: payload.templateId,
-    title: "Contrato",
-    data: { value: String(payload.value) },
+    title: payload.title?.trim() || templateName,
+    data: contractDataPayload(payload.value),
   });
-  return toUiContract(data, undefined, "Contrato");
+  return mapContract(data, { templateName });
 }
 
 export async function generateContractPdf(id: string) {
   const { data } = await api.post<CrmContract>(companyPath(`/contracts/${id}/generate`));
-  return toUiContract(data);
+  return mapContract(data);
 }
 
-export async function fetchFile(id: string) {
-  const response = await api.get<ArrayBuffer>(companyPath(`/attachments/${id}/content`), {
-    responseType: "arraybuffer",
-  });
-  const blob = new Blob([response.data]);
-  const dataUrl = await new Promise<string>((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.readAsDataURL(blob);
-  });
-  return {
-    id,
-    name: "arquivo",
-    mime: String(response.headers["content-type"] || "application/pdf"),
-    dataUrl,
-  } satisfies StoredFile;
-}
-
-export async function signContract(
-  id: string,
-  payload?: { signedDataUrl?: string; fileName?: string; file?: File },
-) {
-  const form = new FormData();
-  if (payload?.file) {
-    form.append("file", payload.file);
-  } else if (payload?.signedDataUrl) {
-    const blob = await (await fetch(payload.signedDataUrl)).blob();
-    form.append("file", blob, payload.fileName || "assinado.pdf");
-  } else {
-    throw new Error("Envie o PDF assinado para concluir a assinatura.");
+export async function downloadContractVersion(id: string, version: number, fallbackName?: string) {
+  if (!version || version < 1) {
+    throw new Error("Este contrato ainda não tem PDF gerado.");
   }
+  return downloadApiFile(
+    companyPath(`/contracts/${id}/versions/${version}/content`),
+    fallbackName ?? `contrato-v${version}.pdf`,
+  );
+}
+
+export async function fetchContractVersionBlob(id: string, version: number) {
+  if (!version || version < 1) {
+    throw new Error("Este contrato ainda não tem PDF gerado.");
+  }
+  return fetchApiBlob(companyPath(`/contracts/${id}/versions/${version}/content`));
+}
+
+export async function downloadSignedContract(id: string, fallbackName = "contrato-assinado.pdf") {
+  return downloadApiFile(companyPath(`/contracts/${id}/signed/content`), fallbackName);
+}
+
+export async function fetchSignedContractBlob(id: string) {
+  return fetchApiBlob(companyPath(`/contracts/${id}/signed/content`));
+}
+
+export async function signContract(id: string, file: Blob, fileName = "contrato-assinado.pdf") {
+  const form = new FormData();
+  form.append("file", file instanceof File ? file : new File([file], fileName, { type: file.type || "application/pdf" }));
   const { data } = await api.post<CrmContract>(companyPath(`/contracts/${id}/sign`), form);
-  return toUiContract(data);
+  return mapContract(data);
+}
+
+export async function signContractWithGeneratedVersion(id: string, version: number) {
+  const blob = await fetchContractVersionBlob(id, version);
+  return signContract(id, blob, `contrato-v${version}.pdf`);
 }
 
 export async function updateContract(id: string, payload: Partial<Contract>) {
   if (payload.status === "Arquivado") {
     const { data } = await api.post<CrmContract>(companyPath(`/contracts/${id}/archive`));
-    return toUiContract(data);
+    return mapContract(data);
+  }
+  if (payload.status === "Enviado") {
+    return generateContractPdf(id);
   }
   const { data } = await api.patch<CrmContract>(companyPath(`/contracts/${id}`), {
-    title: payload.templateName,
-    data: payload.value != null ? { value: String(payload.value) } : undefined,
+    title: payload.title ?? payload.templateName,
+    data: payload.value != null ? contractDataPayload(payload.value) : undefined,
   });
-  return toUiContract(data);
+  return mapContract(data);
 }
 
-export { UI_TO_STATUS };
+export { UI_TO_STATUS, STATUS_TO_UI };
