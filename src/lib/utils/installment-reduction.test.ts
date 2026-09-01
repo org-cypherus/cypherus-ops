@@ -1,53 +1,62 @@
 import { describe, expect, it } from "vitest";
-import { calculateInstallmentReduction } from "./installment-reduction";
+import {
+  calculateInstallmentReduction,
+  clampReductionPercent,
+} from "./installment-reduction";
+
+describe("clampReductionPercent", () => {
+  it("keeps values inside 0–100", () => {
+    expect(clampReductionPercent(-10)).toBe(0);
+    expect(clampReductionPercent(30)).toBe(30);
+    expect(clampReductionPercent(140)).toBe(100);
+  });
+});
 
 describe("calculateInstallmentReduction", () => {
-  it("computes monthly, total and percent savings", () => {
+  it("derives the new installment and payoff from the operator percent", () => {
     expect(
       calculateInstallmentReduction({
-        currentInstallment: 1000,
-        remainingInstallments: 12,
-        newInstallment: 800,
+        currentInstallment: 1175,
+        remainingInstallments: 36,
+        reductionPercent: 30,
       }),
     ).toEqual({
-      monthlySavings: 200,
-      totalSavings: 2400,
-      reductionPercent: 20,
+      reductionPercent: 30,
+      newInstallment: 822.5,
+      monthlySavings: 352.5,
+      totalSavings: 12690,
+      originalRemaining: 42300,
+      estimatedSettlement: 29610,
+      estimatedRestitution: 0,
       hasSavings: true,
       status: "ok",
     });
   });
 
-  it("does not return negative savings when the new installment is not lower", () => {
+  it("treats 0% as no savings without negative numbers", () => {
     expect(
       calculateInstallmentReduction({
         currentInstallment: 900,
         remainingInstallments: 10,
-        newInstallment: 900,
+        reductionPercent: 0,
       }),
-    ).toEqual({
+    ).toMatchObject({
+      newInstallment: 900,
       monthlySavings: 0,
       totalSavings: 0,
-      reductionPercent: 0,
+      originalRemaining: 9000,
+      estimatedSettlement: 9000,
       hasSavings: false,
       status: "no_savings",
     });
-
-    expect(
-      calculateInstallmentReduction({
-        currentInstallment: 900,
-        remainingInstallments: 10,
-        newInstallment: 950,
-      }).status,
-    ).toBe("no_savings");
   });
 
-  it("stays incomplete until current, remaining and new installment are filled", () => {
+  it("stays incomplete until current installment and remaining are filled", () => {
     expect(
       calculateInstallmentReduction({
         currentInstallment: 0,
         remainingInstallments: 12,
-        newInstallment: 800,
+        reductionPercent: 20,
       }).status,
     ).toBe("incomplete");
 
@@ -55,15 +64,7 @@ describe("calculateInstallmentReduction", () => {
       calculateInstallmentReduction({
         currentInstallment: 1000,
         remainingInstallments: 0,
-        newInstallment: 800,
-      }).status,
-    ).toBe("incomplete");
-
-    expect(
-      calculateInstallmentReduction({
-        currentInstallment: 1000,
-        remainingInstallments: 12,
-        newInstallment: 0,
+        reductionPercent: 20,
       }).status,
     ).toBe("incomplete");
   });
@@ -73,7 +74,7 @@ describe("calculateInstallmentReduction", () => {
       calculateInstallmentReduction({
         currentInstallment: 500,
         remainingInstallments: 6.9,
-        newInstallment: 400,
+        reductionPercent: 20,
       }).totalSavings,
     ).toBe(600);
   });

@@ -838,7 +838,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
             </Card>
 
             <InstallmentReductionCard
-              process={lead.process}
+              lead={lead}
               applying={updateLead.isPending}
               onApply={(installmentValue) => {
                 updateLead.mutate(

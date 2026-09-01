@@ -2,10 +2,12 @@
 
 import {
   Alert,
+  Box,
   Button,
   Card,
   CardContent,
   Grid2 as Grid,
+  Slider,
   Stack,
   Typography,
 } from "@mui/material";
@@ -13,41 +15,35 @@ import { useEffect, useMemo, useState } from "react";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { CurrencyField } from "@/components/inputs/CurrencyField";
 import { IntegerField } from "@/components/inputs/IntegerField";
-import { formatCurrency, formatPercent } from "@/lib/utils/format";
-import { calculateInstallmentReduction } from "@/lib/utils/installment-reduction";
+import { formatPercent } from "@/lib/utils/format";
+import {
+  calculateInstallmentReduction,
+  clampReductionPercent,
+} from "@/lib/utils/installment-reduction";
+import { useSession } from "@/modules/auth/hooks";
 import type { Lead } from "../types";
+import { InstallmentReductionPreview } from "./InstallmentReductionPreview";
+
+const DEFAULT_REDUCTION_PERCENT = 30;
+
+const PERCENT_MARKS = [
+  { value: 0, label: "0%" },
+  { value: 50, label: "50%" },
+  { value: 100, label: "100%" },
+];
 
 type Props = {
-  process: Lead["process"];
+  lead: Lead;
   applying?: boolean;
   onApply: (installmentValue: number) => void;
 };
 
-function ResultCell({ label, value }: { label: string; value: string }) {
-  return (
-    <Stack
-      spacing={0.25}
-      sx={{
-        p: 1.5,
-        borderRadius: 1,
-        bgcolor: "action.hover",
-        height: "100%",
-      }}
-    >
-      <Typography variant="caption" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="subtitle1" fontWeight={600}>
-        {value}
-      </Typography>
-    </Stack>
-  );
-}
-
-export function InstallmentReductionCard({ process, applying, onApply }: Props) {
+export function InstallmentReductionCard({ lead, applying, onApply }: Props) {
+  const { data: session } = useSession();
+  const process = lead.process;
   const [currentInstallment, setCurrentInstallment] = useState(process.installmentValue || 0);
   const [remainingInstallments, setRemainingInstallments] = useState(process.installments || 0);
-  const [newInstallment, setNewInstallment] = useState(0);
+  const [reductionPercent, setReductionPercent] = useState(DEFAULT_REDUCTION_PERCENT);
 
   useEffect(() => {
     setCurrentInstallment(process.installmentValue || 0);
@@ -59,16 +55,15 @@ export function InstallmentReductionCard({ process, applying, onApply }: Props) 
       calculateInstallmentReduction({
         currentInstallment,
         remainingInstallments,
-        newInstallment,
+        reductionPercent,
       }),
-    [currentInstallment, remainingInstallments, newInstallment],
+    [currentInstallment, remainingInstallments, reductionPercent],
   );
 
   function handleApply() {
     if (!result.hasSavings) return;
-    const next = newInstallment;
-    setNewInstallment(0);
-    onApply(next);
+    setReductionPercent(0);
+    onApply(result.newInstallment);
   }
 
   return (
@@ -76,10 +71,11 @@ export function InstallmentReductionCard({ process, applying, onApply }: Props) 
       <CardContent>
         <Typography variant="h6">Calculadora de redução</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
-          Estime a economia ao negociar uma parcela menor. Cálculo simples, sem CET nem taxa.
+          Informe o percentual de redução estimado. A nova parcela e o parecer são
+          calculados na hora — gerar o PDF com o modelo da análise vem depois.
         </Typography>
         <Grid container spacing={2}>
-          <Grid size={{ xs: 12, sm: 4 }}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <CurrencyField
               label="Parcela atual"
               size="small"
@@ -88,7 +84,7 @@ export function InstallmentReductionCard({ process, applying, onApply }: Props) 
               onChange={setCurrentInstallment}
             />
           </Grid>
-          <Grid size={{ xs: 12, sm: 4 }}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <IntegerField
               label="Parcelas restantes"
               size="small"
@@ -97,34 +93,53 @@ export function InstallmentReductionCard({ process, applying, onApply }: Props) 
               onChange={setRemainingInstallments}
             />
           </Grid>
-          <Grid size={{ xs: 12, sm: 4 }}>
-            <CurrencyField
-              label="Nova parcela"
-              size="small"
-              fullWidth
-              value={newInstallment}
-              onChange={setNewInstallment}
-            />
+          <Grid size={12}>
+            <Stack
+              direction="row"
+              justifyContent="space-between"
+              alignItems="baseline"
+              mb={0.5}
+            >
+              <Typography id="reduction-percent-label" variant="body2">
+                Redução estimada
+              </Typography>
+              <Typography variant="subtitle2" color="primary">
+                {formatPercent(reductionPercent)}
+              </Typography>
+            </Stack>
+            <Box px={{ xs: 1, sm: 1.5 }}>
+              <Slider
+                aria-labelledby="reduction-percent-label"
+                aria-valuetext={`${reductionPercent} por cento`}
+                value={reductionPercent}
+                min={0}
+                max={100}
+                step={1}
+                marks={PERCENT_MARKS}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
+                onChange={(_, value) =>
+                  setReductionPercent(clampReductionPercent(Array.isArray(value) ? value[0] : value))
+                }
+              />
+            </Box>
           </Grid>
         </Grid>
 
         {result.status === "no_savings" ? (
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            A nova parcela precisa ser menor que a atual para haver economia.
+          <Alert severity="info" sx={{ mt: 1 }}>
+            Mova o percentual acima de 0% para projetar economia na parcela.
           </Alert>
-        ) : (
-          <Grid container spacing={1.5} sx={{ mt: 1 }} role="status" aria-live="polite">
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <ResultCell label="Economia mensal" value={formatCurrency(result.monthlySavings)} />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <ResultCell label="Economia total" value={formatCurrency(result.totalSavings)} />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 4 }}>
-              <ResultCell label="Redução" value={formatPercent(result.reductionPercent)} />
-            </Grid>
-          </Grid>
-        )}
+        ) : null}
+
+        <InstallmentReductionPreview
+          lead={lead}
+          currentInstallment={currentInstallment}
+          remainingInstallments={remainingInstallments}
+          result={result}
+          consultantName={session?.name}
+          companyName={session?.company.name}
+        />
 
         <PermissionGate permission="crm:editar">
           <Button

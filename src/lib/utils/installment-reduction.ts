@@ -1,15 +1,20 @@
 export type InstallmentReductionInput = {
   currentInstallment: number;
   remainingInstallments: number;
-  newInstallment: number;
+  /** Percentual de redução estimado (0–100). */
+  reductionPercent: number;
 };
 
 export type InstallmentReductionStatus = "incomplete" | "no_savings" | "ok";
 
 export type InstallmentReductionResult = {
+  reductionPercent: number;
+  newInstallment: number;
   monthlySavings: number;
   totalSavings: number;
-  reductionPercent: number;
+  originalRemaining: number;
+  estimatedSettlement: number;
+  estimatedRestitution: number;
   hasSavings: boolean;
   status: InstallmentReductionStatus;
 };
@@ -24,34 +29,70 @@ function asRemaining(value: number) {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-/** Economia v1: mensal = atual − nova; total = mensal × restantes; % = mensal / atual. */
+export function clampReductionPercent(value: number) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, n));
+}
+
+export function roundCents(value: number) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
+const EMPTY: Omit<InstallmentReductionResult, "status" | "reductionPercent"> = {
+  newInstallment: 0,
+  monthlySavings: 0,
+  totalSavings: 0,
+  originalRemaining: 0,
+  estimatedSettlement: 0,
+  estimatedRestitution: 0,
+  hasSavings: false,
+};
+
+/**
+ * Economia a partir do % informado pelo operador:
+ * nova = atual × (1 − %); mensal = atual − nova; restante original = atual × restantes;
+ * quitação estimada = nova × restantes (mesmo %). Restituição fica 0 até haver dado de parcelas pagas.
+ */
 export function calculateInstallmentReduction(
   input: InstallmentReductionInput,
 ): InstallmentReductionResult {
   const current = asPositiveMoney(input.currentInstallment);
   const remaining = asRemaining(input.remainingInstallments);
-  const next = asPositiveMoney(input.newInstallment);
+  const reductionPercent = clampReductionPercent(input.reductionPercent);
 
-  const empty = {
-    monthlySavings: 0,
-    totalSavings: 0,
-    reductionPercent: 0,
-    hasSavings: false,
-  } as const;
-
-  if (!current || !remaining || !next) {
-    return { ...empty, status: "incomplete" };
+  if (!current || !remaining) {
+    return { ...EMPTY, reductionPercent, status: "incomplete" };
   }
 
-  if (next >= current) {
-    return { ...empty, status: "no_savings" };
+  const originalRemaining = roundCents(current * remaining);
+  const monthlySavings = roundCents((current * reductionPercent) / 100);
+  const newInstallment = roundCents(current - monthlySavings);
+  const estimatedSettlement = roundCents(newInstallment * remaining);
+  const totalSavings = roundCents(monthlySavings * remaining);
+
+  if (reductionPercent <= 0) {
+    return {
+      reductionPercent,
+      newInstallment: current,
+      monthlySavings: 0,
+      totalSavings: 0,
+      originalRemaining,
+      estimatedSettlement: originalRemaining,
+      estimatedRestitution: 0,
+      hasSavings: false,
+      status: "no_savings",
+    };
   }
 
-  const monthlySavings = current - next;
   return {
+    reductionPercent,
+    newInstallment,
     monthlySavings,
-    totalSavings: monthlySavings * remaining,
-    reductionPercent: (monthlySavings / current) * 100,
+    totalSavings,
+    originalRemaining,
+    estimatedSettlement,
+    estimatedRestitution: 0,
     hasSavings: true,
     status: "ok",
   };
