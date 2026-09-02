@@ -41,4 +41,13 @@ describe("session cache", () => {
     expect(getCachedSessionUser()).toBeUndefined();
     expect(getCachedSessionUpdatedAt()).toBeUndefined();
   });
+
+  it("strips a stale isPlatformAdmin flag from cached snapshots", () => {
+    sessionStorage.setItem(
+      "cypher_ops_session_user",
+      JSON.stringify({ ...sampleUser, isPlatformAdmin: true }),
+    );
+    expect(getCachedSessionUser()).toEqual(sampleUser);
+    expect(getCachedSessionUser()).not.toHaveProperty("isPlatformAdmin");
+  });
 });

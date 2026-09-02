@@ -7,11 +7,10 @@ export function homePathForRole(role: RoleName) {
   return "/leads";
 }
 
-/** Home respeitando role ∩ features do plano da company. Staff Cypher cai na visão de plataforma. */
+/** Home respeitando role ∩ features do plano da company. */
 export function homePathForSession(
-  user: Pick<SessionUser, "role" | "permissions" | "features"> & { isPlatformAdmin?: boolean },
+  user: Pick<SessionUser, "role" | "permissions" | "features">,
 ) {
-  if (user.isPlatformAdmin) return "/platform";
   const preferred = homePathForRole(user.role);
   const preferredRoute = APP_NAV_ROUTES.find((route) => route.href === preferred);
   if (preferredRoute && canSeeAppRoute(user, preferredRoute)) return preferred;

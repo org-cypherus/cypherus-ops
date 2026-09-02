@@ -7,7 +7,6 @@ import { fetchContracts } from "@/modules/contracts/services";
 import { fetchAdminDashboard, fetchCommercialDashboard, periodRange } from "@/modules/dashboard/services";
 import { fetchPayments } from "@/modules/financial/services";
 import { fetchKanban } from "@/modules/leads/services";
-import { fetchCompaniesOverview } from "@/modules/platform/services";
 import { fetchUserDirectoryOrEmpty } from "@/modules/users/directory";
 
 function periodBounds(days = 30) {
@@ -85,13 +84,6 @@ export function prefetchNavHref(queryClient: QueryClient, href: string) {
       return queryClient.prefetchQuery({
         queryKey: queryKeys.users,
         queryFn: fetchUsers,
-      });
-    case "/platform":
-    case "/platform/companies":
-    case "/platform/billing":
-      return queryClient.prefetchQuery({
-        queryKey: queryKeys.platform.overview,
-        queryFn: fetchCompaniesOverview,
       });
     default:
       return Promise.resolve();
