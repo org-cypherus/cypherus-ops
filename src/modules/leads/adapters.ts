@@ -1,6 +1,6 @@
 import type { Attachment, KanbanBoard, Lead, LeadPriority, PipelineStage, TimelineEvent } from "./types";
 import { PIPELINE_STAGES } from "./types";
-import { timelineEventLabel } from "./timeline-labels";
+import { timelineEventDescription } from "./timeline-labels";
 
 function timelineTime(iso?: string) {
   const t = iso ? new Date(iso).getTime() : Number.NaN;
@@ -185,9 +185,7 @@ export function toUiLead(
   const eventTimeline = (extras?.events ?? []).map((event, index) => ({
     id: `event-${index}`,
     type: event.type,
-    description: String(
-      event.payload?.description ?? event.payload?.message ?? timelineEventLabel(event.type),
-    ),
+    description: timelineEventDescription(event.type, event.payload),
     createdAt: event.created_at,
     userName: String(event.payload?.actor_name ?? "Sistema"),
   }));

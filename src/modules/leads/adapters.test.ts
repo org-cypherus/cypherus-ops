@@ -100,6 +100,19 @@ describe("timeline events", () => {
     expect(ui.timeline[0].description).toBe("Contrato criado");
     expect(ui.timeline[0].userName).toBe("Sistema");
   });
+
+  it("includes destination stage on STAGE_CHANGED", () => {
+    const ui = toUiLead(baseLead, "João", {
+      events: [
+        {
+          type: "STAGE_CHANGED",
+          payload: { from_status: "NEW", to_status: "CONTACTED", actor_name: "Bruno" },
+          created_at: "2026-08-20T12:00:00.000Z",
+        },
+      ],
+    });
+    expect(ui.timeline[0].description).toBe("Status alterado: Novo Lead → Contato realizado");
+  });
 });
 
 describe("leadToUpdateRequest", () => {
