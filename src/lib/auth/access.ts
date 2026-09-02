@@ -12,6 +12,7 @@ export function homePathForSession(
   user: Pick<SessionUser, "role" | "permissions" | "features">,
 ) {
   const preferred = homePathForRole(user.role);
+  if (preferred === "/financial" && user.role === Role.Financeiro) return preferred;
   const preferredRoute = APP_NAV_ROUTES.find((route) => route.href === preferred);
   if (preferredRoute && canSeeAppRoute(user, preferredRoute)) return preferred;
 

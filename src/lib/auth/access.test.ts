@@ -18,14 +18,14 @@ describe("homePathForRole", () => {
 });
 
 describe("homePathForSession", () => {
-  it("falls back when preferred home is not in the company plan", () => {
-    const path = homePathForSession({
-      role: Role.Financeiro,
-      permissions: ROLE_PERMISSIONS[Role.Financeiro],
-      features: resolveFeatures("ESSENTIAL"),
-    });
-    expect(path).not.toBe("/financial");
-    expect(path).toBe("/dashboard");
+  it("keeps financeiro on /financial even when the plan feature is off", () => {
+    expect(
+      homePathForSession({
+        role: Role.Financeiro,
+        permissions: ROLE_PERMISSIONS[Role.Financeiro],
+        features: resolveFeatures("ESSENTIAL"),
+      }),
+    ).toBe("/financial");
   });
 
   it("keeps preferred home when plan allows", () => {

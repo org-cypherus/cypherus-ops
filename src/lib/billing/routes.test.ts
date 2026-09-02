@@ -49,6 +49,13 @@ describe("canSeeAppRoute", () => {
     expect(canSeeAppRoute({ permissions: financeiro, features: pro }, route)).toBe(true);
   });
 
+  it("keeps financeiro nav for the Financeiro role even without mapped invoices.view", () => {
+    const route = APP_NAV_ROUTES.find((item) => item.href === "/financial")!;
+    expect(
+      canSeeAppRoute({ role: Role.Financeiro, permissions: [], features: essential }, route),
+    ).toBe(true);
+  });
+
   it("hides users management without usuarios:visualizar", () => {
     const users = APP_NAV_ROUTES.find((item) => item.href === "/admin/users")!;
     expect(canSeeAppRoute({ permissions: comercial, features: pro }, users)).toBe(false);
