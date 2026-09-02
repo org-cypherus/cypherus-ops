@@ -291,7 +291,6 @@ export function leadToUpdateRequest(payload: Partial<Lead>) {
   const body: Record<string, unknown> = {};
   if (payload.name !== undefined) body.name = payload.name;
   if (payload.cpf !== undefined) body.cpf = payload.cpf;
-  if (payload.ownerId !== undefined) body.owner_user_id = payload.ownerId;
   if (payload.rg !== undefined) body.rg = payload.rg;
   if (payload.birthDate !== undefined) body.birth_date = payload.birthDate;
   if (payload.email !== undefined) body.email = payload.email;

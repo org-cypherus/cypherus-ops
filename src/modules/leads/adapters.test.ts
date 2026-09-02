@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   daysSince,
+  leadToUpdateRequest,
   nextLeadCursor,
   processPotentialValue,
   toUiLead,
@@ -98,6 +99,12 @@ describe("timeline events", () => {
     expect(ui.timeline[0].type).toBe("CONTRACT_CREATED");
     expect(ui.timeline[0].description).toBe("Contrato criado");
     expect(ui.timeline[0].userName).toBe("Sistema");
+  });
+});
+
+describe("leadToUpdateRequest", () => {
+  it("does not send owner_user_id (CRM assignment is PATCH .../assign)", () => {
+    expect(leadToUpdateRequest({ ownerId: "u2", name: "Ana" })).toEqual({ name: "Ana" });
   });
 });
 
