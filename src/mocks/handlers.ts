@@ -109,6 +109,7 @@ const ROLES = [
   { id: "role-admin", code: "ADMIN", name: "Administrador" },
   { id: "role-manager", code: "MANAGER", name: "Gestor" },
   { id: "role-sales", code: "SALES", name: "Comercial" },
+  { id: "role-viewer", code: "VIEWER", name: "Colaborador" },
   { id: "role-finance", code: "FINANCE", name: "Financeiro" },
   { id: "role-legal", code: "LEGAL", name: "Jurídico" },
 ];

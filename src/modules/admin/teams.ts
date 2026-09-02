@@ -194,6 +194,20 @@ export function matchTeamName(name: string, options: string[]): string | undefin
   return options.find((item) => item.toLowerCase() === trimmed);
 }
 
+export type NewTeamNameResult =
+  | { ok: true; name: string }
+  | { ok: false; reason: "empty" }
+  | { ok: false; reason: "duplicate"; existing: string };
+
+/** Valida um nome digitado em “+ Adicionar time” sem apagar o texto. */
+export function parseNewTeamName(input: string, existingNames: string[]): NewTeamNameResult {
+  const name = input.trim();
+  if (!name) return { ok: false, reason: "empty" };
+  const existing = matchTeamName(name, existingNames);
+  if (existing) return { ok: false, reason: "duplicate", existing };
+  return { ok: true, name };
+}
+
 /** Time já tem gestor (além do owner) — útil para marcar “em uso” na UI. */
 export function isTeamInUse(team: CrmTeam, ownerId?: string | null): boolean {
   if (!team.is_active || !team.manager_user_id) return false;

@@ -38,7 +38,7 @@ const links = [
   {
     href: "/admin/roles",
     title: "Perfis",
-    description: "Administrador, Gestor, Comercial e Financeiro",
+    description: "Administrador, Gestor, Comercial, Colaborador e Financeiro",
   },
   {
     href: "/admin/permissions",

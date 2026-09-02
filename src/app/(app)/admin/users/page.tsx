@@ -47,7 +47,6 @@ import { canAddActiveUser, nextPlanForMoreUsers, usersLimitLabel } from "@/lib/b
 import { planLabel } from "@/lib/billing/plan-catalog";
 import { queryKeys } from "@/lib/query/keys";
 import { formatPhone } from "@/lib/utils/phone";
-import { defaultPasswordFromName } from "@/lib/utils/password";
 import { formatDate } from "@/lib/utils/format";
 import { OrphanLeadsPanel } from "@/modules/admin/components/OrphanLeadsPanel";
 import { ReassignLeadsOnDeleteDialog } from "@/modules/admin/components/ReassignLeadsOnDeleteDialog";
@@ -77,6 +76,7 @@ import {
   fetchTeamsWithMembers,
   findManagedTeamForUser,
   matchTeamName,
+  parseNewTeamName,
   teamNameOptions,
   teamNamesInUse,
   updateTeam,
@@ -131,8 +131,7 @@ export default function UsersPage() {
   const [pendingManagerExit, setPendingManagerExit] = useState<PendingManagerExit | null>(null);
   const [teamSelectMode, setTeamSelectMode] = useState<"list" | "custom">("list");
   const [extraTeamNames, setExtraTeamNames] = useState<string[]>([]);
-  const [createdPassword, setCreatedPassword] = useState<string | null>(null);
-  const [createdEmail, setCreatedEmail] = useState<string | null>(null);
+  const [customTeamError, setCustomTeamError] = useState("");
   const [draftPermissions, setDraftPermissions] = useState<Permission[]>([]);
   const [permissionsDirty, setPermissionsDirty] = useState(false);
   const [roleAdjusted, setRoleAdjusted] = useState(false);
@@ -159,10 +158,8 @@ export default function UsersPage() {
     defaultValues: emptyAdminUserForm,
   });
 
-  const watchedName = watch("name");
-  const previewPassword = watchedName?.trim()
-    ? defaultPasswordFromName(watchedName)
-    : "Sobrenome" + new Date().getFullYear();
+  const watchedTeam = watch("team");
+  const watchedRole = watch("role");
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: queryKeys.users,
@@ -198,16 +195,23 @@ export default function UsersPage() {
   );
 
   function commitTeamToList(name: string): string {
-    const trimmed = name.trim();
-    if (!trimmed) return "";
-    const canonical = matchTeamName(trimmed, teamNames) ?? trimmed;
+    const parsed = parseNewTeamName(name, teamNames);
+    if (!parsed.ok) {
+      if (parsed.reason === "duplicate") {
+        setCustomTeamError(`O time "${parsed.existing}" já existe. Escolha na lista.`);
+      } else {
+        setCustomTeamError("Informe o nome do time");
+      }
+      return "";
+    }
+    setCustomTeamError("");
     setExtraTeamNames((current) =>
-      current.some((name) => name.toLowerCase() === canonical.toLowerCase())
+      current.some((item) => item.toLowerCase() === parsed.name.toLowerCase())
         ? current
-        : [...current, canonical],
+        : [...current, parsed.name],
     );
     setTeamSelectMode("list");
-    return canonical;
+    return parsed.name;
   }
 
   const ownerIdForTeams =
@@ -248,8 +252,7 @@ export default function UsersPage() {
   const atUserLimit = !canAddActiveUser(features, activeCount);
   const upgradePlan = nextPlanForMoreUsers(planCode);
   const limitHint = usersLimitLabel(features, activeCount);
-  const showPermissions = Boolean(editing && isAdmin && !createdPassword);
-  const watchedTeam = watch("team");
+  const showPermissions = Boolean(editing && isAdmin);
 
   useEffect(() => {
     if (!open) return;
@@ -259,6 +262,7 @@ export default function UsersPage() {
       setPermissionsDirty(false);
       setRoleAdjusted(false);
       setTeamSelectMode("list");
+      setCustomTeamError("");
       return;
     }
     const names = teamNameOptions(teamOptions, extraTeamNames);
@@ -349,7 +353,7 @@ export default function UsersPage() {
       }
       return { user: created, invitationToken: created.invitationToken };
     },
-    onSuccess: async ({ invitationToken }, { values, syncPermissions }) => {
+    onSuccess: async (_result, { syncPermissions }) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.users }),
         queryClient.invalidateQueries({ queryKey: queryKeys.teams }),
@@ -360,16 +364,12 @@ export default function UsersPage() {
           syncPermissions ? "Usuário e permissões atualizados" : "Usuário atualizado",
           { variant: "success" },
         );
-        setOpen(false);
-        setEditing(null);
-        reset(emptyAdminUserForm);
-        setPermissionsDirty(false);
-        setRoleAdjusted(false);
       } else {
-        setCreatedEmail(values.email);
-        setCreatedPassword(invitationToken || defaultPasswordFromName(values.name));
-        enqueueSnackbar("Convite enviado", { variant: "success" });
+        enqueueSnackbar("Convite enviado. O colaborador define a senha no primeiro acesso.", {
+          variant: "success",
+        });
       }
+      closeDialog();
     },
     onError: (err: unknown) => {
       enqueueSnackbar(getApiError(err).message || "Falha ao salvar usuário", { variant: "error" });
@@ -482,8 +482,6 @@ export default function UsersPage() {
   }
 
   function closeDialog() {
-    setCreatedPassword(null);
-    setCreatedEmail(null);
     setOpen(false);
     setEditing(null);
     reset(emptyAdminUserForm);
@@ -491,6 +489,7 @@ export default function UsersPage() {
     setPermissionsDirty(false);
     setRoleAdjusted(false);
     setTeamSelectMode("list");
+    setCustomTeamError("");
   }
 
   function handlePermissionsChange(next: Permission[]) {
@@ -520,7 +519,7 @@ export default function UsersPage() {
         <Box>
           <Typography variant="h4">Gestão de Usuários</Typography>
           <Typography variant="body2" color="text.secondary">
-            Colaboradores, cargos e convites — o token de convite é exibido uma única vez
+            Colaboradores, cargos e convites — a senha é definida no primeiro acesso
           </Typography>
           <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
             {limitHint}
@@ -544,8 +543,7 @@ export default function UsersPage() {
               disabled={atUserLimit || !canCreateUsers}
               onClick={() => {
                 setEditing(null);
-                setCreatedPassword(null);
-                setCreatedEmail(null);
+                setCustomTeamError("");
                 setOpen(true);
               }}
             >
@@ -765,8 +763,7 @@ export default function UsersPage() {
                           size="small"
                           onClick={() => {
                             setEditing(user);
-                            setCreatedPassword(null);
-                            setCreatedEmail(null);
+                            setCustomTeamError("");
                             setOpen(true);
                           }}
                         >
@@ -802,25 +799,8 @@ export default function UsersPage() {
         fullScreen={fullScreenDialog}
         scroll="paper"
       >
-        <DialogTitle>
-          {createdPassword ? "Usuário criado" : editing ? "Editar usuário" : "Novo usuário"}
-        </DialogTitle>
+        <DialogTitle>{editing ? "Editar usuário" : "Novo usuário"}</DialogTitle>
         <DialogContent dividers={showPermissions}>
-          {createdPassword ? (
-            <Stack spacing={2} mt={1}>
-              <Alert severity="success">Conta criada. Envie estas credenciais ao colaborador:</Alert>
-              <Typography variant="body2">
-                E-mail: <strong>{createdEmail}</strong>
-              </Typography>
-              <Typography variant="body2">
-                Token de convite: <strong>{createdPassword}</strong>
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Envie o token ao colaborador. No login, use <strong>Primeiro acesso</strong> para
-                validar o convite e definir a senha.
-              </Typography>
-            </Stack>
-          ) : (
             <Stack
               component="form"
               id="admin-user-form"
@@ -926,10 +906,12 @@ export default function UsersPage() {
                             const next = e.target.value;
                             if (next === CUSTOM_TEAM_VALUE) {
                               setTeamSelectMode("custom");
+                              setCustomTeamError("");
                               if (matchTeamName(field.value, teamNames)) field.onChange("");
                               return;
                             }
                             setTeamSelectMode("list");
+                            setCustomTeamError("");
                             field.onChange(next);
                           }}
                           onBlur={field.onBlur}
@@ -941,7 +923,9 @@ export default function UsersPage() {
                               ? "Carregando times da empresa…"
                               : teamsQuery.isError
                                 ? "Não foi possível listar os times. Use um nome padrão ou adicione outro."
-                                : "Times cadastrados na empresa — ou adicione outro")
+                                : watchedRole === Role.Gestor
+                                  ? "Times da empresa. Colaboradores podem entrar em times que já têm gestor."
+                                  : "Times cadastrados na empresa — ou adicione outro")
                           }
                         >
                           <MenuItem value="">
@@ -949,10 +933,11 @@ export default function UsersPage() {
                           </MenuItem>
                           {teamNames.map((name) => {
                             const inUse = usedTeamNames.has(name.toLowerCase());
+                            const blockUsed = watchedRole === Role.Gestor && inUse;
                             return (
-                              <MenuItem key={name} value={name}>
+                              <MenuItem key={name} value={name} disabled={blockUsed}>
                                 {name}
-                                {inUse ? " · em uso" : ""}
+                                {blockUsed ? " · já tem gestor" : ""}
                               </MenuItem>
                             );
                           })}
@@ -966,8 +951,11 @@ export default function UsersPage() {
                               fullWidth
                               required
                               autoFocus
-                              value={matchTeamName(field.value, teamNames) ? "" : field.value}
-                              onChange={(e) => field.onChange(e.target.value)}
+                              value={field.value}
+                              onChange={(e) => {
+                                setCustomTeamError("");
+                                field.onChange(e.target.value);
+                              }}
                               onBlur={field.onBlur}
                               onKeyDown={(e) => {
                                 if (e.key !== "Enter") return;
@@ -975,9 +963,11 @@ export default function UsersPage() {
                                 const next = commitTeamToList(field.value);
                                 if (next) field.onChange(next);
                               }}
-                              error={Boolean(errors.team)}
+                              error={Boolean(errors.team || customTeamError)}
                               helperText={
-                                errors.team?.message || "O time entra na lista e é criado ao salvar"
+                                customTeamError ||
+                                errors.team?.message ||
+                                "O time entra na lista e é criado ao salvar"
                               }
                             />
                             <Button
@@ -1031,11 +1021,6 @@ export default function UsersPage() {
                   )}
                 />
               ) : null}
-              {!editing ? (
-                <Alert severity="info">
-                  Senha inicial prevista: <strong>{previewPassword}</strong>
-                </Alert>
-              ) : null}
 
               {showPermissions ? (
                 <>
@@ -1050,15 +1035,8 @@ export default function UsersPage() {
                 </>
               ) : null}
             </Stack>
-          )}
         </DialogContent>
         <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 1.5 }}>
-          {createdPassword ? (
-            <Button variant="contained" onClick={closeDialog}>
-              Fechar
-            </Button>
-          ) : (
-            <>
               <Button onClick={closeDialog}>Cancelar</Button>
               <Button
                 type="submit"
@@ -1072,8 +1050,6 @@ export default function UsersPage() {
                     ? "Salvar usuário e permissões"
                     : "Salvar"}
               </Button>
-            </>
-          )}
         </DialogActions>
       </Dialog>
 
