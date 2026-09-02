@@ -1,9 +1,5 @@
-import { Box, CircularProgress } from "@mui/material";
+import { LeadsPageSkeleton } from "@/components/feedback/PageSkeletons";
 
 export default function Loading() {
-  return (
-    <Box py={8} display="flex" justifyContent="center">
-      <CircularProgress />
-    </Box>
-  );
+  return <LeadsPageSkeleton />;
 }

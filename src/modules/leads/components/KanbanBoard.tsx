@@ -62,11 +62,13 @@ function Column({
   status,
   count,
   potentialValue,
+  hasMore,
   leads,
 }: {
   status: PipelineStage;
   count: number;
   potentialValue: number;
+  hasMore?: boolean;
   leads: Lead[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -78,6 +80,7 @@ function Column({
         width: 260,
         flex: "0 0 260px",
         height: "100%",
+        minHeight: 0,
         display: "flex",
         flexDirection: "column",
         bgcolor: isOver ? "action.hover" : "background.paper",
@@ -85,16 +88,20 @@ function Column({
         border: 1,
         borderColor: "divider",
         p: 1.25,
-        minHeight: 0,
       }}
     >
-      <Stack spacing={0.25} mb={1.5} px={0.5} flexShrink={0}>
+      <Stack spacing={0.25} mb={1.5} px={0.5}>
         <Typography variant="subtitle2">{status}</Typography>
         <Typography variant="caption" color="text.secondary">
           {count} leads · {formatCurrency(potentialValue)}
         </Typography>
+        {hasMore ? (
+          <Typography variant="caption" color="warning.main">
+            Exibindo {leads.length} de {count}
+          </Typography>
+        ) : null}
       </Stack>
-      <Box flex={1} minHeight={0} overflow="auto" pr={0.25}>
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto", pr: 0.25 }}>
         {leads.map((lead) => (
           <LeadCard key={lead.id} lead={lead} />
         ))}
@@ -133,21 +140,26 @@ export function KanbanBoard({ board }: { board: KanbanBoardType }) {
   }
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
-      <Box
-        display="flex"
-        gap={1.5}
-        overflow="auto"
-        alignItems="stretch"
-        height="100%"
-        minHeight={0}
-        pb={0.5}
-      >
-        {board.columns.map((column) => (
-          <Column key={column.status} {...column} />
-        ))}
-      </Box>
-      <DragOverlay>{active ? <LeadCard lead={active} dragging /> : null}</DragOverlay>
-    </DndContext>
+    <Box sx={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+        <Box
+          display="flex"
+          gap={1.5}
+          alignItems="stretch"
+          pb={0.5}
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflowX: "auto",
+            overflowY: "hidden",
+          }}
+        >
+          {board.columns.map((column) => (
+            <Column key={column.status} {...column} />
+          ))}
+        </Box>
+        <DragOverlay>{active ? <LeadCard lead={active} dragging /> : null}</DragOverlay>
+      </DndContext>
+    </Box>
   );
 }

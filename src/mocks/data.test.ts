@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { homePathForSession } from "@/lib/auth/access";
 import {
   buildSessionUser,
   createLead,
@@ -33,6 +34,12 @@ describe("buildSessionUser (company tier)", () => {
     expect(carla.subscription.planCode).toBe("ESSENTIAL");
     expect(ana.features.agenda?.enabled).toBe(true);
     expect(carla.features.agenda?.enabled).toBe(false);
+  });
+
+  it("does not treat @cypherops.com.br as platform admin", () => {
+    const ops = buildSessionUser(mockUsers.find((u) => u.email === "ops@cypherops.com.br")!);
+    expect(ops).not.toHaveProperty("isPlatformAdmin");
+    expect(homePathForSession(ops)).toBe("/leads");
   });
 });
 

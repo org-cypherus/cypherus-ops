@@ -16,6 +16,8 @@ import {
   MenuItem,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -31,44 +33,37 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSnackbar } from "notistack";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { ErrorState } from "@/components/feedback/ErrorState";
 import { FeatureGate } from "@/components/auth/FeatureGate";
-import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
 import { formatCommissionRuleLabel } from "@/lib/utils/commission";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import { useFeature } from "@/modules/auth/hooks";
-
-type Payment = {
-  id: string;
-  contractId: string;
-  leadName: string;
-  leadId?: string;
-  amount: number;
-  dueDate: string;
-  status: string;
-  paidAt?: string;
-};
-
-type CommissionRule = {
-  id: string;
-  plan: string;
-  type: "percentual" | "taxa" | "percentual_meta";
-  value: number;
-  threshold?: number;
-  active?: boolean;
-};
+import { FinancialCashPanel } from "@/modules/financial/components/FinancialCashPanel";
+import { FinancialCommissionsPanel } from "@/modules/financial/components/FinancialCommissionsPanel";
+import { filterCommissions } from "@/modules/financial/commission-metrics";
+import {
+  confirmPayment as confirmPaymentRequest,
+  deleteCommissionRule,
+  fetchCommissionRules,
+  fetchCommissions,
+  fetchPayments,
+  filterPayments,
+  saveCommissionRule,
+  type CommissionRule,
+} from "@/modules/financial/services";
 
 type RuleForm = {
   plan: string;
   type: CommissionRule["type"];
   value: number;
-  threshold: number;
   active: boolean;
 };
+
+const PAYMENT_STATUSES = ["Pendente", "Recebido", "Atrasado"] as const;
 
 export default function FinancialPage() {
   const searchParams = useSearchParams();
@@ -80,50 +75,77 @@ export default function FinancialPage() {
   const [editingRule, setEditingRule] = useState<CommissionRule | null>(null);
   const [ruleForm, setRuleForm] = useState<RuleForm>({
     plan: "",
-    type: "percentual_meta",
+    type: "percentual",
     value: 10,
-    threshold: 10000,
     active: false,
   });
   const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
+  const [leadFilter, setLeadFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [fromFilter, setFromFilter] = useState("");
+  const [toFilter, setToFilter] = useState("");
+  const [beneficiaryFilter, setBeneficiaryFilter] = useState("");
+  const [commissionStatusFilter, setCommissionStatusFilter] = useState("");
+  const [tab, setTab] = useState<"operacional" | "caixa" | "comissoes">("operacional");
 
   useEffect(() => {
     const paymentId = searchParams.get("paymentId");
-    if (paymentId) setSelectedId(paymentId);
-  }, [searchParams]);
+    const view = searchParams.get("view");
+    if (paymentId) {
+      setSelectedId(paymentId);
+      setTab("operacional");
+      return;
+    }
+    if (view === "caixa") setTab("caixa");
+    if (view === "comissoes" && commissionsEnabled) setTab("comissoes");
+  }, [searchParams, commissionsEnabled]);
 
   const payments = useQuery({
     queryKey: queryKeys.payments.list(),
-    queryFn: async () => {
-      const { data } = await api.get<{ data: Payment[] }>("/payments");
-      return data.data;
-    },
+    queryFn: fetchPayments,
   });
 
   const commissions = useQuery({
     queryKey: queryKeys.payments.commissions,
-    queryFn: async () => {
-      const { data } = await api.get<{
-        data: Array<{ id: string; userName: string; amount: number; status: string }>;
-      }>("/commissions");
-      return data.data;
-    },
+    queryFn: fetchCommissions,
     enabled: commissionsEnabled,
   });
 
   const rules = useQuery({
     queryKey: queryKeys.payments.rules,
-    queryFn: async () => {
-      const { data } = await api.get<{ data: CommissionRule[] }>("/commission-rules");
-      return data.data;
-    },
+    queryFn: fetchCommissionRules,
     enabled: commissionsEnabled,
   });
-  const selected = payments.data?.find((p) => p.id === selectedId) || null;
+
+  const filteredPayments = useMemo(
+    () =>
+      filterPayments(payments.data || [], {
+        lead: leadFilter,
+        status: statusFilter,
+        from: fromFilter,
+        to: toFilter,
+      }),
+    [payments.data, leadFilter, statusFilter, fromFilter, toFilter],
+  );
+
+  const filteredCommissions = useMemo(
+    () =>
+      filterCommissions(commissions.data || [], {
+        beneficiary: beneficiaryFilter,
+        status: commissionStatusFilter,
+      }),
+    [commissions.data, beneficiaryFilter, commissionStatusFilter],
+  );
+
+  const commissionStatuses = useMemo(() => {
+    const set = new Set((commissions.data || []).map((item) => item.status).filter(Boolean));
+    return Array.from(set).sort();
+  }, [commissions.data]);
+
+  const selected = filteredPayments.find((p) => p.id === selectedId) || null;
 
   const confirmPayment = useMutation({
-    mutationFn: (id: string) =>
-      api.patch(`/payments/${id}`, { status: "Recebido", paidAt: new Date().toISOString() }),
+    mutationFn: (id: string) => confirmPaymentRequest(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.payments.all });
       enqueueSnackbar("Pagamento confirmado — comissão pela regra vigente", { variant: "success" });
@@ -131,14 +153,14 @@ export default function FinancialPage() {
   });
 
   const saveRule = useMutation({
-    mutationFn: async () => {
-      if (editingRule) {
-        const { data } = await api.patch<CommissionRule>(`/commission-rules/${editingRule.id}`, ruleForm);
-        return data;
-      }
-      const { data } = await api.post<CommissionRule>("/commission-rules", ruleForm);
-      return data;
-    },
+    mutationFn: async () =>
+      saveCommissionRule({
+        id: editingRule?.id,
+        plan: ruleForm.plan,
+        type: ruleForm.type,
+        value: ruleForm.value,
+        active: ruleForm.active,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.payments.rules });
       enqueueSnackbar(editingRule ? "Regra atualizada" : "Regra criada", { variant: "success" });
@@ -148,7 +170,7 @@ export default function FinancialPage() {
   });
 
   const removeRule = useMutation({
-    mutationFn: (id: string) => api.delete(`/commission-rules/${id}`),
+    mutationFn: (id: string) => deleteCommissionRule(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.payments.rules });
       enqueueSnackbar("Regra removida", { variant: "success" });
@@ -156,13 +178,19 @@ export default function FinancialPage() {
     },
   });
 
-  const received = (payments.data || [])
+  const received = filteredPayments
     .filter((p) => p.status === "Recebido")
     .reduce((s, p) => s + p.amount, 0);
-  const pending = (payments.data || [])
+  const pending = filteredPayments
     .filter((p) => p.status !== "Recebido")
     .reduce((s, p) => s + p.amount, 0);
   const commissionsTotal = (commissions.data || []).reduce((s, c) => s + c.amount, 0);
+  const hasActivePaymentFilters = Boolean(leadFilter.trim() || statusFilter || fromFilter || toFilter);
+  const hasActiveCommissionFilters = Boolean(beneficiaryFilter.trim() || commissionStatusFilter);
+
+  useEffect(() => {
+    if (!commissionsEnabled && tab === "comissoes") setTab("operacional");
+  }, [commissionsEnabled, tab]);
 
   if (payments.isLoading) {
     return (
@@ -173,7 +201,13 @@ export default function FinancialPage() {
   }
 
   if (payments.isError) {
-    return <ErrorState onRetry={() => payments.refetch()} />;
+    return (
+      <ErrorState
+        error={payments.error}
+        resourceLabel="os pagamentos"
+        onRetry={() => payments.refetch()}
+      />
+    );
   }
 
   return (
@@ -185,12 +219,133 @@ export default function FinancialPage() {
         </Typography>
       </Box>
 
+      <Tabs
+        value={tab}
+        onChange={(_, value: "operacional" | "caixa" | "comissoes") => setTab(value)}
+        sx={{ borderBottom: 1, borderColor: "divider" }}
+      >
+        <Tab value="operacional" label="Operacional" />
+        <Tab value="caixa" label="Caixa e inadimplência" />
+        {commissionsEnabled ? <Tab value="comissoes" label="Comissões operacionais" /> : null}
+      </Tabs>
+
+      {tab === "comissoes" ? (
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1} flexWrap="wrap" useFlexGap>
+          <TextField
+            size="small"
+            label="Beneficiário"
+            placeholder="Buscar beneficiário..."
+            value={beneficiaryFilter}
+            onChange={(e) => setBeneficiaryFilter(e.target.value)}
+            sx={{ minWidth: 200, flex: 1 }}
+          />
+          <TextField
+            select
+            size="small"
+            label="Tipo"
+            value={commissionStatusFilter}
+            onChange={(e) => setCommissionStatusFilter(e.target.value)}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="">Todos</MenuItem>
+            {commissionStatuses.map((status) => (
+              <MenuItem key={status} value={status}>
+                {status}
+              </MenuItem>
+            ))}
+          </TextField>
+          {hasActiveCommissionFilters ? (
+            <Button
+              size="small"
+              onClick={() => {
+                setBeneficiaryFilter("");
+                setCommissionStatusFilter("");
+              }}
+            >
+              Limpar filtros
+            </Button>
+          ) : null}
+        </Stack>
+      ) : (
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1} flexWrap="wrap" useFlexGap>
+          <TextField
+            size="small"
+            label="Lead"
+            placeholder="Buscar lead..."
+            value={leadFilter}
+            onChange={(e) => setLeadFilter(e.target.value)}
+            sx={{ minWidth: 200, flex: 1 }}
+          />
+          <TextField
+            select
+            size="small"
+            label="Status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            sx={{ minWidth: 150 }}
+          >
+            <MenuItem value="">Todos</MenuItem>
+            {PAYMENT_STATUSES.map((status) => (
+              <MenuItem key={status} value={status}>
+                {status}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            size="small"
+            type="date"
+            label="Vencimento de"
+            InputLabelProps={{ shrink: true }}
+            value={fromFilter}
+            onChange={(e) => setFromFilter(e.target.value)}
+          />
+          <TextField
+            size="small"
+            type="date"
+            label="Vencimento até"
+            InputLabelProps={{ shrink: true }}
+            value={toFilter}
+            onChange={(e) => setToFilter(e.target.value)}
+          />
+          {hasActivePaymentFilters ? (
+            <Button
+              size="small"
+              onClick={() => {
+                setLeadFilter("");
+                setStatusFilter("");
+                setFromFilter("");
+                setToFilter("");
+              }}
+            >
+              Limpar filtros
+            </Button>
+          ) : null}
+        </Stack>
+      )}
+
+      {tab === "caixa" ? (
+        <FinancialCashPanel payments={filteredPayments} />
+      ) : tab === "comissoes" ? (
+        commissions.isLoading ? (
+          <Box py={6} display="flex" justifyContent="center">
+            <CircularProgress />
+          </Box>
+        ) : (
+          <FinancialCommissionsPanel commissions={filteredCommissions} />
+        )
+      ) : (
+        <>
       <Grid container spacing={2}>
         {[
           { label: "Receita recebida", value: formatCurrency(received) },
           { label: "Pendências", value: formatCurrency(pending) },
           ...(commissionsEnabled
-            ? [{ label: "Comissões a pagar", value: formatCurrency(commissionsTotal) }]
+            ? [
+                {
+                  label: "Comissões a pagar",
+                  value: commissions.isLoading ? "Carregando…" : formatCurrency(commissionsTotal),
+                },
+              ]
             : []),
         ].map((kpi) => (
           <Grid key={kpi.label} size={{ xs: 12, md: commissionsEnabled ? 4 : 6 }}>
@@ -211,9 +366,13 @@ export default function FinancialPage() {
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: commissionsEnabled ? 8 : 12 }}>
           <TableContainer component={Paper} variant="outlined">
-            <Typography variant="h6" sx={{ p: 2 }}>
-              Pagamentos
-            </Typography>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 2, pb: 1 }}>
+              <Typography variant="h6">Pagamentos</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {filteredPayments.length}
+                {hasActivePaymentFilters ? ` de ${(payments.data || []).length}` : ""} registro(s)
+              </Typography>
+            </Stack>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -224,22 +383,34 @@ export default function FinancialPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {(payments.data || []).map((payment) => (
-                  <TableRow
-                    key={payment.id}
-                    hover
-                    selected={selectedId === payment.id}
-                    sx={{ cursor: "pointer" }}
-                    onClick={() => setSelectedId(payment.id)}
-                  >
-                    <TableCell>{payment.leadName}</TableCell>
-                    <TableCell align="right">{formatCurrency(payment.amount)}</TableCell>
-                    <TableCell>{formatDate(payment.dueDate)}</TableCell>
-                    <TableCell>
-                      <StatusBadge label={payment.status} />
+                {filteredPayments.length ? (
+                  filteredPayments.map((payment) => (
+                    <TableRow
+                      key={payment.id}
+                      hover
+                      selected={selectedId === payment.id}
+                      sx={{ cursor: "pointer" }}
+                      onClick={() => setSelectedId(payment.id)}
+                    >
+                      <TableCell>{payment.leadName}</TableCell>
+                      <TableCell align="right">{formatCurrency(payment.amount)}</TableCell>
+                      <TableCell>{formatDate(payment.dueDate)}</TableCell>
+                      <TableCell>
+                        <StatusBadge label={payment.status} />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <Typography variant="body2" color="text.secondary" py={2} textAlign="center">
+                        {hasActivePaymentFilters
+                          ? "Nenhum pagamento encontrado com os filtros atuais."
+                          : "Nenhum pagamento cadastrado."}
+                      </Typography>
                     </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           </TableContainer>
@@ -252,14 +423,24 @@ export default function FinancialPage() {
                   <Typography variant="h6" sx={{ mb: 1 }}>
                     Comissões
                   </Typography>
-                  {(commissions.data || []).map((item) => (
-                    <Stack key={item.id} direction="row" justifyContent="space-between" mb={1}>
-                      <Typography variant="body2">{item.userName}</Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {formatCurrency(item.amount)}
-                      </Typography>
-                    </Stack>
-                  ))}
+                  {commissions.isLoading ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Carregando…
+                    </Typography>
+                  ) : (commissions.data || []).length ? (
+                    (commissions.data || []).map((item) => (
+                      <Stack key={item.id} direction="row" justifyContent="space-between" mb={1}>
+                        <Typography variant="body2">{item.userName}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {formatCurrency(item.amount)}
+                        </Typography>
+                      </Stack>
+                    ))
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      Nenhuma comissão encontrada.
+                    </Typography>
+                  )}
                 </CardContent>
               </Card>
             </FeatureGate>
@@ -273,10 +454,9 @@ export default function FinancialPage() {
                       onClick={() => {
                         setEditingRule(null);
                         setRuleForm({
-                          plan: "Meta mínima 10k",
-                          type: "percentual_meta",
+                          plan: "Comissão padrão",
+                          type: "percentual",
                           value: 10,
-                          threshold: 10000,
                           active: false,
                         });
                         setRuleOpen(true);
@@ -286,10 +466,19 @@ export default function FinancialPage() {
                     </Button>
                   </Stack>
                 <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                  Vigente: soma as vendas do período; ao bater a meta mínima, % sobre o total
-                  acumulado (ex.: 3k+2k+6k=11k → 10% de 11k).
+                  CRM: uma regra vigente por empresa (`PERCENT` ou `FIXED`). Sem regra ativa o
+                  pagamento confirma, mas pode não gerar comissão.
                 </Typography>
-                {(rules.data || []).map((rule) => (
+                {rules.isLoading ? (
+                  <Box py={2} display="flex" justifyContent="center">
+                    <CircularProgress size={22} />
+                  </Box>
+                ) : !(rules.data || []).length ? (
+                  <Typography variant="body2" color="text.secondary">
+                    Nenhuma regra cadastrada.
+                  </Typography>
+                ) : (
+                  (rules.data || []).map((rule) => (
                   <Stack
                     key={rule.id}
                     direction="row"
@@ -315,7 +504,6 @@ export default function FinancialPage() {
                             plan: rule.plan,
                             type: rule.type,
                             value: rule.value,
-                            threshold: rule.threshold ?? 10000,
                             active: Boolean(rule.active),
                           });
                           setRuleOpen(true);
@@ -328,13 +516,16 @@ export default function FinancialPage() {
                       </IconButton>
                     </Stack>
                   </Stack>
-                ))}
+                ))
+                )}
               </CardContent>
             </Card>
             </FeatureGate>
           </Stack>
         </Grid>
       </Grid>
+        </>
+      )}
 
       <Drawer anchor="right" open={Boolean(selected)} onClose={() => setSelectedId(null)}>
         <Box width={360} p={2}>
@@ -347,6 +538,9 @@ export default function FinancialPage() {
               <Typography variant="body2">Status: {selected.status}</Typography>
               {selected.paidAt ? (
                 <Typography variant="body2">Recebido em: {formatDate(selected.paidAt)}</Typography>
+              ) : null}
+              {selected.commissionId ? (
+                <Typography variant="body2">Comissão: {selected.commissionId}</Typography>
               ) : null}
               <FeatureGate feature="contracts" permission="contratos:visualizar">
                 <Button component={Link} href={`/contracts/${selected.contractId}`} size="small">
@@ -390,14 +584,12 @@ export default function FinancialPage() {
                 setRuleForm((f) => ({
                   ...f,
                   type: e.target.value as RuleForm["type"],
-                  threshold: e.target.value === "percentual_meta" ? f.threshold || 10000 : f.threshold,
                 }))
               }
               fullWidth
             >
-              <MenuItem value="percentual_meta">% após meta acumulada</MenuItem>
-              <MenuItem value="percentual">Percentual total</MenuItem>
-              <MenuItem value="taxa">Taxa fixa</MenuItem>
+              <MenuItem value="percentual">Percentual (0–100)</MenuItem>
+              <MenuItem value="taxa">Valor fixo</MenuItem>
             </TextField>
             <TextField
               type="number"
@@ -406,16 +598,6 @@ export default function FinancialPage() {
               onChange={(e) => setRuleForm((f) => ({ ...f, value: Number(e.target.value) }))}
               fullWidth
             />
-            {ruleForm.type === "percentual_meta" ? (
-              <TextField
-                type="number"
-                label="Meta mínima acumulada (R$)"
-                helperText="Soma as vendas do período. Abaixo da meta = 0. Na meta ou acima = % do total."
-                value={ruleForm.threshold}
-                onChange={(e) => setRuleForm((f) => ({ ...f, threshold: Number(e.target.value) }))}
-                fullWidth
-              />
-            ) : null}
             <TextField
               select
               label="Usar no cálculo automático"

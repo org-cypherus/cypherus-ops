@@ -16,14 +16,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSnackbar } from "notistack";
 import { api } from "@/lib/api/client";
+import { getApiError } from "@/lib/api/client";
 import {
   clampDistributionStrategy,
   distributionStrategyOptions,
 } from "@/lib/billing/distribution";
 import { planLabel } from "@/lib/billing/plan-catalog";
+import { canSeeAppRoute, getAppRouteByHref } from "@/lib/billing/routes";
 import { queryKeys } from "@/lib/query/keys";
+import { companyPath } from "@/lib/auth/session";
 import { EnterpriseCapabilities } from "@/modules/admin/components/EnterpriseCapabilities";
-import { useCompanyPlan, useFeature } from "@/modules/auth/hooks";
+import { fetchDistributionRules } from "@/modules/financial/services";
+import { useCompanyPlan, useSession } from "@/modules/auth/hooks";
 
 const links = [
   {
@@ -34,14 +38,12 @@ const links = [
   {
     href: "/admin/roles",
     title: "Perfis",
-    description: "Administrador, Gestor, Comercial, Financeiro e Jurídico",
-    feature: "advanced_permissions" as const,
+    description: "Administrador, Gestor, Comercial e Financeiro",
   },
   {
     href: "/admin/permissions",
     title: "Matriz de permissões",
     description: "Controle granular por módulo e ação",
-    feature: "advanced_permissions" as const,
   },
   {
     href: "/admin/enterprise",
@@ -53,41 +55,47 @@ const links = [
 export default function AdminPage() {
   const { enqueueSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
+  const { data: session } = useSession();
   const { planCode } = useCompanyPlan();
-  const advancedPermissions = useFeature("advanced_permissions");
-  const visibleLinks = links.filter((item) => !item.feature || advancedPermissions.enabled);
+  const visibleLinks = links.filter((item) => {
+    const route = getAppRouteByHref(item.href);
+    return route ? canSeeAppRoute(session, route) : false;
+  });
   const strategyOptions = distributionStrategyOptions(planCode);
 
   const settings = useQuery({
-    queryKey: [...queryKeys.roles, "distribution"],
-    queryFn: async () => {
-      const { data } = await api.get<{ defaultStrategy: string }>("/distribution-settings");
-      return data;
-    },
+    queryKey: queryKeys.distributionRules,
+    queryFn: fetchDistributionRules,
   });
 
   const updateSettings = useMutation({
     mutationFn: async (defaultStrategy: string) => {
-      const { data } = await api.patch<{ defaultStrategy: string }>("/distribution-settings", {
-        defaultStrategy,
+      const existing = settings.data?.[0];
+      if (existing) {
+        await api.patch(companyPath(`/distribution/rules/${existing.id}`), {
+          name: defaultStrategy,
+          is_active: true,
+        });
+        return { defaultStrategy };
+      }
+      await api.post(companyPath("/distribution/rules"), {
+        name: defaultStrategy,
+        is_active: true,
       });
-      return data;
+      return { defaultStrategy };
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...queryKeys.roles, "distribution"] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.distributionRules });
       enqueueSnackbar("Regra de distribuição atualizada", { variant: "success" });
     },
     onError: (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        "Não foi possível atualizar a regra";
-      enqueueSnackbar(message, { variant: "error" });
+      enqueueSnackbar(getApiError(err).message || "Não foi possível atualizar a regra", { variant: "error" });
     },
   });
 
   const selectedStrategy = clampDistributionStrategy(
     planCode,
-    settings.data?.defaultStrategy || "round_robin",
+    settings.data?.[0]?.name || "round_robin",
   );
 
   return (
@@ -103,8 +111,8 @@ export default function AdminPage() {
         <CardContent>
           <Typography variant="h6">Distribuição de novos leads</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
-            Quando um lead entra sem responsável manual, o sistema aplica esta regra automaticamente.
-            Redistribuições pontuais continuam pelo botão Distribuir no pipeline.
+            Regras salvas em `/distribution/rules`. Redistribuições pontuais continuam pelo botão
+            Distribuir no pipeline.
           </Typography>
           {planCode === "ESSENTIAL" ? (
             <Alert

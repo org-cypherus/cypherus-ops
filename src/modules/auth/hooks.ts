@@ -6,20 +6,34 @@ import { homePathForSession } from "@/lib/auth/access";
 import type { Permission } from "@/lib/auth/permissions";
 import { canAccess, getFeatureLimit, hasFeature } from "@/lib/billing/access";
 import type { FeatureKey } from "@/lib/billing/types";
-import { getAccessToken } from "@/lib/auth/session";
+import {
+  getCachedSessionUser,
+  hasSession,
+  setCachedSessionUser,
+} from "@/lib/auth/session";
+import { SESSION_STALE_TIME_MS, getQueryClient } from "@/lib/query/client";
 import { queryKeys } from "@/lib/query/keys";
-import { fetchMe, loginRequest, logoutRequest } from "./services";
-import type { LoginFormValues } from "./schemas";
+import { acceptInvitationRequest, fetchMe, loginRequest, logoutRequest } from "./services";
+import type { AcceptInvitationFormValues, LoginFormValues } from "./schemas";
 
 export { homePathForRole, homePathForSession } from "@/lib/auth/access";
 
 export function useSession() {
-  const hasToken = typeof window !== "undefined" && Boolean(getAccessToken());
   return useQuery({
     queryKey: queryKeys.me,
-    queryFn: fetchMe,
-    enabled: hasToken,
+    queryFn: async () => {
+      const user = await fetchMe((partial) => {
+        setCachedSessionUser(partial);
+        getQueryClient().setQueryData(queryKeys.me, partial);
+      });
+      setCachedSessionUser(user);
+      return user;
+    },
+    enabled: typeof window !== "undefined" && hasSession(),
+    staleTime: SESSION_STALE_TIME_MS,
     retry: false,
+    // Snapshot: shell/gates na hora no F5; hydrate refetch em background.
+    placeholderData: () => getCachedSessionUser(),
   });
 }
 
@@ -28,7 +42,6 @@ export function usePermission(permission: Permission) {
   return Boolean(user?.permissions.includes(permission));
 }
 
-/** Plano/tier da company do user autenticado (não do cargo). */
 export function useCompanyPlan() {
   const { data: user } = useSession();
   return {
@@ -46,7 +59,6 @@ export function useFeature(key: FeatureKey) {
   };
 }
 
-/** Acesso efetivo = feature do plano ∩ permission do role. */
 export function useCanAccess(feature: FeatureKey, permission?: Permission) {
   const { data: user } = useSession();
   return canAccess(user?.features, user?.permissions, feature, permission);
@@ -58,6 +70,20 @@ export function useLogin() {
   return useMutation({
     mutationFn: (values: LoginFormValues) => loginRequest(values),
     onSuccess: (user) => {
+      setCachedSessionUser(user);
+      queryClient.setQueryData(queryKeys.me, user);
+      router.replace(homePathForSession(user));
+    },
+  });
+}
+
+export function useAcceptInvitation() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (values: AcceptInvitationFormValues) => acceptInvitationRequest(values),
+    onSuccess: (user) => {
+      setCachedSessionUser(user);
       queryClient.setQueryData(queryKeys.me, user);
       router.replace(homePathForSession(user));
     },

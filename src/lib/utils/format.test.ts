@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { formatCurrency, formatDate, formatDateTime, formatPercent } from "./format";
+import { formatCompactCurrency, formatCurrency, formatDate, formatDateTime, formatFileSize, formatPercent } from "./format";
 
 describe("format utils", () => {
   it("formats BRL currency", () => {
     expect(formatCurrency(1500)).toContain("1.500");
+  });
+
+  it("formats compact currency for chart axes", () => {
+    expect(formatCompactCurrency(1500)).toMatch(/mil/i);
+    expect(formatCompactCurrency(2_500_000)).toMatch(/mi/i);
+    expect(formatCompactCurrency(80)).toMatch(/80/);
   });
 
   it("formats percent values", () => {
@@ -14,5 +20,12 @@ describe("format utils", () => {
     expect(formatDate(null)).toBe("—");
     expect(formatDateTime(undefined)).toBe("—");
     expect(formatDate("2026-08-12T12:00:00.000Z")).toMatch(/\d{2}\/\d{2}\/\d{4}/);
+  });
+
+  it("formats file sizes", () => {
+    expect(formatFileSize(0)).toBe("—");
+    expect(formatFileSize(512)).toBe("512 B");
+    expect(formatFileSize(2048)).toBe("2.0 KB");
+    expect(formatFileSize(2 * 1024 * 1024)).toBe("2.0 MB");
   });
 });

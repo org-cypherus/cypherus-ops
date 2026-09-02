@@ -30,6 +30,8 @@ import NextLink from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 import { Controller, useForm, type FieldPath } from "react-hook-form";
+import { getApiError } from "@/lib/api/client";
+import type { ParsedApiError } from "@/lib/api/errors";
 import { formatCnpj } from "@/lib/utils/document";
 import { findSignupPlanOption, signupPlanOptions } from "@/modules/landing/content";
 import {
@@ -38,6 +40,7 @@ import {
   SIGNUP_STEP_FIELDS,
   validateSignupStep,
 } from "@/modules/auth/signup-flow";
+import { signupRequest } from "@/modules/auth/services";
 import {
   resolvePlanCode,
   signupSchema,
@@ -58,10 +61,58 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Prévia local até existir POST /signup na API. */
-async function createAccountPreview(_values: SignupFormValues) {
-  await new Promise((resolve) => setTimeout(resolve, 900));
-  return { ok: true as const };
+function detailsPreview(details: unknown) {
+  if (details == null) return null;
+  try {
+    const text = typeof details === "string" ? details : JSON.stringify(details, null, 2);
+    return text.length > 1500 ? `${text.slice(0, 1500)}…` : text;
+  } catch {
+    return null;
+  }
+}
+
+function SignupErrorAlert({ error }: { error: ParsedApiError }) {
+  const operation = [error.method, error.path].filter(Boolean).join(" ");
+  const preview = detailsPreview(error.details);
+  return (
+    <Alert severity="error" sx={{ mb: 2 }} role="alert">
+      <Typography variant="body2" fontWeight={700}>
+        {error.message || "Falha ao finalizar a contratação. Verifique os dados e tente de novo."}
+      </Typography>
+      {operation ? (
+        <Typography variant="caption" display="block" sx={{ mt: 0.75 }}>
+          {operation}
+          {error.status ? ` · HTTP ${error.status}` : ""}
+          {error.code && error.code !== "UNKNOWN" ? ` · ${error.code}` : ""}
+        </Typography>
+      ) : (
+        <Typography variant="caption" display="block" sx={{ mt: 0.75 }}>
+          {error.status ? `HTTP ${error.status}` : "Erro local"}
+          {error.code && error.code !== "UNKNOWN" ? ` · ${error.code}` : ""}
+        </Typography>
+      )}
+      {error.requestId ? (
+        <Typography variant="caption" display="block" sx={{ fontFamily: "ui-monospace, monospace", mt: 0.5 }}>
+          Request ID: {error.requestId}
+        </Typography>
+      ) : null}
+      {error.traceId ? (
+        <Typography variant="caption" display="block" sx={{ fontFamily: "ui-monospace, monospace" }}>
+          Trace ID: {error.traceId}
+        </Typography>
+      ) : null}
+      {preview ? (
+        <Typography
+          variant="caption"
+          component="pre"
+          display="block"
+          sx={{ mt: 1, mb: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "ui-monospace, monospace" }}
+        >
+          {preview}
+        </Typography>
+      ) : null}
+    </Alert>
+  );
 }
 
 export function SignupForm() {
@@ -69,7 +120,7 @@ export function SignupForm() {
   const initialPlan = resolvePlanCode(searchParams.get("plan"));
   const [activeStep, setActiveStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<ParsedApiError | null>(null);
   const [createdAccount, setCreatedAccount] = useState<SignupFormValues | null>(null);
 
   const {
@@ -136,14 +187,20 @@ export function SignupForm() {
     setSubmitError(null);
     setSubmitting(true);
     try {
-      const result = await createAccountPreview(formValues);
-      if (!result.ok) {
-        setSubmitError("Não foi possível criar a conta. Tente novamente.");
+      const result = await signupRequest(formValues);
+      if (!result.company) {
+        setSubmitError({
+          status: 0,
+          code: "SIGNUP_FAILED",
+          message: "Não foi possível criar a conta. Tente novamente.",
+        });
         return;
       }
       setCreatedAccount(formValues);
-    } catch {
-      setSubmitError("Falha ao finalizar a contratação. Verifique os dados e tente de novo.");
+    } catch (error) {
+      const parsed = getApiError(error);
+      console.error("[signup] falha ao confirmar e finalizar", parsed, error);
+      setSubmitError(parsed);
     } finally {
       setSubmitting(false);
     }
@@ -397,11 +454,7 @@ export function SignupForm() {
                 A senha permanece oculta nesta etapa. Use <strong>Voltar</strong> se precisar corrigir algum dado.
               </Alert>
 
-              {submitError ? (
-                <Alert severity="error" sx={{ mb: 2 }} role="alert">
-                  {submitError}
-                </Alert>
-              ) : null}
+              {submitError ? <SignupErrorAlert error={submitError} /> : null}
 
               <Typography variant="overline" color="text.secondary">
                 Empresa

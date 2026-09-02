@@ -11,17 +11,20 @@ import {
 } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
 import { ErrorState } from "@/components/feedback/ErrorState";
-import { api } from "@/lib/api/client";
 import { queryKeys } from "@/lib/query/keys";
+import { fetchRoleCatalog, fetchRolePermissions } from "@/modules/admin/services";
+import { mapWithConcurrency } from "@/lib/utils/concurrency";
 
 export default function RolesPage() {
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.roles,
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: queryKeys.roles.withPermissions,
     queryFn: async () => {
-      const { data } = await api.get<{
-        data: Array<{ name: string; permissions: string[] }>;
-      }>("/roles");
-      return data.data;
+      const roles = await fetchRoleCatalog();
+      const withPermissions = await mapWithConcurrency(roles, 2, async (role) => ({
+        ...role,
+        permissions: await fetchRolePermissions(role.id).catch(() => []),
+      }));
+      return withPermissions;
     },
   });
 
@@ -30,7 +33,7 @@ export default function RolesPage() {
       <Box>
         <Typography variant="h4">Gestão de Perfis</Typography>
         <Typography variant="body2" color="text.secondary">
-          Perfis padrão do sistema e suas permissões
+          Cargos da empresa e permissões efetivas
         </Typography>
       </Box>
 
@@ -39,19 +42,22 @@ export default function RolesPage() {
           <CircularProgress />
         </Box>
       ) : isError ? (
-        <ErrorState onRetry={() => refetch()} />
+        <ErrorState error={error} resourceLabel="cargos e papéis" onRetry={() => refetch()} />
       ) : (
         <Grid container spacing={2}>
           {(data || []).map((role) => (
-            <Grid key={role.name} size={{ xs: 12, md: 6, lg: 4 }}>
+            <Grid key={role.id} size={{ xs: 12, md: 6, lg: 4 }}>
               <Card variant="outlined" sx={{ height: "100%" }}>
                 <CardContent>
                   <Typography variant="h6">{role.name}</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1  }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                     {role.permissions.length} permissões
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: "block"  }}>
-                    {role.permissions.slice(0, 6).join(" · ")}
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: "block" }}>
+                    {role.permissions
+                      .slice(0, 6)
+                      .map((item) => item.permission_key)
+                      .join(" · ")}
                     {role.permissions.length > 6 ? "…" : ""}
                   </Typography>
                 </CardContent>

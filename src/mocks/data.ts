@@ -49,7 +49,7 @@ export type Payment = {
   leadId?: string;
   amount: number;
   dueDate: string;
-  status: "Recebido" | "Pendente" | "Inadimplente";
+  status: "Recebido" | "Pendente" | "Atrasado";
   paidAt?: string;
 };
 
@@ -58,18 +58,16 @@ export type Commission = {
   userId: string;
   userName: string;
   amount: number;
-  period: string;
-  status: "A pagar" | "Pago";
+  period?: string;
+  status: string;
   paymentId?: string;
 };
 
 export type CommissionRule = {
   id: string;
   plan: string;
-  type: "percentual" | "taxa" | "percentual_meta";
+  type: "percentual" | "taxa";
   value: number;
-  /** Meta mínima acumulada no período. Em percentual_meta, % sobre o total se ≥ meta. */
-  threshold?: number;
   /** Quando true, usada no cálculo automático ao confirmar pagamento */
   active?: boolean;
 };
@@ -86,6 +84,7 @@ export type AppUser = {
   /** Senha mock (padrão: último sobrenome + ano atual) */
   password: string;
   mustChangePassword: boolean;
+  createdAt?: string;
 };
 
 export type MockCompany = CompanySummary & {
@@ -131,6 +130,7 @@ export const COMPANY_IDS = {
   enterprise: "co-enterprise",
   professional: "co-professional",
   essential: "co-essential",
+  almeida: "co-almeida",
 } as const;
 
 export const mockCompanies: MockCompany[] = [
@@ -155,6 +155,13 @@ export const mockCompanies: MockCompany[] = [
     document: "22.333.444/0001-55",
     status: "ACTIVE",
   },
+  {
+    id: COMPANY_IDS.almeida,
+    name: "Almeida & Associados",
+    legalName: "Almeida e Associados Advogados LTDA",
+    document: "33.444.555/0001-20",
+    status: "ACTIVE",
+  },
 ];
 
 export const mockSubscriptions: MockSubscription[] = [
@@ -175,6 +182,12 @@ export const mockSubscriptions: MockSubscription[] = [
     companyId: COMPANY_IDS.essential,
     planCode: "ESSENTIAL",
     status: "TRIAL",
+  },
+  {
+    id: "sub-almeida",
+    companyId: COMPANY_IDS.almeida,
+    planCode: "PROFESSIONAL",
+    status: "PAST_DUE",
   },
 ];
 
@@ -263,6 +276,18 @@ export const mockUsers: AppUser[] = [
     password: DEMO_PASSWORD,
     mustChangePassword: false,
   },
+  {
+    id: "u-ops",
+    name: "Ops Cypher",
+    email: "ops@cypherops.com.br",
+    phone: "(11) 98888-1099",
+    role: Role.Administrador,
+    team: "Plataforma",
+    status: "Ativo",
+    companyId: COMPANY_IDS.enterprise,
+    password: DEMO_PASSWORD,
+    mustChangePassword: false,
+  },
 ];
 
 export const mockRolePermissions: Record<RoleName, Permission[]> = {
@@ -281,6 +306,133 @@ export function getSubscriptionByCompanyId(companyId: string) {
   return mockSubscriptions.find(
     (subscription) => subscription.companyId === companyId,
   );
+}
+
+export type MockPlan = {
+  id: string;
+  code: PlanCode;
+  name: string;
+  description: string | null;
+  billing_interval: "MONTHLY" | "YEARLY";
+  price: string;
+  is_active: boolean;
+};
+
+export const mockPlans: MockPlan[] = [
+  {
+    id: "plan-essential",
+    code: "ESSENTIAL",
+    name: "Essencial",
+    description: "CRM e operação essencial",
+    billing_interval: "MONTHLY",
+    price: "349.90",
+    is_active: true,
+  },
+  {
+    id: "plan-professional",
+    code: "PROFESSIONAL",
+    name: "Profissional",
+    description: "Contratos, financeiro e permissões",
+    billing_interval: "MONTHLY",
+    price: "449.90",
+    is_active: true,
+  },
+  {
+    id: "plan-enterprise",
+    code: "ENTERPRISE",
+    name: "Enterprise",
+    description: "API, webhooks e personalizações",
+    billing_interval: "MONTHLY",
+    price: "1397.90",
+    is_active: true,
+  },
+];
+
+export type MockCatalogFeature = {
+  id: string;
+  key: string;
+  name: string;
+  type: "BOOLEAN" | "LIMIT" | "QUOTA";
+  unit: string | null;
+  is_active: boolean;
+};
+
+export const mockFeatureCatalog: MockCatalogFeature[] = [
+  { id: "feature-crm", key: "crm", name: "CRM", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-kanban", key: "kanban", name: "Kanban", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-lead-history", key: "lead_history", name: "Histórico de leads", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-lead-distribution", key: "lead_distribution", name: "Distribuição de leads", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-dashboard-basic", key: "dashboard_basic", name: "Dashboard básico", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-dashboard-advanced", key: "dashboard_advanced", name: "Dashboard avançado", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-contracts", key: "contracts", name: "Contratos", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-financial", key: "financial", name: "Financeiro", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-commissions", key: "commissions", name: "Comissões", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-advanced-permissions", key: "advanced_permissions", name: "Permissões avançadas", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-api", key: "api", name: "API", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-webhooks", key: "webhooks", name: "Webhooks", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-advanced-distribution", key: "advanced_distribution", name: "Distribuição avançada", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-custom-dashboard", key: "custom_dashboard", name: "Dashboard personalizado", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-customization", key: "customization", name: "Personalizações", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-max-users", key: "max_users", name: "Limite de usuários", type: "LIMIT", unit: "users", is_active: true },
+  { id: "feature-attachments", key: "attachments", name: "Anexos", type: "BOOLEAN", unit: null, is_active: true },
+];
+
+export type MockFeatureOverride = {
+  companyId: string;
+  featureId: string;
+  enabled: boolean;
+  limit_value: number | null;
+  is_unlimited: boolean;
+};
+
+export const mockFeatureOverrides: MockFeatureOverride[] = [];
+
+const API_TO_UI_FEATURE: Record<string, string> = {
+  advanced_distribution: "lead_distribution_advanced",
+  customization: "customizations",
+  custom_dashboard: "dashboard_custom",
+};
+
+export function toCompanyResponse(company: MockCompany) {
+  return {
+    id: company.id,
+    name: company.name,
+    legal_name: company.legalName,
+    document: company.document,
+    status: company.status,
+    created_at: "2026-01-15T12:00:00.000Z",
+    updated_at: "2026-01-15T12:00:00.000Z",
+  };
+}
+
+export function resolveMockCompanyFeatures(companyId: string) {
+  const subscription = getSubscriptionByCompanyId(companyId);
+  const resolved = resolveFeatures(subscription?.planCode ?? "ESSENTIAL");
+  return mockFeatureCatalog.map((feature) => {
+    const uiKey = (API_TO_UI_FEATURE[feature.key] ?? feature.key) as keyof typeof resolved;
+    const planState = resolved[uiKey];
+    const override = mockFeatureOverrides.find(
+      (item) => item.companyId === companyId && item.featureId === feature.id,
+    );
+    if (override) {
+      return {
+        feature: feature.key,
+        type: feature.type,
+        enabled: override.enabled,
+        limit: override.is_unlimited ? null : override.limit_value,
+        unlimited: override.is_unlimited,
+        source: "OVERRIDE",
+      };
+    }
+    return {
+      feature: feature.key,
+      type: feature.type,
+      enabled: Boolean(planState?.enabled),
+      limit: planState?.limit ?? null,
+      unlimited: planState?.limit === null,
+      source: planState ? "PLAN" : "DEFAULT",
+    };
+  });
 }
 
 /** Resolve User → Company → Subscription → features do catálogo (tier da empresa). */
@@ -634,7 +786,7 @@ export const mockPayments: Payment[] = [
     leadName: "Carlos Eduardo Silva",
     amount: 18500,
     dueDate: daysAgo(10),
-    status: "Inadimplente",
+    status: "Atrasado",
   },
 ];
 
@@ -645,7 +797,7 @@ export const mockCommissions: Commission[] = [
     userName: "Bruno Lima",
     amount: 2295,
     period: "2026-07",
-    status: "A pagar",
+    status: "Percentual",
     paymentId: "p1",
   },
   {
@@ -654,17 +806,16 @@ export const mockCommissions: Commission[] = [
     userName: "Carla Mendes",
     amount: 4120,
     period: "2026-07",
-    status: "A pagar",
+    status: "Fixa",
   },
 ];
 
 export const mockCommissionRules: CommissionRule[] = [
   {
     id: "r0",
-    plan: "Meta mínima 10k (vigente)",
-    type: "percentual_meta",
+    plan: "Comissão padrão 10%",
+    type: "percentual",
     value: 10,
-    threshold: 10000,
     active: true,
   },
   { id: "r1", plan: "Plano A", type: "percentual", value: 15, active: false },

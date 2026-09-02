@@ -1,5 +1,6 @@
 import type { Permission } from "@/lib/auth/permissions";
-import type { FeatureKey } from "./types";
+import { canAccess } from "./access";
+import type { FeatureKey, ResolvedFeatures } from "./types";
 
 export type AppRouteConfig = {
   href: string;
@@ -12,7 +13,7 @@ export type AppRouteConfig = {
 };
 
 /**
- * Nav + guards: hide na Sidebar se !canAccess; URL direta → upsell (plano) ou sem permissão.
+ * Nav + guards: hide na Sidebar se !canSeeAppRoute; URL direta → upsell (plano) ou sem permissão.
  */
 export const APP_NAV_ROUTES: AppRouteConfig[] = [
   {
@@ -28,18 +29,6 @@ export const APP_NAV_ROUTES: AppRouteConfig[] = [
     permission: "crm:visualizar",
   },
   {
-    href: "/calendar",
-    label: "Agenda",
-    feature: "agenda",
-    permission: "agenda:visualizar",
-  },
-  {
-    href: "/legal",
-    label: "Jurídico",
-    feature: "contracts",
-    permission: "contratos:editar",
-  },
-  {
     href: "/contracts",
     label: "Contratos",
     feature: "contracts",
@@ -52,15 +41,9 @@ export const APP_NAV_ROUTES: AppRouteConfig[] = [
     permission: "financeiro:visualizar",
   },
   {
-    href: "/reports",
-    label: "Relatórios",
-    feature: "dashboard_advanced",
-    permission: "relatorios:exportar",
-  },
-  {
     href: "/admin/users",
     label: "Usuários",
-    permission: "admin:visualizar",
+    permission: "usuarios:visualizar",
   },
   {
     href: "/admin",
@@ -97,6 +80,31 @@ export const APP_FEATURE_ROUTES: AppRouteConfig[] = [
 ];
 
 const ALL_ROUTES: AppRouteConfig[] = [...APP_FEATURE_ROUTES, ...APP_NAV_ROUTES];
+
+export function getAppRouteByHref(href: string): AppRouteConfig | undefined {
+  return ALL_ROUTES.find((route) => route.href === href);
+}
+
+/**
+ * Visível na navegação / hub: precisa de permissão; se a rota tiver feature, também do plano.
+ * Sem sessão → oculto.
+ */
+export function canSeeAppRoute(
+  user:
+    | {
+        permissions?: Permission[];
+        features?: ResolvedFeatures;
+      }
+    | null
+    | undefined,
+  route: Pick<AppRouteConfig, "permission" | "feature">,
+): boolean {
+  if (!user?.permissions?.length) return false;
+  if (route.feature) {
+    return canAccess(user.features, user.permissions, route.feature, route.permission);
+  }
+  return user.permissions.includes(route.permission);
+}
 
 function routePrefixes(route: AppRouteConfig) {
   return [route.href, ...(route.matchPrefixes ?? [])];

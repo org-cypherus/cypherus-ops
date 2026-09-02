@@ -1,0 +1,71 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+build/
+.next/
+out/
+.vite/
+.cache/
+
+# Tests / coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# Logs
+*.log
+logs/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Package manager cache
+.npm/
+.pnpm-store/
+.yarn/
+.yarn/cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+
+# Temporary
+tmp/
+temp/
+
+# Generated files
+*.map
+
+# Large generated assets
+public/generated/
+public/uploads/
+
+# Docker
+docker-volumes/
+volumes/
+
+# Infrastructure state
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Documentation generated
+docs/generated/
+
+# Database dumps
+*.sql
+*.dump
+*.baks

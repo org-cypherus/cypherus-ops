@@ -15,16 +15,13 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSnackbar } from "notistack";
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api/client";
-import { Role } from "@/lib/auth/permissions";
 import { distributionStrategyOptions, type DistributionStrategy } from "@/lib/billing/distribution";
 import { planLabel } from "@/lib/billing/plan-catalog";
-import { queryKeys } from "@/lib/query/keys";
 import { useCompanyPlan } from "@/modules/auth/hooks";
+import { useUserDirectory } from "@/modules/users/hooks";
 import { useDistributeLeads } from "../hooks";
 
 type Props = {
@@ -40,13 +37,7 @@ export function DistributeLeadsDialog({ open, onClose, leadIds }: Props) {
   const [ownerId, setOwnerId] = useState("");
   const distribute = useDistributeLeads();
   const { enqueueSnackbar } = useSnackbar();
-  const users = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: async () => {
-      const { data } = await api.get<{ data: Array<{ id: string; name: string; role: string }> }>("/users");
-      return data.data.filter((u) => u.role === Role.Comercial || u.role === Role.Gestor);
-    },
-  });
+  const users = useUserDirectory(open);
 
   useEffect(() => {
     const allowed = distributionStrategyOptions(planCode).map((item) => item.value);
@@ -98,13 +89,21 @@ export function DistributeLeadsDialog({ open, onClose, leadIds }: Props) {
             label="Responsável"
             value={ownerId}
             onChange={(e) => setOwnerId(e.target.value)}
+            disabled={users.isLoading}
+            helperText={users.isLoading ? "Carregando…" : undefined}
             sx={{ mt: 2 }}
           >
-            {(users.data || []).map((u) => (
-              <MenuItem key={u.id} value={u.id}>
-                {u.name}
+            {users.isLoading ? (
+              <MenuItem value="" disabled>
+                Carregando…
               </MenuItem>
-            ))}
+            ) : (
+              (users.data || []).map((u) => (
+                <MenuItem key={u.id} value={u.id}>
+                  {u.name}
+                </MenuItem>
+              ))
+            )}
           </TextField>
         ) : null}
       </DialogContent>

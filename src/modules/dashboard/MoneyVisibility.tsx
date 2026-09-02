@@ -3,7 +3,7 @@
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import { IconButton, Tooltip } from "@mui/material";
-import { formatCurrency } from "@/lib/utils/format";
+import { formatCompactCurrency, formatCurrency } from "@/lib/utils/format";
 import { useUIStore } from "@/store/ui";
 
 const HIDDEN_MONEY = "R$ ••••••";
@@ -16,8 +16,9 @@ export function useMoneyVisibility() {
     moneyVisible,
     toggleMoneyVisible,
     formatMoney: (value: number) => (moneyVisible ? formatCurrency(value) : HIDDEN_MONEY),
+    /** Eixo Y/X — versão compacta para não estourar o SVG. */
     moneyAxisFormatter: (value: number | null) =>
-      moneyVisible ? formatCurrency(Number(value ?? 0)) : "•••",
+      moneyVisible ? formatCompactCurrency(Number(value ?? 0)) : "•••",
   };
 }
 

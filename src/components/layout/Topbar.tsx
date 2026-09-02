@@ -3,47 +3,23 @@
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import MenuIcon from "@mui/icons-material/Menu";
-import NotificationsNoneOutlinedIcon from "@mui/icons-material/NotificationsNoneOutlined";
-import SearchIcon from "@mui/icons-material/Search";
 import {
   AppBar,
   Avatar,
-  Badge,
   Box,
   IconButton,
-  InputAdornment,
-  TextField,
   Toolbar,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api/client";
-import { queryKeys } from "@/lib/query/keys";
-import { useLogout, useSession } from "@/modules/auth/hooks";
+import { useSession } from "@/modules/auth/hooks";
 import { useUIStore } from "@/store/ui";
 import { DRAWER_WIDTH, TOPBAR_HEIGHT } from "./Sidebar";
 
 export function Topbar() {
   const { data: user } = useSession();
-  const logout = useLogout();
   const mode = useUIStore((s) => s.mode);
   const toggleMode = useUIStore((s) => s.toggleMode);
-  const setSearchOpen = useUIStore((s) => s.setSearchOpen);
-  const setNotificationsOpen = useUIStore((s) => s.setNotificationsOpen);
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen);
-
-  const { data: notifications } = useQuery({
-    queryKey: queryKeys.notifications,
-    queryFn: async () => {
-      const { data } = await api.get<{
-        data: Array<{ id: string; read: boolean }>;
-      }>("/notifications");
-      return data.data;
-    },
-    enabled: Boolean(user),
-  });
-
-  const hasUnread = Boolean(notifications?.some((item) => !item.read));
 
   return (
     <AppBar
@@ -61,7 +37,7 @@ export function Topbar() {
     >
       <Toolbar
         sx={{
-          gap: { xs: 1, sm: 2 },
+          gap: { xs: 1, sm: 1.5 },
           minHeight: `${TOPBAR_HEIGHT}px !important`,
           height: TOPBAR_HEIGHT,
           px: { xs: 1.5, lg: 3 },
@@ -76,58 +52,26 @@ export function Topbar() {
           <MenuIcon />
         </IconButton>
 
-        <TextField
-          size="small"
-          placeholder="Pesquisar nome, CPF, telefone, contrato..."
-          onClick={() => setSearchOpen(true)}
-          InputProps={{
-            readOnly: true,
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
-          }}
-          sx={{
-            flex: 1,
-            maxWidth: 480,
-            display: { xs: "none", sm: "block" },
-          }}
-        />
-        <IconButton
-          onClick={() => setSearchOpen(true)}
-          aria-label="Pesquisar"
-          sx={{ display: { xs: "inline-flex", sm: "none" } }}
-        >
-          <SearchIcon />
-        </IconButton>
-
         <Box sx={{ flex: 1 }} />
 
         <IconButton onClick={toggleMode} aria-label="Alternar tema">
           {mode === "light" ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
         </IconButton>
-        <IconButton onClick={() => setNotificationsOpen(true)} aria-label="Notificações">
-          <Badge color="error" variant="dot" invisible={!hasUnread}>
-            <NotificationsNoneOutlinedIcon />
-          </Badge>
-        </IconButton>
-        <Box
-          display="flex"
-          alignItems="center"
-          gap={1.25}
-          sx={{ cursor: "pointer" }}
-          onClick={() => logout.mutate()}
-          title="Sair"
-        >
-          <Avatar sx={{ width: 36, height: 36, bgcolor: "primary.main" }}>
+
+        <Box display="flex" alignItems="center" gap={1} minWidth={0}>
+          <Avatar sx={{ width: 36, height: 36, bgcolor: "primary.main", flexShrink: 0 }}>
             {user?.name?.charAt(0) || "U"}
           </Avatar>
-          <Box display={{ xs: "none", md: "block" }}>
-            <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+          <Box minWidth={0} display={{ xs: "none", sm: "block" }}>
+            <Typography
+              variant="body2"
+              noWrap
+              sx={{ fontWeight: 600, lineHeight: 1.2, maxWidth: 160 }}
+              title={user?.name || "Usuário"}
+            >
               {user?.name || "Usuário"}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary" noWrap display="block">
               {user?.role || "—"}
             </Typography>
           </Box>

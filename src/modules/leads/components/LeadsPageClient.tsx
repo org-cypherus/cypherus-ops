@@ -4,7 +4,6 @@ import {
   Box,
   Button,
   Checkbox,
-  CircularProgress,
   MenuItem,
   Paper,
   Stack,
@@ -20,27 +19,35 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSnackbar } from "notistack";
 import { useEffect, useMemo, useState } from "react";
 import { PermissionGate } from "@/components/auth/PermissionGate";
 import { EmptyState } from "@/components/feedback/EmptyState";
 import { ErrorState } from "@/components/feedback/ErrorState";
-import { api } from "@/lib/api/client";
-import { queryKeys } from "@/lib/query/keys";
+import { KanbanSkeleton, TableSkeleton } from "@/components/feedback/PageSkeletons";
+import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { downloadText } from "@/lib/utils/download";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
-import { StatusBadge } from "@/components/feedback/StatusBadge";
 import Link from "next/link";
+import { useSession } from "@/modules/auth/hooks";
+import { Role } from "@/lib/auth/permissions";
+import { applyColumnVisibility } from "@/modules/leads/column-visibility";
+import {
+  CustomizeColumnsButton,
+  CustomizeColumnsDialog,
+} from "@/modules/leads/components/CustomizeColumnsDialog";
 import { CreateLeadDialog } from "@/modules/leads/components/CreateLeadDialog";
 import { DistributeLeadsDialog } from "@/modules/leads/components/DistributeLeadsDialog";
 import { ImportLeadsDialog } from "@/modules/leads/components/ImportLeadsDialog";
 import { KanbanBoard } from "@/modules/leads/components/KanbanBoard";
-import { useSession } from "@/modules/auth/hooks";
-import { Role } from "@/lib/auth/permissions";
 import { useDistributeLeads, useKanban, useLeads } from "@/modules/leads/hooks";
-import type { Lead } from "@/modules/leads/types";
+import { filterKanbanBoard } from "@/modules/leads/services";
+import type { Lead, PipelineStage } from "@/modules/leads/types";
+import { useUserDirectory } from "@/modules/users/hooks";
+import { usePipelinePrefsStore } from "@/store/pipeline-prefs";
+
+const NO_HIDDEN_STAGES: PipelineStage[] = [];
 
 function leadsToCsv(leads: Lead[]) {
   const header = "nome,email,telefone,cpf,origem,status,responsavel,valor,prioridade,tags";
@@ -63,38 +70,55 @@ export function LeadsPageClient() {
 
   useEffect(() => {
     if (sessionReady && session && !canViewCrm) {
-      router.replace(session.role === Role.Jurídico ? "/legal" : "/dashboard");
+      router.replace("/dashboard");
     }
   }, [sessionReady, session, canViewCrm, router]);
 
-  const filters = {
-    q: searchParams.get("q") || undefined,
-    ownerId: isComercial ? session?.id : searchParams.get("ownerId") || undefined,
-    origin: searchParams.get("origin") || undefined,
-    priority: searchParams.get("priority") || undefined,
-    tag: searchParams.get("tag") || undefined,
-    from: searchParams.get("from") || undefined,
-    to: searchParams.get("to") || undefined,
-  };
+  const filters = useMemo(
+    () => ({
+      q: searchParams.get("q") || undefined,
+      ownerId: isComercial ? session?.id : searchParams.get("ownerId") || undefined,
+      origin: searchParams.get("origin") || undefined,
+      priority: searchParams.get("priority") || undefined,
+      tag: searchParams.get("tag") || undefined,
+      from: searchParams.get("from") || undefined,
+      to: searchParams.get("to") || undefined,
+    }),
+    [searchParams, isComercial, session?.id],
+  );
 
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [distributeOpen, setDistributeOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [bulkTags, setBulkTags] = useState("");
   const distribute = useDistributeLeads();
+  const companyId = session?.companyId || "";
+  const hiddenStages = usePipelinePrefsStore(
+    (s) => s.hiddenStagesByCompany[companyId] ?? NO_HIDDEN_STAGES,
+  );
+  const setHiddenStages = usePipelinePrefsStore((s) => s.setHiddenStages);
 
-  const kanban = useKanban(filters);
-  const leads = useLeads({ ...filters, pageSize: 100 });
-  const users = useQuery({
-    queryKey: queryKeys.users,
-    queryFn: async () => {
-      const { data } = await api.get<{ data: Array<{ id: string; name: string }> }>("/users");
-      return data.data;
-    },
-  });
+  const kanban = useKanban(view === "kanban");
+  const leads = useLeads({ ...filters, pageSize: 100 }, view === "table");
+  const users = useUserDirectory(!isComercial);
 
-  const allLeads = useMemo(() => leads.data?.data || [], [leads.data?.data]);
+  const filteredKanban = useMemo(() => {
+    if (!kanban.data) return undefined;
+    const filtered = filterKanbanBoard(kanban.data, filters);
+    return applyColumnVisibility(filtered, hiddenStages);
+  }, [kanban.data, filters, hiddenStages]);
+
+  const availableStages = useMemo(
+    () => (kanban.data?.columns.map((column) => column.status) ?? []) as PipelineStage[],
+    [kanban.data],
+  );
+
+  const allLeads = useMemo(() => {
+    if (view === "table") return leads.data?.data || [];
+    return filteredKanban?.columns.flatMap((column) => column.leads) || [];
+  }, [view, leads.data?.data, filteredKanban]);
   const selectedLeads = useMemo(
     () => allLeads.filter((l) => selected.includes(l.id)),
     [allLeads, selected],
@@ -119,7 +143,7 @@ export function LeadsPageClient() {
   }
 
   return (
-    <Stack spacing={2.5} sx={{ flex: 1, minHeight: 0, height: "100%" }}>
+    <Stack spacing={2.5} sx={{ flex: 1, minHeight: 0 }}>
       <Stack
         direction={{ xs: "column", md: "row" }}
         justifyContent="space-between"
@@ -150,6 +174,9 @@ export function LeadsPageClient() {
             <ToggleButton value="kanban">Kanban</ToggleButton>
             <ToggleButton value="table">Tabela</ToggleButton>
           </ToggleButtonGroup>
+          {view === "kanban" ? (
+            <CustomizeColumnsButton onClick={() => setColumnsOpen(true)} />
+          ) : null}
           {!isComercial ? (
             <PermissionGate permission="crm:editar">
               <Button variant="outlined" onClick={() => setDistributeOpen(true)}>
@@ -188,14 +215,22 @@ export function LeadsPageClient() {
             label="Responsável"
             value={filters.ownerId || ""}
             onChange={(e) => setFilter("ownerId", e.target.value)}
+            disabled={users.isLoading}
+            helperText={users.isLoading ? "Carregando…" : undefined}
             sx={{ minWidth: 160 }}
           >
             <MenuItem value="">Todos</MenuItem>
-            {(users.data || []).map((u) => (
-              <MenuItem key={u.id} value={u.id}>
-                {u.name}
+            {users.isLoading ? (
+              <MenuItem value="__loading" disabled>
+                Carregando…
               </MenuItem>
-            ))}
+            ) : (
+              (users.data || []).map((u) => (
+                <MenuItem key={u.id} value={u.id}>
+                  {u.name}
+                </MenuItem>
+              ))
+            )}
           </TextField>
         ) : null}
         <TextField
@@ -239,7 +274,7 @@ export function LeadsPageClient() {
           label="De"
           InputLabelProps={{ shrink: true }}
           value={filters.from?.slice(0, 10) || ""}
-          onChange={(e) => setFilter("from", e.target.value ? new Date(e.target.value).toISOString() : "")}
+          onChange={(e) => setFilter("from", e.target.value)}
         />
         <TextField
           size="small"
@@ -247,7 +282,7 @@ export function LeadsPageClient() {
           label="Até"
           InputLabelProps={{ shrink: true }}
           value={filters.to?.slice(0, 10) || ""}
-          onChange={(e) => setFilter("to", e.target.value ? new Date(e.target.value + "T23:59:59").toISOString() : "")}
+          onChange={(e) => setFilter("to", e.target.value)}
         />
       </Stack>
 
@@ -312,93 +347,113 @@ export function LeadsPageClient() {
         </Paper>
       ) : null}
 
-      <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: view === "kanban" ? "hidden" : "auto",
+        }}
+      >
         {view === "kanban" ? (
           kanban.isLoading ? (
-            <Box py={8} display="flex" justifyContent="center">
-              <CircularProgress />
-            </Box>
+            <KanbanSkeleton />
           ) : kanban.isError ? (
-            <ErrorState onRetry={() => kanban.refetch()} />
-          ) : !kanban.data?.columns.some((c) => c.count > 0) ? (
+            <ErrorState
+              error={kanban.error}
+              resourceLabel="os leads"
+              onRetry={() => kanban.refetch()}
+            />
+          ) : !filteredKanban?.columns.some((c) => c.count > 0) ? (
             <EmptyState title="Nenhum lead no pipeline" description="Crie ou importe leads para começar." />
           ) : (
-            <KanbanBoard board={kanban.data} />
+            <KanbanBoard board={filteredKanban} />
           )
         ) : leads.isLoading ? (
-          <Box py={8} display="flex" justifyContent="center">
-            <CircularProgress />
-          </Box>
+          <TableSkeleton
+            columns={8}
+            headers={["", "Nome", "Documento", "Status", "Responsável", "Origem", "Valor", "Criação"]}
+          />
         ) : leads.isError ? (
-          <ErrorState onRetry={() => leads.refetch()} />
+          <ErrorState error={leads.error} resourceLabel="os leads" onRetry={() => leads.refetch()} />
         ) : !allLeads.length ? (
           <EmptyState title="Nenhum lead encontrado" />
         ) : (
-          <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={allSelected}
+                      indeterminate={selected.length > 0 && !allSelected}
+                      onChange={(e) => setSelected(e.target.checked ? allLeads.map((l) => l.id) : [])}
+                    />
+                  </TableCell>
+                  <TableCell>Nome</TableCell>
+                  <TableCell>Documento</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Responsável</TableCell>
+                  <TableCell>Origem</TableCell>
+                  <TableCell align="right">Valor</TableCell>
+                  <TableCell>Criação</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {allLeads.map((lead) => (
+                  <TableRow key={lead.id} hover selected={selected.includes(lead.id)}>
                     <TableCell padding="checkbox">
                       <Checkbox
-                        checked={allSelected}
-                        indeterminate={selected.length > 0 && !allSelected}
-                        onChange={(e) => setSelected(e.target.checked ? allLeads.map((l) => l.id) : [])}
+                        checked={selected.includes(lead.id)}
+                        onChange={(e) =>
+                          setSelected((prev) =>
+                            e.target.checked ? [...prev, lead.id] : prev.filter((id) => id !== lead.id),
+                          )
+                        }
                       />
                     </TableCell>
-                    <TableCell>Nome</TableCell>
-                    <TableCell>Documento</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell>Responsável</TableCell>
-                    <TableCell>Origem</TableCell>
-                    <TableCell align="right">Valor</TableCell>
-                    <TableCell>Criação</TableCell>
+                    <TableCell>
+                      <Typography
+                        component={Link}
+                        href={`/leads/${lead.id}`}
+                        variant="body2"
+                        color="primary"
+                        sx={{ textDecoration: "none", fontWeight: 600 }}
+                      >
+                        {lead.name}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{lead.cpf}</TableCell>
+                    <TableCell>
+                      <StatusBadge label={lead.status} />
+                    </TableCell>
+                    <TableCell>{lead.ownerName}</TableCell>
+                    <TableCell>{lead.origin}</TableCell>
+                    <TableCell align="right">{formatCurrency(lead.process.totalValue)}</TableCell>
+                    <TableCell>{formatDate(lead.createdAt)}</TableCell>
                   </TableRow>
-                </TableHead>
-                <TableBody>
-                  {allLeads.map((lead) => (
-                    <TableRow key={lead.id} hover selected={selected.includes(lead.id)}>
-                      <TableCell padding="checkbox">
-                        <Checkbox
-                          checked={selected.includes(lead.id)}
-                          onChange={(e) =>
-                            setSelected((prev) =>
-                              e.target.checked ? [...prev, lead.id] : prev.filter((id) => id !== lead.id),
-                            )
-                          }
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Typography
-                          component={Link}
-                          href={`/leads/${lead.id}`}
-                          variant="body2"
-                          color="primary"
-                          sx={{ textDecoration: "none", fontWeight: 600 }}
-                        >
-                          {lead.name}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>{lead.cpf}</TableCell>
-                      <TableCell>
-                        <StatusBadge label={lead.status} />
-                      </TableCell>
-                      <TableCell>{lead.ownerName}</TableCell>
-                      <TableCell>{lead.origin}</TableCell>
-                      <TableCell align="right">{formatCurrency(lead.process.totalValue)}</TableCell>
-                      <TableCell>{formatDate(lead.createdAt)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
       </Box>
 
       <CreateLeadDialog open={createOpen} onClose={() => setCreateOpen(false)} />
       <ImportLeadsDialog open={importOpen} onClose={() => setImportOpen(false)} />
       <DistributeLeadsDialog open={distributeOpen} onClose={() => setDistributeOpen(false)} leadIds={selected} />
+      <CustomizeColumnsDialog
+        open={columnsOpen}
+        onClose={() => setColumnsOpen(false)}
+        stages={availableStages}
+        hiddenStages={hiddenStages}
+        onSave={(hidden) => {
+          if (!companyId) return;
+          setHiddenStages(companyId, hidden);
+          enqueueSnackbar("Colunas do kanban atualizadas", { variant: "success" });
+        }}
+      />
     </Stack>
   );
 }

@@ -6,7 +6,7 @@ export const leadFormSchema = z.object({
   email: z.string().email("E-mail inválido"),
   phone: z.string().min(8, "Informe o telefone"),
   whatsapp: z.string().optional(),
-  cpf: z.string().optional(),
+  cpf: z.string().min(11, "Informe o CPF"),
   origin: z.string().optional(),
   campaign: z.string().optional(),
   channel: z.string().optional(),

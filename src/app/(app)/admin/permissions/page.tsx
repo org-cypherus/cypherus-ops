@@ -20,67 +20,62 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
 import { useMemo, useState } from "react";
 import { ErrorState } from "@/components/feedback/ErrorState";
-import { api } from "@/lib/api/client";
-import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
+import { mapApiPermissions, UI_TO_API_PERMISSION } from "@/lib/auth/mappers";
+import type { Permission } from "@/lib/auth/permissions";
 import { queryKeys } from "@/lib/query/keys";
-
-const modules = [
-  { key: "crm", label: "CRM / Leads", actions: ["visualizar", "criar", "editar", "excluir"] },
-  { key: "agenda", label: "Agenda", actions: ["visualizar", "criar", "editar", "excluir"] },
-  { key: "contratos", label: "Contratos", actions: ["visualizar", "criar", "editar"] },
-  { key: "financeiro", label: "Financeiro", actions: ["visualizar", "editar"] },
-  { key: "dashboard", label: "Dashboard", actions: ["visualizar"] },
-  { key: "relatorios", label: "Relatórios", actions: ["exportar"] },
-  { key: "admin", label: "Administração", actions: ["visualizar", "editar"] },
-];
+import {
+  PERMISSION_ACTIONS,
+  PERMISSION_MODULES,
+  permissionFromModule,
+} from "@/modules/admin/permission-modules";
+import { fetchRoleCatalog, fetchRolePermissions, replaceRolePermissions } from "@/modules/admin/services";
 
 export default function PermissionsPage() {
-  const [role, setRole] = useState<RoleName>(Role.Administrador);
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
+  const rolesQuery = useQuery({
+    queryKey: queryKeys.roles.catalog,
+    queryFn: fetchRoleCatalog,
+  });
+  const [roleId, setRoleId] = useState<string>("");
+  const selectedRoleId = roleId || rolesQuery.data?.[0]?.id || "";
 
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: queryKeys.roles,
-    queryFn: async () => {
-      const { data } = await api.get<{
-        data: Array<{ name: RoleName; permissions: Permission[] }>;
-      }>("/roles");
-      return data.data;
-    },
+  const permissionsQuery = useQuery({
+    queryKey: [...queryKeys.roles.catalog, selectedRoleId, "permissions"],
+    queryFn: () => fetchRolePermissions(selectedRoleId),
+    enabled: Boolean(selectedRoleId),
   });
 
   const selected = useMemo(
-    () => data?.find((item) => item.name === role)?.permissions || [],
-    [data, role],
+    () =>
+      mapApiPermissions(
+        (permissionsQuery.data ?? []).map((item) => ({
+          permission: item.permission_key,
+          granted: true,
+        })),
+      ),
+    [permissionsQuery.data],
   );
 
   const updatePermissions = useMutation({
-    mutationFn: async (permissions: Permission[]) => {
-      const { data } = await api.patch(`/roles/${encodeURIComponent(role)}/permissions`, {
-        permissions,
-      });
-      return data;
+    mutationFn: async (permission: Permission) => {
+      const key = UI_TO_API_PERMISSION[permission];
+      if (!key) throw new Error("Permissão sem equivalente na API.");
+      await replaceRolePermissions(selectedRoleId, key);
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.roles });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.me });
-      enqueueSnackbar("Permissões atualizadas", { variant: "success" });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.roles.catalog });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.roles.withPermissions });
+      enqueueSnackbar("Permissão atualizada", { variant: "success" });
     },
   });
-
-  function togglePermission(permission: Permission, checked: boolean) {
-    const next = checked
-      ? Array.from(new Set([...selected, permission]))
-      : selected.filter((p) => p !== permission);
-    updatePermissions.mutate(next);
-  }
 
   return (
     <Stack spacing={2.5}>
       <Box>
         <Typography variant="h4">Matriz de Permissões</Typography>
         <Typography variant="body2" color="text.secondary">
-          Módulos × ações por perfil — alterações persistem na sessão mock
+          Cargos da empresa × chaves da API (`leads.view`, `contracts.sign`, …)
         </Typography>
       </Box>
 
@@ -88,30 +83,35 @@ export default function PermissionsPage() {
         select
         size="small"
         label="Perfil"
-        value={role}
-        onChange={(e) => setRole(e.target.value as RoleName)}
+        value={selectedRoleId}
+        onChange={(e) => setRoleId(e.target.value)}
         sx={{ maxWidth: 280 }}
+        disabled={!rolesQuery.data?.length}
       >
-        {(data || []).map((item) => (
-          <MenuItem key={item.name} value={item.name}>
+        {(rolesQuery.data || []).map((item) => (
+          <MenuItem key={item.id} value={item.id}>
             {item.name}
           </MenuItem>
         ))}
       </TextField>
 
-      {isLoading ? (
+      {rolesQuery.isLoading || permissionsQuery.isLoading ? (
         <Box py={8} display="flex" justifyContent="center">
           <CircularProgress />
         </Box>
-      ) : isError ? (
-        <ErrorState onRetry={() => refetch()} />
+      ) : rolesQuery.isError || permissionsQuery.isError ? (
+        <ErrorState
+          error={rolesQuery.error || permissionsQuery.error}
+          resourceLabel="cargos e permissões"
+          onRetry={() => permissionsQuery.refetch()}
+        />
       ) : (
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Módulo</TableCell>
-                {["visualizar", "criar", "editar", "excluir", "exportar"].map((action) => (
+                {PERMISSION_ACTIONS.map((action) => (
                   <TableCell key={action} align="center">
                     {action}
                   </TableCell>
@@ -119,19 +119,21 @@ export default function PermissionsPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {modules.map((mod) => (
+              {PERMISSION_MODULES.map((mod) => (
                 <TableRow key={mod.key}>
                   <TableCell>{mod.label}</TableCell>
-                  {["visualizar", "criar", "editar", "excluir", "exportar"].map((action) => {
-                    const permission = `${mod.key}:${action}` as Permission;
+                  {PERMISSION_ACTIONS.map((action) => {
+                    const permission = permissionFromModule(mod.key, action);
                     const available = mod.actions.includes(action);
                     return (
                       <TableCell key={action} align="center">
                         {available ? (
                           <Checkbox
                             checked={selected.includes(permission)}
-                            disabled={updatePermissions.isPending}
-                            onChange={(e) => togglePermission(permission, e.target.checked)}
+                            disabled={updatePermissions.isPending || selected.includes(permission)}
+                            onChange={(e) => {
+                              if (e.target.checked) updatePermissions.mutate(permission);
+                            }}
                           />
                         ) : (
                           "—"

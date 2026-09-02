@@ -4,8 +4,7 @@ import { homePathForRole, homePathForSession, roleHasPermission, userHasPermissi
 import { Role, ROLE_PERMISSIONS } from "./permissions";
 
 describe("homePathForRole", () => {
-  it("routes juridico and financeiro to specialized homes", () => {
-    expect(homePathForRole(Role.Jurídico)).toBe("/legal");
+  it("routes financeiro to the financial home", () => {
     expect(homePathForRole(Role.Financeiro)).toBe("/financial");
   });
 
@@ -13,6 +12,7 @@ describe("homePathForRole", () => {
     expect(homePathForRole(Role.Administrador)).toBe("/leads");
     expect(homePathForRole(Role.Comercial)).toBe("/leads");
     expect(homePathForRole(Role.Gestor)).toBe("/leads");
+    expect(homePathForRole(Role.Jurídico)).toBe("/leads");
   });
 });
 
@@ -36,6 +36,16 @@ describe("homePathForSession", () => {
       }),
     ).toBe("/financial");
   });
+
+  it("never sends a tenant session to the removed platform console", () => {
+    expect(
+      homePathForSession({
+        role: Role.Administrador,
+        permissions: ROLE_PERMISSIONS[Role.Administrador],
+        features: resolveFeatures("ENTERPRISE"),
+      }),
+    ).toBe("/leads");
+  });
 });
 
 describe("roleHasPermission", () => {
@@ -46,17 +56,12 @@ describe("roleHasPermission", () => {
   it("denies financeiro from creating leads", () => {
     expect(roleHasPermission(Role.Financeiro, "crm:criar")).toBe(false);
   });
-
-  it("allows juridico agenda but not lead delete", () => {
-    expect(roleHasPermission(Role.Jurídico, "agenda:criar")).toBe(true);
-    expect(roleHasPermission(Role.Jurídico, "crm:excluir")).toBe(false);
-  });
 });
 
 describe("userHasPermission", () => {
   it("checks permission list", () => {
-    expect(userHasPermission(["crm:visualizar", "agenda:visualizar"], "agenda:visualizar")).toBe(true);
-    expect(userHasPermission(["crm:visualizar"], "agenda:criar")).toBe(false);
+    expect(userHasPermission(["crm:visualizar", "contratos:visualizar"], "contratos:visualizar")).toBe(true);
+    expect(userHasPermission(["crm:visualizar"], "crm:criar")).toBe(false);
     expect(userHasPermission(undefined, "crm:visualizar")).toBe(false);
   });
 });
