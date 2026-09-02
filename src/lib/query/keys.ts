@@ -44,6 +44,7 @@ export const queryKeys = {
   orgTree: ["teams", "org-tree"] as const,
   leadNames: ["lead-names"] as const,
   plans: ["plans"] as const,
+  planLimits: ["plans", "limits"] as const,
   roles: {
     catalog: ["roles", "catalog"] as const,
     withPermissions: ["roles", "with-permissions"] as const,

@@ -33,7 +33,8 @@ import { Controller, useForm, type FieldPath } from "react-hook-form";
 import { getApiError } from "@/lib/api/client";
 import type { ParsedApiError } from "@/lib/api/errors";
 import { formatCnpj } from "@/lib/utils/document";
-import { findSignupPlanOption, signupPlanOptions } from "@/modules/landing/content";
+import { usePlanCatalog } from "@/modules/billing/use-plan-catalog";
+import { buildSignupPlanOptions, findSignupPlanOption } from "@/modules/landing/content";
 import {
   billingIntervalLabel,
   canSubmitSignup,
@@ -151,7 +152,12 @@ export function SignupForm() {
   });
 
   const values = watch();
-  const selectedPlanMeta = useMemo(() => findSignupPlanOption(values.planCode), [values.planCode]);
+  const { plans: catalogPlans, isLoading: plansLoading, isError: plansError } = usePlanCatalog();
+  const signupOptions = useMemo(() => buildSignupPlanOptions(catalogPlans), [catalogPlans]);
+  const selectedPlanMeta = useMemo(
+    () => findSignupPlanOption(values.planCode, signupOptions),
+    [signupOptions, values.planCode],
+  );
 
   function applyZodIssues(issues: { path: (string | number)[]; message: string }[]) {
     for (const issue of issues) {
@@ -216,7 +222,7 @@ export function SignupForm() {
   }
 
   if (createdAccount) {
-    const plan = findSignupPlanOption(createdAccount.planCode);
+    const plan = findSignupPlanOption(createdAccount.planCode, signupOptions);
     return (
       <Card sx={{ width: "100%", maxWidth: 640 }} elevation={0} variant="outlined">
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
@@ -390,13 +396,16 @@ export function SignupForm() {
                 Plano e assinatura
               </Typography>
               <Stack spacing={2}>
+                {plansError ? (
+                  <Alert severity="error">Não foi possível carregar os planos do catálogo.</Alert>
+                ) : null}
                 <TextField
                   select
                   label="Plano"
                   fullWidth
-                  disabled={submitting}
+                  disabled={submitting || plansLoading || plansError}
                   error={Boolean(errors.planCode)}
-                  helperText={errors.planCode?.message}
+                  helperText={plansLoading ? "Carregando preços do catálogo…" : errors.planCode?.message}
                   value={values.planCode}
                   onChange={(event) =>
                     setValue("planCode", event.target.value as SignupFormValues["planCode"], {
@@ -404,15 +413,21 @@ export function SignupForm() {
                     })
                   }
                 >
-                  {signupPlanOptions.map((option) => (
+                  {signupOptions.map((option) => (
                     <MenuItem key={option.code} value={option.code}>
-                      {option.label} — {option.price}/mês
+                      {option.label}
+                      {option.price ? ` — ${option.price}/mês` : ""}
                     </MenuItem>
                   ))}
                 </TextField>
 
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  <Chip size="small" label={`${selectedPlanMeta.price}/mês`} color="primary" variant="outlined" />
+                  <Chip
+                    size="small"
+                    label={selectedPlanMeta.price ? `${selectedPlanMeta.price}/mês` : "Preço do catálogo"}
+                    color="primary"
+                    variant="outlined"
+                  />
                   <Chip size="small" label={selectedPlanMeta.note} variant="outlined" />
                 </Stack>
 
@@ -475,7 +490,14 @@ export function SignupForm() {
               <Typography variant="overline" color="text.secondary">
                 Contratação
               </Typography>
-              <ReviewRow label="Plano" value={`${selectedPlanMeta.label} — ${selectedPlanMeta.price}/mês`} />
+              <ReviewRow
+                label="Plano"
+                value={
+                  selectedPlanMeta.price
+                    ? `${selectedPlanMeta.label} — ${selectedPlanMeta.price}/mês`
+                    : selectedPlanMeta.label
+                }
+              />
               <ReviewRow label="Periodicidade" value={billingIntervalLabel(values.billingInterval)} />
               <ReviewRow label="Após confirmar" value="Assinatura inicia em trial" />
             </Box>

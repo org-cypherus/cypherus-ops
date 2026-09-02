@@ -51,11 +51,14 @@ type SubscriptionResponse = {
   status: string;
 };
 
-type PlanResponse = {
+export type PlanResponse = {
   id: string;
   code: string;
   name: string;
+  description?: string | null;
+  price?: string | number;
   billing_interval: string;
+  is_active?: boolean;
 };
 
 type RoleResponse = {
