@@ -71,6 +71,7 @@ export type Plan = {
   name: string;
   price: string;
   priceNote: string;
+  pricePrefix?: string;
   highlight?: boolean;
   badge?: string;
   cta: { label: string; href: string; variant: "solid" | "outline" };
@@ -81,7 +82,7 @@ export const plans: Plan[] = [
   {
     id: "essencial",
     name: "Essencial",
-    price: "R$ 349,90",
+    price: "",
     priceNote: "/mês",
     cta: {
       label: "Começar no Essencial",
@@ -89,7 +90,8 @@ export const plans: Plan[] = [
       variant: "outline",
     },
     features: [
-      "Até 5 usuários",
+      "5 usuários inclusos",
+      "50 GB de armazenamento",
       "CRM + Pipeline Kanban",
       "Histórico básico",
       "Distribuição manual de leads",
@@ -103,7 +105,7 @@ export const plans: Plan[] = [
   {
     id: "profissional",
     name: "Profissional",
-    price: "R$ 449,90",
+    price: "",
     priceNote: "/mês",
     highlight: true,
     badge: "Mais popular",
@@ -113,7 +115,8 @@ export const plans: Plan[] = [
       variant: "solid",
     },
     features: [
-      "Até 15 usuários",
+      "15 usuários inclusos",
+      "100 GB de armazenamento",
       "Tudo do Essencial",
       "Agenda (retornos e compromissos)",
       "Contratos (sem assinatura digital integrada)",
@@ -129,26 +132,47 @@ export const plans: Plan[] = [
   {
     id: "enterprise",
     name: "Enterprise",
-    price: "R$ 1.397,90",
+    price: "",
     priceNote: "/mês",
+    pricePrefix: "a partir de",
     cta: {
       label: "Falar com vendas",
       href: "mailto:comercial@cypherops.com.br",
       variant: "outline",
     },
     features: [
-      "Usuários personalizados",
+      "25 usuários inclusos",
+      "300 GB de armazenamento",
       "Tudo do Profissional",
       "Distribuição com regras avançadas",
       "Dashboard personalizado",
       "Financeiro completo",
       "Integrações múltiplas",
       "API e webhooks",
+      "WhatsApp (1 número, inbox multi-user)",
       "Personalizações sob demanda",
       "Suporte prioritário",
     ],
   },
 ];
+
+export const addons = [
+  { item: "Usuário extra", price: "R$ 49 / mês" },
+  { item: "Storage extra", price: "R$ 29 / 50 GB / mês" },
+  {
+    item: "WhatsApp (1 número, inbox multi-user, se não for Enterprise)",
+    price: "R$ 149 / mês + tarifa Meta (repasse)",
+  },
+  { item: "Número WhatsApp extra", price: "R$ 99 / mês + Meta" },
+  {
+    item: "API / webhooks (se não for Enterprise)",
+    price: "R$ 197 / mês",
+  },
+  {
+    item: "Customização / integração",
+    price: "Sob proposta",
+  },
+] as const;
 
 export const proofPoints = [
   { value: "1", label: "Plataforma unificada" },
@@ -156,12 +180,26 @@ export const proofPoints = [
   { value: String(plans.length), label: "Planos comerciais" },
 ] as const;
 
+export type ComparisonValue = boolean | string;
+
 export const comparisonRows: {
   feature: string;
-  essencial: boolean;
-  profissional: boolean;
-  enterprise: boolean;
+  essencial: ComparisonValue;
+  profissional: ComparisonValue;
+  enterprise: ComparisonValue;
 }[] = [
+  {
+    feature: "Usuários inclusos",
+    essencial: "5",
+    profissional: "15",
+    enterprise: "25",
+  },
+  {
+    feature: "Storage incluso",
+    essencial: "50 GB",
+    profissional: "100 GB",
+    enterprise: "300 GB",
+  },
   { feature: "CRM", essencial: true, profissional: true, enterprise: true },
   { feature: "Kanban", essencial: true, profissional: true, enterprise: true },
   {
@@ -233,6 +271,12 @@ export const comparisonRows: {
     enterprise: true,
   },
   {
+    feature: "WhatsApp",
+    essencial: false,
+    profissional: false,
+    enterprise: true,
+  },
+  {
     feature: "Personalizações",
     essencial: false,
     profissional: false,
@@ -240,32 +284,41 @@ export const comparisonRows: {
   },
 ];
 
-/** Opções do formulário de signup (preço/nome sincronizados com `plans`). */
-const signupPlanNotes: Record<PlanId, string> = {
-  essencial: "até 5 usuários · CRM",
-  profissional: "até 15 usuários · Agenda · Contratos",
-  enterprise: "usuários sob demanda · integrações",
+export const PLAN_CODE_BY_ID = {
+  essencial: "ESSENTIAL",
+  profissional: "PROFESSIONAL",
+  enterprise: "ENTERPRISE",
+} as const;
+
+/** Opções do formulário de signup (preço/nome sincronizados com `plans` hidratados da API). */
+export const signupPlanNotes: Record<PlanId, string> = {
+  essencial: "5 usuários · 50 GB · CRM",
+  profissional: "15 usuários · 100 GB · Agenda · Contratos",
+  enterprise: "25 usuários · 300 GB · integrações",
 };
 
-export const signupPlanOptions = plans.map((plan) => ({
-  code: (
-    {
-      essencial: "ESSENTIAL",
-      profissional: "PROFESSIONAL",
-      enterprise: "ENTERPRISE",
-    } as const
-  )[plan.id],
-  planId: plan.id,
-  label: plan.name,
-  price: plan.price,
-  note: signupPlanNotes[plan.id],
-}));
+export type SignupPlanOption = {
+  code: (typeof PLAN_CODE_BY_ID)[PlanId];
+  planId: PlanId;
+  label: string;
+  price: string;
+  note: string;
+};
 
-export function findSignupPlanOption(code: string) {
-  return (
-    signupPlanOptions.find((option) => option.code === code) ??
-    signupPlanOptions[1]
-  );
+export function buildSignupPlanOptions(source: Plan[] = plans): SignupPlanOption[] {
+  return source.map((plan) => ({
+    code: PLAN_CODE_BY_ID[plan.id],
+    planId: plan.id,
+    label: plan.name,
+    price: plan.pricePrefix && plan.price ? `${plan.pricePrefix} ${plan.price}` : plan.price,
+    note: signupPlanNotes[plan.id],
+  }));
+}
+
+export const signupPlanOptions = buildSignupPlanOptions();
+
+export function findSignupPlanOption(code: string, options: SignupPlanOption[] = signupPlanOptions) {
+  return options.find((option) => option.code === code) ?? options[1] ?? signupPlanOptions[1];
 }
 
 export function findPlanById(id: PlanId) {

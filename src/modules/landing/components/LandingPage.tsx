@@ -11,9 +11,11 @@ import PaymentsRoundedIcon from "@mui/icons-material/PaymentsRounded";
 import ShieldRoundedIcon from "@mui/icons-material/ShieldRounded";
 import ViewKanbanRoundedIcon from "@mui/icons-material/ViewKanbanRounded";
 import {
+  Alert,
   Box,
   Button,
   Chip,
+  CircularProgress,
   Container,
   Stack,
   Table,
@@ -25,13 +27,15 @@ import {
 } from "@mui/material";
 import NextLink from "next/link";
 import type { ReactNode } from "react";
+import { hydrateComparisonRows } from "@/modules/billing/plan-catalog";
+import { usePlanCatalog } from "@/modules/billing/use-plan-catalog";
 import {
-  comparisonRows,
+  addons,
   features,
   hero,
   landingColors,
-  plans,
   proofPoints,
+  type ComparisonValue,
   type Plan,
 } from "../content";
 import { LandingHeader } from "./LandingHeader";
@@ -47,6 +51,37 @@ const visuallyHidden = {
   whiteSpace: "nowrap",
   border: 0,
 } as const;
+
+function ComparisonCell({ value }: { value: ComparisonValue }) {
+  if (typeof value === "string") {
+    return (
+      <Typography variant="body2" fontWeight={700} color={landingColors.text} component="span">
+        {value}
+      </Typography>
+    );
+  }
+
+  if (value) {
+    return (
+      <>
+        <CheckCircleRoundedIcon aria-hidden sx={{ fontSize: 20, color: landingColors.primary, display: "block" }} />
+        <Box component="span" sx={visuallyHidden}>
+          Incluído
+        </Box>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <CloseRoundedIcon aria-hidden sx={{ fontSize: 20, color: "rgba(188,201,205,0.35)", display: "block" }} />
+      <Box component="span" sx={visuallyHidden}>
+        Não incluído
+      </Box>
+    </>
+  );
+}
+
 const featureIcons: Record<(typeof features)[number]["icon"], ReactNode> = {
   view_kanban: <ViewKanbanRoundedIcon aria-hidden />,
   calendar_month: <CalendarMonthRoundedIcon aria-hidden />,
@@ -99,11 +134,16 @@ function PlanCard({ plan }: { plan: Plan }) {
       <Typography id={headingId} component="h3" variant="h5" fontWeight={700} color={landingColors.text} mb={1}>
         {plan.name}
       </Typography>
-      <Stack direction="row" alignItems="baseline" spacing={0.5} mb={3}>
+      <Stack mb={3} spacing={0.25}>
+        {plan.pricePrefix ? (
+          <Typography component="p" variant="caption" color={landingColors.muted} sx={{ m: 0, letterSpacing: "0.04em", textTransform: "uppercase", fontWeight: 700 }}>
+            {plan.pricePrefix}
+          </Typography>
+        ) : null}
         <Typography
           component="p"
-          aria-label={`${plan.price} por mês`}
-          sx={{ fontSize: { xs: "2rem", md: "2.4rem" }, fontWeight: 800, color: landingColors.text, m: 0 }}
+          aria-label={plan.pricePrefix ? `${plan.pricePrefix} ${plan.price} por mês` : `${plan.price} por mês`}
+          sx={{ fontSize: { xs: "2rem", md: "2.4rem" }, fontWeight: 800, color: landingColors.text, m: 0, lineHeight: 1.15 }}
         >
           {plan.price}
           <Typography component="span" color={landingColors.muted} sx={{ fontSize: "1rem", fontWeight: 400, ml: 0.5 }}>
@@ -154,6 +194,9 @@ function PlanCard({ plan }: { plan: Plan }) {
 }
 
 export function LandingPage() {
+  const { plans: catalogPlans, limits, isLoading: plansLoading, isError: plansError } = usePlanCatalog();
+  const comparison = hydrateComparisonRows(limits);
+
   return (
     <Box
       sx={{
@@ -440,18 +483,90 @@ export function LandingPage() {
               </Typography>
             </Stack>
 
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
-                gap: 3,
-                alignItems: "stretch",
-                pt: 1.5,
-              }}
-            >
-              {plans.map((plan) => (
-                <PlanCard key={plan.id} plan={plan} />
-              ))}
+            {plansLoading ? (
+              <Stack alignItems="center" py={8} spacing={2}>
+                <CircularProgress aria-label="Carregando planos" />
+                <Typography color={landingColors.muted} variant="body2">
+                  Carregando preços do catálogo…
+                </Typography>
+              </Stack>
+            ) : plansError || catalogPlans.every((plan) => !plan.price) ? (
+              <Alert severity="error">
+                Não foi possível carregar os planos. Atualize a página ou tente novamente em instantes.
+              </Alert>
+            ) : (
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", md: "1fr 1fr 1fr" },
+                  gap: 3,
+                  alignItems: "stretch",
+                  pt: 1.5,
+                }}
+              >
+                {catalogPlans.map((plan) => (
+                  <PlanCard key={plan.id} plan={plan} />
+                ))}
+              </Box>
+            )}
+
+            <Box id="addons" aria-labelledby="addons-heading" sx={{ mt: { xs: 8, md: 10 } }}>
+              <Stack textAlign="center" spacing={1.5} mb={4} maxWidth={640} mx="auto">
+                <Typography
+                  id="addons-heading"
+                  component="h3"
+                  sx={{ fontSize: { xs: "1.35rem", md: "1.75rem" }, fontWeight: 700, color: landingColors.text }}
+                >
+                  Add-ons
+                </Typography>
+                <Typography component="p" color={landingColors.muted} variant="body2">
+                  WhatsApp e API já entram no Enterprise. Nos demais planos, são contratados à parte. Customização entra só sob proposta.
+                </Typography>
+              </Stack>
+              <Box
+                sx={{
+                  borderRadius: 3,
+                  border: `1px solid ${landingColors.border}`,
+                  bgcolor: landingColors.surface,
+                  overflow: "hidden",
+                }}
+              >
+                <Table
+                  size="small"
+                  aria-labelledby="addons-heading"
+                  sx={{
+                    width: "100%",
+                    "& .MuiTableCell-root": { borderColor: landingColors.border },
+                  }}
+                >
+                  <TableHead>
+                    <TableRow>
+                      <TableCell
+                        scope="col"
+                        sx={{ color: landingColors.muted, fontWeight: 700, bgcolor: landingColors.surfaceHigh }}
+                      >
+                        Item
+                      </TableCell>
+                      <TableCell
+                        scope="col"
+                        sx={{ color: landingColors.muted, fontWeight: 700, bgcolor: landingColors.surfaceHigh }}
+                      >
+                        Preço
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {addons.map((addon) => (
+                      <TableRow key={addon.item} hover>
+                        <TableCell component="th" scope="row" sx={{ color: landingColors.text, fontWeight: 500 }}>
+                          {addon.item}
+                        </TableCell>
+                        <TableCell sx={{ color: landingColors.muted }}>{addon.price}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
             </Box>
           </Container>
         </Box>
@@ -525,7 +640,7 @@ export function LandingPage() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {comparisonRows.map((row) => (
+                  {comparison.map((row) => (
                     <TableRow key={row.feature} hover>
                       <TableCell
                         component="th"
@@ -552,27 +667,7 @@ export function LandingPage() {
                               width: "100%",
                             }}
                           >
-                            {row[key] ? (
-                              <>
-                                <CheckCircleRoundedIcon
-                                  aria-hidden
-                                  sx={{ fontSize: 20, color: landingColors.primary, display: "block" }}
-                                />
-                                <Box component="span" sx={visuallyHidden}>
-                                  Incluído
-                                </Box>
-                              </>
-                            ) : (
-                              <>
-                                <CloseRoundedIcon
-                                  aria-hidden
-                                  sx={{ fontSize: 20, color: "rgba(188,201,205,0.35)", display: "block" }}
-                                />
-                                <Box component="span" sx={visuallyHidden}>
-                                  Não incluído
-                                </Box>
-                              </>
-                            )}
+                            <ComparisonCell value={row[key]} />
                           </Box>
                         </TableCell>
                       ))}
