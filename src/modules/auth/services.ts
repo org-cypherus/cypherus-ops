@@ -1,7 +1,6 @@
 import { api, getApiError } from "@/lib/api/client";
 import { isMockMode } from "@/lib/api/config";
 import { isGatewayUpstreamTimeout, type ParsedApiError } from "@/lib/api/errors";
-import { isPlatformAdminEmail } from "@/lib/auth/platform";
 import {
   mapApiFeatures,
   mapApiPermissions,
@@ -108,7 +107,6 @@ function buildSessionUser(input: {
     },
     subscription: input.subscription,
     features: mapApiFeatures(input.features),
-    isPlatformAdmin: isPlatformAdminEmail(input.user.email),
   };
 }
 

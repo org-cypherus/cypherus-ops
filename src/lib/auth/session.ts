@@ -16,7 +16,6 @@ export type SessionUser = {
   company: CompanySummary;
   subscription: SubscriptionSummary;
   features: ResolvedFeatures;
-  isPlatformAdmin?: boolean;
 };
 
 const ACCESS_KEY = "cypher_ops_access_token";
@@ -65,7 +64,14 @@ export function getCachedSessionUser(): SessionUser | undefined {
     const raw = sessionStorage.getItem(SESSION_USER_KEY);
     if (!raw) return undefined;
     const parsed: unknown = JSON.parse(raw);
-    return isSessionUser(parsed) ? parsed : undefined;
+    if (!isSessionUser(parsed)) return undefined;
+    if ("isPlatformAdmin" in parsed) {
+      const { isPlatformAdmin: _stale, ...rest } = parsed as SessionUser & {
+        isPlatformAdmin?: boolean;
+      };
+      return rest;
+    }
+    return parsed;
   } catch {
     return undefined;
   }

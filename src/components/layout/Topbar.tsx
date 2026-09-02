@@ -72,7 +72,7 @@ export function Topbar() {
               {user?.name || "Usuário"}
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap display="block">
-              {user?.isPlatformAdmin ? "Plataforma" : user?.role || "—"}
+              {user?.role || "—"}
             </Typography>
           </Box>
         </Box>

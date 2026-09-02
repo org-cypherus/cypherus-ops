@@ -12,7 +12,7 @@ const sampleUser = {
   name: "Ana",
   email: "ana@example.com",
   role: "Administrador",
-  permissions: ["leads:visualizar"],
+  permissions: ["crm:visualizar"],
   companyId: "c1",
   company: { id: "c1", name: "Acme", status: "ACTIVE" },
   subscription: { planCode: "PROFESSIONAL", status: "ACTIVE" },
@@ -40,5 +40,14 @@ describe("session cache", () => {
     clearCachedSessionUser();
     expect(getCachedSessionUser()).toBeUndefined();
     expect(getCachedSessionUpdatedAt()).toBeUndefined();
+  });
+
+  it("strips a stale isPlatformAdmin flag from cached snapshots", () => {
+    sessionStorage.setItem(
+      "cypher_ops_session_user",
+      JSON.stringify({ ...sampleUser, isPlatformAdmin: true }),
+    );
+    expect(getCachedSessionUser()).toEqual(sampleUser);
+    expect(getCachedSessionUser()).not.toHaveProperty("isPlatformAdmin");
   });
 });

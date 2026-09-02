@@ -5,8 +5,6 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_USE_MOCKS: ${NEXT_PUBLIC_USE_MOCKS:-false}
-        NEXT_PUBLIC_PLATFORM_ADMIN_DOMAINS: ${NEXT_PUBLIC_PLATFORM_ADMIN_DOMAINS:-cypherops.com.br}
-        NEXT_PUBLIC_PLATFORM_ADMIN_EMAILS: ${NEXT_PUBLIC_PLATFORM_ADMIN_EMAILS:-}
     ports:
       - "${PORT:-3000}:3000"
     env_file:
