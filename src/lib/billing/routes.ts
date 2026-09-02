@@ -1,4 +1,5 @@
-import type { Permission } from "@/lib/auth/permissions";
+import type { Permission, RoleName } from "@/lib/auth/permissions";
+import { Role } from "@/lib/auth/permissions";
 import { canAccess } from "./access";
 import type { FeatureKey, ResolvedFeatures } from "./types";
 
@@ -92,14 +93,18 @@ export function getAppRouteByHref(href: string): AppRouteConfig | undefined {
 export function canSeeAppRoute(
   user:
     | {
+        role?: RoleName;
         permissions?: Permission[];
         features?: ResolvedFeatures;
       }
     | null
     | undefined,
-  route: Pick<AppRouteConfig, "permission" | "feature">,
+  route: Pick<AppRouteConfig, "href" | "permission" | "feature">,
 ): boolean {
-  if (!user?.permissions?.length) return false;
+  if (!user) return false;
+  // Cargo Financeiro: a home/nav é o módulo financeiro. Upsell de plano fica no FeatureRouteGuard.
+  if (route.href === "/financial" && user.role === Role.Financeiro) return true;
+  if (!user.permissions?.length) return false;
   if (route.feature) {
     return canAccess(user.features, user.permissions, route.feature, route.permission);
   }

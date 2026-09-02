@@ -13,6 +13,16 @@ describe("mapApiPermissions", () => {
     ).toEqual(["crm:visualizar", "contratos:visualizar"]);
   });
 
+  it("maps finance keys including permission_key alias", () => {
+    expect(
+      mapApiPermissions([
+        { permission_key: "invoices.view", granted: true },
+        { permission: "financial.reconcile", granted: true },
+        { permission: "billing.view", granted: true },
+      ]),
+    ).toEqual(["financeiro:visualizar", "financeiro:editar"]);
+  });
+
   it("maps users CRUD keys independently", () => {
     expect(
       mapApiPermissions([

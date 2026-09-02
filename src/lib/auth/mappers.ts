@@ -14,6 +14,8 @@ export const API_TO_UI_PERMISSION: Record<string, Permission> = {
   "invoices.view": "financeiro:visualizar",
   "invoices.manage": "financeiro:editar",
   "payments.register": "financeiro:editar",
+  "financial.reconcile": "financeiro:editar",
+  "billing.view": "financeiro:visualizar",
   "commissions.view": "financeiro:visualizar",
   "commissions.manage": "financeiro:editar",
   "dashboard.view": "dashboard:visualizar",
@@ -88,7 +90,8 @@ export function resolveRoleName(codeOrName?: string | null): RoleName | undefine
 }
 
 export type PermissionAccess = {
-  permission: string;
+  permission?: string;
+  permission_key?: string;
   granted: boolean;
   scope?: string | null;
   source?: string;
@@ -105,7 +108,9 @@ export function mapApiPermissions(items: PermissionAccess[] | undefined): Permis
   const mapped = new Set<Permission>();
   for (const item of items ?? []) {
     if (!item.granted) continue;
-    const ui = API_TO_UI_PERMISSION[item.permission];
+    const key = item.permission || item.permission_key;
+    if (!key) continue;
+    const ui = API_TO_UI_PERMISSION[key];
     if (ui) mapped.add(ui);
   }
   return [...mapped];
