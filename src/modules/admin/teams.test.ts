@@ -111,6 +111,38 @@ describe("buildOrgTree", () => {
     expect(tree.unassigned.map((item) => item.id)).toEqual(["f1"]);
   });
 
+  it("keeps active collaborators when the manager is inactive or missing", () => {
+    const owner = user({ id: "o1", name: "Owner", role: Role.Administrador, isOwner: true });
+    const gestor = user({ id: "g1", name: "Gestor", role: Role.Gestor, status: "Inativo" });
+    const collab = user({ id: "c1", name: "Colab", role: Role.Comercial });
+    const teams: CrmTeam[] = [
+      {
+        id: "t-root",
+        company_id: "co",
+        parent_team_id: null,
+        name: "Empresa",
+        manager_user_id: "o1",
+        is_active: true,
+      },
+      {
+        id: "t-g1",
+        company_id: "co",
+        parent_team_id: "t-root",
+        name: "Time Gestor",
+        manager_user_id: "g1",
+        is_active: true,
+      },
+    ];
+    const membersByTeamId: Record<string, CrmTeamMember[]> = {
+      "t-g1": [{ team_id: "t-g1", user_id: "c1", is_leader: false }],
+    };
+
+    const tree = buildOrgTree([owner, gestor, collab], teams, membersByTeamId);
+    expect(tree.managers).toEqual([]);
+    expect(tree.ownerCollaborators.map((item) => item.user.id)).toEqual(["c1"]);
+    expect(tree.unassigned.map((item) => item.id)).toEqual([]);
+  });
+
   it("lists root-team members under ownerCollaborators", () => {
     const owner = user({ id: "o1", name: "Owner", role: Role.Administrador, isOwner: true });
     const direct = user({ id: "d1", name: "Direto", role: Role.Comercial });
@@ -189,7 +221,7 @@ describe("inferMembersFromUsers", () => {
     };
 
     const members = inferMembersFromUsers([collab], teams, snapshot);
-    expect(members["t-ops"]?.map((item) => item.user_id)).toEqual(["c1"]);
+    expect(members["t-ops"]?.map((item) => item.user_id).sort()).toEqual(["c1", "g2"]);
     expect(members["t-com"]?.some((item) => item.user_id === "c1")).toBe(false);
   });
 

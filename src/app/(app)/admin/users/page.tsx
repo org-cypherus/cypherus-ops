@@ -593,7 +593,7 @@ export default function UsersPage() {
         ) : (
           <Box sx={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <UserOrgTree
-              users={activeUsers}
+              users={data || []}
               teams={teamOptions}
               membersByTeamId={membersByTeamId}
               teamsLoading={teamsQuery.isLoading}

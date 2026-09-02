@@ -439,6 +439,7 @@ export async function fetchTeamsWithMembers(ownerId?: string): Promise<{
 /**
  * Monta a árvore Owner → Gestores (manager do time) → Colaboradores (membros).
  * Times sem gestor ou com gestor = owner ficam fora dos nós de gestor (exceto raiz).
+ * Inativos não aparecem como nós, mas os membros ativos do time continuam visíveis.
  */
 export function buildOrgTree(
   users: AppUser[],
@@ -446,11 +447,11 @@ export function buildOrgTree(
   membersByTeamId: Record<string, CrmTeamMember[]>,
 ): OrgTree {
   const byId = new Map(users.map((user) => [user.id, user]));
-  const activeUsers = users.filter((user) => user.status === "Ativo");
+  const visibleUsers = users.filter((user) => user.status !== "Inativo");
   const owner =
-    activeUsers.find((user) => user.isOwner) ??
-    users.find((user) => user.isOwner) ??
-    activeUsers.find((user) => user.role === "Administrador") ??
+    visibleUsers.find((user) => user.isOwner) ??
+    users.find((user) => user.isOwner && user.status !== "Inativo") ??
+    visibleUsers.find((user) => user.role === "Administrador") ??
     null;
 
   const activeTeams = teams.filter((team) => team.is_active);
@@ -463,19 +464,26 @@ export function buildOrgTree(
     null;
 
   const managers: OrgTreeManagerNode[] = [];
+  const strandedCollaborators: OrgTreeCollaborator[] = [];
+
+  const collaboratorsOf = (teamId: string, managerUserId: string): OrgTreeCollaborator[] => {
+    const members = membersByTeamId[teamId] ?? [];
+    return members
+      .filter((member) => member.user_id !== managerUserId && !member.is_leader)
+      .map((member) => byId.get(member.user_id))
+      .filter((user): user is AppUser => Boolean(user) && user.status !== "Inativo")
+      .map((user) => ({ kind: "collaborator" as const, user, teamId }));
+  };
 
   for (const team of activeTeams) {
     if (!team.manager_user_id) continue;
     if (owner && team.manager_user_id === owner.id) continue;
     const manager = byId.get(team.manager_user_id);
-    if (!manager) continue;
-
-    const members = membersByTeamId[team.id] ?? [];
-    const collaborators: OrgTreeCollaborator[] = members
-      .filter((member) => member.user_id !== team.manager_user_id && !member.is_leader)
-      .map((member) => byId.get(member.user_id))
-      .filter((user): user is AppUser => Boolean(user))
-      .map((user) => ({ kind: "collaborator" as const, user, teamId: team.id }));
+    const collaborators = collaboratorsOf(team.id, team.manager_user_id);
+    if (!manager || manager.status === "Inativo") {
+      strandedCollaborators.push(...collaborators);
+      continue;
+    }
 
     managers.push({ kind: "manager", user: manager, team, collaborators });
   }
@@ -490,10 +498,17 @@ export function buildOrgTree(
       if (member.is_leader && owner && member.user_id === owner.id) continue;
       if (managers.some((node) => node.user.id === member.user_id)) continue;
       const user = byId.get(member.user_id);
-      if (!user) continue;
+      if (!user || user.status === "Inativo") continue;
       ownerCollaborators.push({ kind: "collaborator", user, teamId: rootTeam.id });
     }
+    for (const collab of strandedCollaborators) {
+      if (ownerCollaborators.some((item) => item.user.id === collab.user.id)) continue;
+      if (managers.some((node) => node.user.id === collab.user.id)) continue;
+      ownerCollaborators.push(collab);
+    }
     ownerCollaborators.sort((a, b) => a.user.name.localeCompare(b.user.name, "pt-BR"));
+  } else {
+    ownerCollaborators.push(...strandedCollaborators);
   }
 
   const assignedIds = new Set<string>();
@@ -515,7 +530,7 @@ export function buildOrgTree(
     }
   }
 
-  const unassigned = activeUsers
+  const unassigned = visibleUsers
     .filter((user) => !assignedIds.has(user.id))
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
