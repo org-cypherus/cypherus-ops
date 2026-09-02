@@ -1,11 +1,8 @@
 "use client";
 
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
-import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
-import CreditCardOutlinedIcon from "@mui/icons-material/CreditCardOutlined";
 import DashboardOutlinedIcon from "@mui/icons-material/DashboardOutlined";
 import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
-import HubOutlinedIcon from "@mui/icons-material/HubOutlined";
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
 import PeopleOutlineIcon from "@mui/icons-material/PeopleOutline";
@@ -25,8 +22,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { canAccess } from "@/lib/billing/access";
-import { APP_NAV_ROUTES, canSeeAppRoute, getAppRouteByHref } from "@/lib/billing/routes";
-import { PLATFORM_NAV_ROUTES, isPlatformPath } from "@/lib/platform/routes";
+import { APP_NAV_ROUTES, canSeeAppRoute } from "@/lib/billing/routes";
 import { Role } from "@/lib/auth/permissions";
 import { prefetchNavHref } from "@/lib/query/prefetch-routes";
 import { useLogout, useSession } from "@/modules/auth/hooks";
@@ -44,10 +40,6 @@ const icons: Record<string, ReactNode> = {
   "/financial": <PaidOutlinedIcon />,
   "/admin/users": <PeopleOutlineIcon />,
   "/admin": <SettingsOutlinedIcon />,
-  "/platform": <HubOutlinedIcon />,
-  "/platform/companies": <BusinessOutlinedIcon />,
-  "/platform/plans": <CreditCardOutlinedIcon />,
-  "/platform/billing": <PaidOutlinedIcon />,
 };
 
 const paperSx = {
@@ -67,24 +59,15 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const queryClient = useQueryClient();
   const { data: user } = useSession();
   const logout = useLogout();
-  const platformMode = Boolean(user?.isPlatformAdmin);
   const adminUsesAdminDash =
     user?.role === Role.Administrador &&
     canAccess(user?.features, user?.permissions, "dashboard_advanced", "dashboard:visualizar");
 
-  const tenantItems = APP_NAV_ROUTES.filter((item) => canSeeAppRoute(user, item)).map((item) =>
+  const visibleItems = APP_NAV_ROUTES.filter((item) => canSeeAppRoute(user, item)).map((item) =>
     item.href === "/dashboard" && adminUsesAdminDash
       ? { ...item, href: "/dashboard/admin", label: "Dashboard" }
       : item,
   );
-
-  const crmNav = getAppRouteByHref("/leads");
-  const platformCrm =
-    crmNav && canSeeAppRoute(user, crmNav)
-      ? [{ href: "/leads", label: "CRM da empresa" }]
-      : [];
-
-  const visibleItems = platformMode ? [...PLATFORM_NAV_ROUTES, ...platformCrm] : tenantItems;
 
   return (
     <Box display="flex" flexDirection="column" height="100%" minHeight={0}>
@@ -97,7 +80,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             Cypher Ops
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {platformMode ? "Console da plataforma" : "Operação comercial"}
+            Operação comercial
           </Typography>
         </Box>
       </Toolbar>
@@ -106,10 +89,8 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
           const selected =
             pathname === item.href ||
             (item.href === "/dashboard/admin" && pathname.startsWith("/dashboard")) ||
-            (item.href === "/platform" && isPlatformPath(pathname) && pathname === "/platform") ||
             (item.href !== "/admin" &&
               item.href !== "/dashboard/admin" &&
-              item.href !== "/platform" &&
               pathname.startsWith(item.href)) ||
             (item.href === "/admin" &&
               pathname.startsWith("/admin") &&

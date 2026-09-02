@@ -1,6 +1,5 @@
 import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
 import { ROLE_PERMISSIONS } from "@/lib/auth/permissions";
-import { isPlatformAdminEmail } from "@/lib/auth/platform";
 import { resolveFeatures } from "@/lib/billing/access";
 import type {
   CompanySummary,
@@ -283,7 +282,7 @@ export const mockUsers: AppUser[] = [
     email: "ops@cypherops.com.br",
     phone: "(11) 98888-1099",
     role: Role.Administrador,
-    team: "Plataforma",
+    team: "Administração",
     status: "Ativo",
     companyId: COMPANY_IDS.enterprise,
     password: DEMO_PASSWORD,
@@ -466,7 +465,6 @@ export function buildSessionUser(user: AppUser): SessionUser {
       status: subscription.status,
     },
     features: resolveFeatures(subscription.planCode),
-    isPlatformAdmin: isPlatformAdminEmail(user.email),
   };
 }
 

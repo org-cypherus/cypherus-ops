@@ -16,7 +16,6 @@ export type SessionUser = {
   company: CompanySummary;
   subscription: SubscriptionSummary;
   features: ResolvedFeatures;
-  isPlatformAdmin?: boolean;
 };
 
 const ACCESS_KEY = "cypher_ops_access_token";

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { homePathForSession } from "@/lib/auth/access";
 import {
   buildSessionUser,
   createLead,
@@ -35,11 +36,10 @@ describe("buildSessionUser (company tier)", () => {
     expect(carla.features.agenda?.enabled).toBe(false);
   });
 
-  it("marks Cypher staff email as platform admin", () => {
+  it("treats @cypherops.com.br as a tenant user, not platform staff", () => {
     const ops = buildSessionUser(mockUsers.find((u) => u.email === "ops@cypherops.com.br")!);
-    const ana = buildSessionUser(mockUsers.find((u) => u.email === "ana@cypherops.com")!);
-    expect(ops.isPlatformAdmin).toBe(true);
-    expect(ana.isPlatformAdmin).toBe(false);
+    expect("isPlatformAdmin" in ops).toBe(false);
+    expect(homePathForSession(ops)).toBe("/leads");
   });
 });
 

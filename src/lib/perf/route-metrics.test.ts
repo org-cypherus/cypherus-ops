@@ -24,6 +24,8 @@ describe("primaryQueryForPath", () => {
 
   it("returns null for unknown routes", () => {
     expect(primaryQueryForPath("/admin/users")).toBeNull();
+    expect(primaryQueryForPath("/platform")).toBeNull();
+    expect(primaryQueryForPath("/platform/companies")).toBeNull();
   });
 });
 

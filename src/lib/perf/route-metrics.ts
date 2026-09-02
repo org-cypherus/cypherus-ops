@@ -75,13 +75,6 @@ export function primaryQueryForPath(pathname: string): PrimaryQueryTarget | null
     };
   }
 
-  if (pathname === "/platform" || pathname.startsWith("/platform/")) {
-    return {
-      label: "platform",
-      match: (key) => key[0] === "platform" && (key[1] === "overview" || key[1] === "companies"),
-    };
-  }
-
   return null;
 }
 

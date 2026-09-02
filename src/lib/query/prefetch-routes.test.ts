@@ -35,7 +35,6 @@ describe("prefetchWarmQueries", () => {
     company: { id: "c1", name: "X", status: "active" },
     subscription: { planCode: "PROFESSIONAL", status: "active" },
     features: [],
-    isPlatformAdmin: false,
   };
 
   it("skips kanban prefetch on the leads home", async () => {

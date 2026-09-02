@@ -23,7 +23,7 @@ describe("matchAppRoute", () => {
     expect(matchAppRoute("/reports")).toBeUndefined();
   });
 
-  it("does not treat platform console as a tenant-gated route", () => {
+  it("does not register /platform as a tenant-gated route", () => {
     expect(matchAppRoute("/platform")).toBeUndefined();
     expect(matchAppRoute("/platform/companies")).toBeUndefined();
     expect(matchAppRoute("/platform/plans")).toBeUndefined();

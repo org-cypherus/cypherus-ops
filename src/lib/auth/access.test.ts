@@ -37,15 +37,14 @@ describe("homePathForSession", () => {
     ).toBe("/financial");
   });
 
-  it("routes Cypher staff to the platform console", () => {
+  it("sends tenant administrators to the CRM home, not /platform", () => {
     expect(
       homePathForSession({
         role: Role.Administrador,
         permissions: ROLE_PERMISSIONS[Role.Administrador],
         features: resolveFeatures("ENTERPRISE"),
-        isPlatformAdmin: true,
       }),
-    ).toBe("/platform");
+    ).toBe("/leads");
   });
 });
 

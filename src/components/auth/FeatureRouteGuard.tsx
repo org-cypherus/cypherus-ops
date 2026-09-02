@@ -6,7 +6,6 @@ import { AccessDeniedState } from "@/components/feedback/AccessDeniedState";
 import { hasFeature, minimumPlanForFeature } from "@/lib/billing/access";
 import { planLabel } from "@/lib/billing/plan-catalog";
 import { canSeeAppRoute, matchAppRoute } from "@/lib/billing/routes";
-import { isPlatformPath } from "@/lib/platform/routes";
 import type { FeatureKey } from "@/lib/billing/types";
 import { useSession } from "@/modules/auth/hooks";
 import { usePathname } from "next/navigation";
@@ -62,9 +61,7 @@ export function FeatureRouteGuard({ children }: { children: ReactNode }) {
 
   let content: ReactNode = children;
 
-  if (isPlatformPath(pathname)) {
-    content = user.isPlatformAdmin ? children : <PermissionDenied label="a visão de plataforma" />;
-  } else if (route) {
+  if (route) {
     if (route.feature && !hasFeature(user.features, route.feature)) {
       content = <PlanUpsell feature={route.feature} label={route.label} />;
     } else if (!canSeeAppRoute(user, route)) {
