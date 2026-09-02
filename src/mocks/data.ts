@@ -1,6 +1,6 @@
 import { Role, type Permission, type RoleName } from "@/lib/auth/permissions";
 import { ROLE_PERMISSIONS } from "@/lib/auth/permissions";
-import { isPlatformAdminEmail } from "@/lib/auth/platform";
+import type { PlatformStaff } from "@/lib/auth/platform";
 import { resolveFeatures } from "@/lib/billing/access";
 import type {
   CompanySummary,
@@ -466,8 +466,26 @@ export function buildSessionUser(user: AppUser): SessionUser {
       status: subscription.status,
     },
     features: resolveFeatures(subscription.planCode),
-    isPlatformAdmin: isPlatformAdminEmail(user.email),
+    isPlatformAdmin: false,
   };
+}
+
+export const mockPlatformStaff: PlatformStaff & { password: string } = {
+  id: "staff-ops",
+  email: "staff@cypherops.com.br",
+  role: "PLATFORM_ADMIN",
+  last_login_at: null,
+  password: DEMO_PASSWORD,
+};
+
+let currentPlatformStaff: PlatformStaff | null = null;
+
+export function getCurrentPlatformStaff() {
+  return currentPlatformStaff;
+}
+
+export function setCurrentPlatformStaff(staff: PlatformStaff | null) {
+  currentPlatformStaff = staff;
 }
 
 export const currentUser: SessionUser = buildSessionUser(mockUsers[0]);

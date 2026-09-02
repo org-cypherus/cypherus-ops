@@ -1,47 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { isPlatformAdminEmail, parseCsvList } from "./platform";
+import { isPlatformStaff, isPlatformStaffRole } from "./platform";
 
-describe("parseCsvList", () => {
-  it("normalizes emails and drops empties", () => {
-    expect(parseCsvList("  Ana@Cypherops.com.br, ,ops@cypherops.com.br ")).toEqual([
-      "ana@cypherops.com.br",
-      "ops@cypherops.com.br",
-    ]);
+describe("isPlatformStaffRole", () => {
+  it("accepts the three staff roles from the CRM", () => {
+    expect(isPlatformStaffRole("PLATFORM_VIEWER")).toBe(true);
+    expect(isPlatformStaffRole("PLATFORM_OPS")).toBe(true);
+    expect(isPlatformStaffRole("PLATFORM_ADMIN")).toBe(true);
+    expect(isPlatformStaffRole("ADMIN")).toBe(false);
+    expect(isPlatformStaffRole("ops@cypherops.com.br")).toBe(false);
   });
 });
 
-describe("isPlatformAdminEmail", () => {
-  it("matches explicit allowlist", () => {
+describe("isPlatformStaff", () => {
+  it("does not treat a tenant user or an email domain as platform staff", () => {
     expect(
-      isPlatformAdminEmail("luccas@empresa.com", {
-        emails: ["luccas@empresa.com"],
-        domains: [],
-      }),
-    ).toBe(true);
-    expect(
-      isPlatformAdminEmail("ana@cypherops.com", {
-        emails: ["ops@cypherops.com.br"],
-        domains: [],
+      isPlatformStaff({
+        id: "u1",
+        email: "ops@cypherops.com.br",
+        role: "Administrador",
       }),
     ).toBe(false);
+    expect(isPlatformStaff({ email: "ops@cypherops.com.br" })).toBe(false);
   });
 
-  it("matches operational domain and ignores demo tenant emails", () => {
+  it("accepts a platform /me payload", () => {
     expect(
-      isPlatformAdminEmail("ops@cypherops.com.br", {
-        emails: [],
-        domains: ["cypherops.com.br"],
+      isPlatformStaff({
+        id: "staff-1",
+        email: "staff@cypherops.com.br",
+        role: "PLATFORM_ADMIN",
+        last_login_at: null,
       }),
     ).toBe(true);
-    expect(
-      isPlatformAdminEmail("ana@cypherops.com", {
-        emails: [],
-        domains: ["cypherops.com.br"],
-      }),
-    ).toBe(false);
-  });
-
-  it("defaults to cypherops.com.br when no domain list is given", () => {
-    expect(isPlatformAdminEmail("financeiro@cypherops.com.br", { emails: [] })).toBe(true);
   });
 });

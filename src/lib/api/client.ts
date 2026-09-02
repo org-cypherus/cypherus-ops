@@ -77,12 +77,19 @@ function isPublicAuthPage() {
   return path.startsWith("/login") || path.startsWith("/signup");
 }
 
+function isAuthCredentialRequest(url?: string) {
+  if (!url) return false;
+  return /\/v1\/(?:platform\/)?auth\/(?:login|refresh|logout|invitations|password-reset|email-verification)/.test(
+    url,
+  );
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const parsed = parseAxiosError(error);
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-    const skipRefresh = isPublicAuthPage() || Boolean(original?.url?.includes("/v1/auth/"));
+    const skipRefresh = isPublicAuthPage() || isAuthCredentialRequest(original?.url);
     if (parsed.status === 401 && original && !original._retry && !skipRefresh) {
       original._retry = true;
       refreshing = refreshing ?? refreshSession();

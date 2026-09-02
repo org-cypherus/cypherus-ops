@@ -19,7 +19,8 @@ import {
   readCrmTokens,
   setAuthCookies,
 } from "@/lib/server/gateway";
-import { needsUpstreamAuth, requiresCrmSession } from "@/lib/server/bff-public-routes";
+import { isPlatformAccessToken, resolvePlatformUpstreamPath } from "@/lib/server/jwt-payload";
+import { needsUpstreamAuth, requiresCrmSession, requiresPlatformSession } from "@/lib/server/bff-public-routes";
 import { isNullBodyStatus } from "@/lib/server/null-body-status";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,12 @@ const TOKEN_RESPONSE_PATHS = new Set([
   "v1/auth/login",
   "v1/auth/refresh",
   "v1/auth/invitations/accept",
+  "v1/platform/auth/login",
+  "v1/platform/auth/refresh",
 ]);
+
+const LOGOUT_PATHS = new Set(["v1/auth/logout", "v1/platform/auth/logout"]);
+const REFRESH_PATHS = new Set(["v1/auth/refresh", "v1/platform/auth/refresh"]);
 
 const TRACE_PASS_HEADERS = [
   "content-type",
@@ -111,6 +117,10 @@ async function proxy(request: NextRequest, path: string, requestId: string) {
   if (requiresCrmSession(path, request.method) && !crm.access) {
     return bffError(401, "AUTHENTICATION_FAILED", "Sessão ausente.", { requestId });
   }
+  if (requiresPlatformSession(path) && !isPlatformAccessToken(crm.access)) {
+    return bffError(401, "AUTHENTICATION_FAILED", "Sessão de plataforma ausente.", { requestId });
+  }
+  path = resolvePlatformUpstreamPath(path, crm.access);
 
   const config = gatewayConfig();
   if (!config.url) {
@@ -150,7 +160,7 @@ async function proxy(request: NextRequest, path: string, requestId: string) {
 
   let body: ArrayBuffer | string | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {
-    if (path === "v1/auth/refresh") {
+    if (REFRESH_PATHS.has(path)) {
       const incoming = await request.text();
       let refresh = crm.refresh;
       if (incoming) {
@@ -166,7 +176,7 @@ async function proxy(request: NextRequest, path: string, requestId: string) {
       }
       headers.set("Content-Type", "application/json");
       body = JSON.stringify({ refresh_token: refresh });
-    } else if (path === "v1/auth/logout") {
+    } else if (LOGOUT_PATHS.has(path)) {
       const incoming = await request.text();
       let refresh = crm.refresh;
       if (incoming) {
@@ -224,7 +234,7 @@ async function proxy(request: NextRequest, path: string, requestId: string) {
     }
   }
 
-  if (path === "v1/auth/logout") {
+  if (LOGOUT_PATHS.has(path)) {
     await clearAuthCookies();
     return new NextResponse(null, { status: upstream.status === 204 ? 204 : upstream.status });
   }
@@ -238,6 +248,7 @@ async function proxy(request: NextRequest, path: string, requestId: string) {
       token_type?: string;
       expires_in?: number;
       user?: unknown;
+      staff?: unknown;
     };
     if (payload.access_token && payload.refresh_token) {
       await setAuthCookies(payload.access_token, payload.refresh_token);
@@ -247,6 +258,7 @@ async function proxy(request: NextRequest, path: string, requestId: string) {
         token_type: payload.token_type ?? "bearer",
         expires_in: payload.expires_in,
         user: payload.user,
+        staff: payload.staff,
       },
       { status: upstream.status, headers: responseHeaders },
     );

@@ -1,7 +1,8 @@
 import { api, getApiError } from "@/lib/api/client";
 import { isMockMode } from "@/lib/api/config";
 import { isGatewayUpstreamTimeout, type ParsedApiError } from "@/lib/api/errors";
-import { isPlatformAdminEmail } from "@/lib/auth/platform";
+import { isPlatformStaff, type PlatformStaff } from "@/lib/auth/platform";
+import { Role } from "@/lib/auth/permissions";
 import {
   mapApiFeatures,
   mapApiPermissions,
@@ -14,8 +15,10 @@ import {
 } from "@/lib/auth/mappers";
 import {
   clearAccessToken,
+  getSessionKind,
   setAccessToken,
   setCompanyId,
+  setSessionKind,
   type SessionUser,
 } from "@/lib/auth/session";
 import { getQueryClient, PLANS_STALE_TIME_MS } from "@/lib/query/client";
@@ -108,7 +111,7 @@ function buildSessionUser(input: {
     },
     subscription: input.subscription,
     features: mapApiFeatures(input.features),
-    isPlatformAdmin: isPlatformAdminEmail(input.user.email),
+    isPlatformAdmin: false,
   };
 }
 
@@ -125,7 +128,19 @@ async function hydrateSession(
   setCompanyId(companyId);
 
   const [{ data: company }, { data: features }] = await Promise.all([
-    api.get<CompanyResponse>(`/v1/companies/${companyId}`),
+    api.get<CompanyResponse>(`/v1/companies/${companyId}`).catch((error: unknown) => {
+      const status = getApiError(error).status;
+      if (status === 401 || status === 403) {
+        return {
+          data: {
+            id: companyId,
+            name: user.name,
+            status: "ACTIVE",
+          } satisfies CompanyResponse,
+        };
+      }
+      throw error;
+    }),
     api.get<FeatureAccess[]>(`/v1/companies/${companyId}/features`),
   ]);
 
@@ -168,14 +183,70 @@ async function hydrateSession(
   });
 }
 
+export function shouldTryPlatformLogin(error: unknown) {
+  const parsed = getApiError(error);
+  if (parsed.status !== 401) return false;
+  return parsed.code !== "ACCOUNT_LOCKED";
+}
+
+function buildPlatformSessionUser(staff: PlatformStaff): SessionUser {
+  return {
+    id: staff.id,
+    name: staff.email.split("@")[0] || staff.email,
+    email: staff.email,
+    role: Role.Administrador,
+    permissions: [],
+    companyId: "",
+    company: {
+      id: "",
+      name: "Plataforma",
+      status: "ACTIVE",
+    },
+    subscription: {
+      planCode: "ENTERPRISE",
+      status: "ACTIVE",
+    },
+    features: {},
+    isPlatformAdmin: true,
+  };
+}
+
+async function fetchPlatformMe(): Promise<SessionUser> {
+  const { data } = await api.get<PlatformStaff>("/v1/platform/auth/me");
+  if (!isPlatformStaff(data)) {
+    throw new Error("Resposta de plataforma inválida.");
+  }
+  setSessionKind("platform");
+  return buildPlatformSessionUser(data);
+}
+
 export async function loginRequest(values: LoginFormValues) {
-  const { data } = await api.post<{
-    access_token?: string;
-    user: CrmUser;
-  }>("/v1/auth/login", values);
-  if (isMockMode() && data.access_token) setAccessToken(data.access_token);
-  setCompanyId(data.user.company_id);
-  return fetchMe();
+  try {
+    const { data } = await api.post<{
+      access_token?: string;
+      user: CrmUser;
+    }>("/v1/auth/login", values);
+    if (isMockMode() && data.access_token) setAccessToken(data.access_token);
+    setSessionKind("tenant");
+    setCompanyId(data.user.company_id);
+    return fetchMe();
+  } catch (error) {
+    if (!shouldTryPlatformLogin(error)) throw error;
+    try {
+      const { data } = await api.post<{
+        access_token?: string;
+        staff?: PlatformStaff;
+      }>("/v1/platform/auth/login", values);
+      if (isMockMode() && data.access_token) setAccessToken(data.access_token);
+      setSessionKind("platform");
+      if (isPlatformStaff(data.staff)) {
+        return buildPlatformSessionUser(data.staff);
+      }
+      return fetchPlatformMe();
+    } catch {
+      throw error;
+    }
+  }
 }
 
 export async function acceptInvitationRequest(values: AcceptInvitationFormValues) {
@@ -192,8 +263,17 @@ export async function acceptInvitationRequest(values: AcceptInvitationFormValues
 }
 
 export async function fetchMe(onPartial?: HydrateSessionProgress) {
-  const { data } = await api.get<MeResponse>("/v1/me");
-  return hydrateSession(data.user, data.company_id, data.permissions, onPartial);
+  if (getSessionKind() === "platform") {
+    return fetchPlatformMe();
+  }
+  try {
+    const { data } = await api.get<MeResponse>("/v1/me");
+    setSessionKind("tenant");
+    return hydrateSession(data.user, data.company_id, data.permissions, onPartial);
+  } catch (error) {
+    if (getApiError(error).status !== 401) throw error;
+    return fetchPlatformMe();
+  }
 }
 
 export async function logoutRequest() {

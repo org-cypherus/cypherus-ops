@@ -7,7 +7,7 @@ export function homePathForRole(role: RoleName) {
   return "/leads";
 }
 
-/** Home respeitando role ∩ features do plano da company. Staff Cypher cai na visão de plataforma. */
+/** Home respeitando role ∩ features do plano da company. Principal de plataforma (`typ=platform`) cai no console. */
 export function homePathForSession(
   user: Pick<SessionUser, "role" | "permissions" | "features"> & { isPlatformAdmin?: boolean },
 ) {

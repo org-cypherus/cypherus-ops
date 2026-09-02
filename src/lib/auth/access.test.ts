@@ -37,7 +37,7 @@ describe("homePathForSession", () => {
     ).toBe("/financial");
   });
 
-  it("routes Cypher staff to the platform console", () => {
+  it("routes a platform principal to the platform console", () => {
     expect(
       homePathForSession({
         role: Role.Administrador,

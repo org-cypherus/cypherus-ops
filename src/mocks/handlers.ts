@@ -12,6 +12,7 @@ import {
   currentUser,
   deleteLead,
   getCompanyById,
+  getCurrentPlatformStaff,
   getSubscriptionByCompanyId,
   mockCompanies,
   mockCommissionRules,
@@ -22,10 +23,12 @@ import {
   mockLeads,
   mockPayments,
   mockPlans,
+  mockPlatformStaff,
   mockTemplates,
   mockUsers,
   patchLead,
   resolveMockCompanyFeatures,
+  setCurrentPlatformStaff,
   toCompanyResponse,
   updateLeadStatus,
   type Contract as MockContract,
@@ -205,6 +208,40 @@ function toCrmTemplate(template: MockTemplate) {
   };
 }
 
+function toPlatformCompanyListItem(company: (typeof mockCompanies)[number]) {
+  const subscription = getSubscriptionByCompanyId(company.id);
+  const plan = mockPlans.find((item) => item.code === subscription?.planCode);
+  return {
+    id: company.id,
+    name: company.name,
+    document: company.document,
+    status: company.status,
+    created_at: "2026-01-15T12:00:00.000Z",
+    subscription:
+      subscription && plan
+        ? {
+            status: subscription.status,
+            plan_id: plan.id,
+            plan_code: plan.code,
+            plan_name: plan.name,
+          }
+        : null,
+  };
+}
+
+function currentSubscriptionPayload(companyId: string) {
+  const subscription = getSubscriptionByCompanyId(companyId);
+  if (!subscription) return null;
+  const plan = mockPlans.find((item) => item.code === subscription.planCode);
+  return {
+    id: subscription.id,
+    company_id: subscription.companyId,
+    plan_id: plan?.id,
+    status: subscription.status,
+    is_current: true,
+  };
+}
+
 function mePayload(user = currentUser) {
   return {
     user: {
@@ -258,6 +295,57 @@ export const handlers = [
 
   http.post(`${API}/v1/auth/logout`, () => new HttpResponse(null, { status: 204 })),
 
+  http.post(`${API}/v1/platform/auth/login`, async ({ request }) => {
+    const body = (await request.json()) as { email?: string; password?: string };
+    if (
+      body.email?.toLowerCase() !== mockPlatformStaff.email ||
+      body.password !== mockPlatformStaff.password
+    ) {
+      return crmError(401, "AUTHENTICATION_FAILED", "Credenciais inválidas.");
+    }
+    const staff = {
+      id: mockPlatformStaff.id,
+      email: mockPlatformStaff.email,
+      role: mockPlatformStaff.role,
+      last_login_at: mockPlatformStaff.last_login_at,
+    };
+    setCurrentPlatformStaff(staff);
+    return HttpResponse.json({
+      access_token: "mock-platform-access",
+      refresh_token: "mock-platform-refresh",
+      token_type: "bearer",
+      expires_in: 3600,
+      staff,
+    });
+  }),
+
+  http.post(`${API}/v1/platform/auth/refresh`, () => {
+    const staff = getCurrentPlatformStaff() ?? {
+      id: mockPlatformStaff.id,
+      email: mockPlatformStaff.email,
+      role: mockPlatformStaff.role,
+      last_login_at: mockPlatformStaff.last_login_at,
+    };
+    return HttpResponse.json({
+      access_token: "mock-platform-access",
+      refresh_token: "mock-platform-refresh",
+      token_type: "bearer",
+      expires_in: 3600,
+      staff,
+    });
+  }),
+
+  http.post(`${API}/v1/platform/auth/logout`, () => {
+    setCurrentPlatformStaff(null);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.get(`${API}/v1/platform/auth/me`, () => {
+    const staff = getCurrentPlatformStaff();
+    if (!staff) return crmError(401, "AUTHENTICATION_FAILED", "Sessão de plataforma ausente.");
+    return HttpResponse.json(staff);
+  }),
+
   http.get(`${API}/v1/me`, () => HttpResponse.json(mePayload())),
 
   http.get(`${API}/v1/plans`, () => HttpResponse.json(mockPlans)),
@@ -279,6 +367,123 @@ export const handlers = [
   }),
 
   http.get(`${API}/v1/features`, () => HttpResponse.json(mockFeatureCatalog)),
+
+  http.get(`${API}/v1/platform/plans`, () => HttpResponse.json(mockPlans)),
+
+  http.patch(`${API}/v1/platform/plans/:planId`, async ({ params, request }) => {
+    const plan = mockPlans.find((item) => item.id === params.planId);
+    if (!plan) return crmError(404, "PLAN_NOT_FOUND", "Plano não encontrado.");
+    const body = (await request.json()) as { name?: string; price?: number | string; is_active?: boolean };
+    if (body.name) plan.name = body.name;
+    if (body.price !== undefined) plan.price = String(body.price);
+    if (body.is_active !== undefined) plan.is_active = body.is_active;
+    return HttpResponse.json(plan);
+  }),
+
+  http.get(`${API}/v1/platform/features`, () => HttpResponse.json(mockFeatureCatalog)),
+
+  http.get(`${API}/v1/platform/companies`, () =>
+    HttpResponse.json({
+      items: mockCompanies.map(toPlatformCompanyListItem),
+      next_cursor: null,
+    }),
+  ),
+
+  http.get(`${API}/v1/platform/companies/:companyId`, ({ params }) => {
+    const company = getCompanyById(String(params.companyId));
+    if (!company) return crmError(404, "COMPANY_NOT_FOUND", "Empresa não encontrada.");
+    const subscription = currentSubscriptionPayload(company.id);
+    const plan = mockPlans.find((item) => item.id === subscription?.plan_id);
+    return HttpResponse.json({
+      company: toCompanyResponse(company),
+      subscription: subscription && plan
+        ? { ...subscription, plan_code: plan.code, plan_name: plan.name }
+        : null,
+      features: resolveMockCompanyFeatures(company.id),
+    });
+  }),
+
+  http.patch(`${API}/v1/platform/companies/:companyId/status`, async ({ params, request }) => {
+    const company = getCompanyById(String(params.companyId));
+    if (!company) return crmError(404, "COMPANY_NOT_FOUND", "Empresa não encontrada.");
+    const body = (await request.json()) as { status?: "ACTIVE" | "INACTIVE" | "SUSPENDED" };
+    if (body.status) company.status = body.status;
+    return HttpResponse.json(toCompanyResponse(company));
+  }),
+
+  http.put(`${API}/v1/platform/companies/:companyId/overrides`, async ({ params, request }) => {
+    const companyId = String(params.companyId);
+    const body = (await request.json()) as {
+      feature_id: string;
+      enabled: boolean;
+      limit_value?: number | null;
+      is_unlimited?: boolean;
+    };
+    const existing = mockFeatureOverrides.find(
+      (item) => item.companyId === companyId && item.featureId === body.feature_id,
+    );
+    if (existing) {
+      existing.enabled = body.enabled;
+      existing.limit_value = body.limit_value ?? null;
+      existing.is_unlimited = Boolean(body.is_unlimited);
+    } else {
+      mockFeatureOverrides.push({
+        companyId,
+        featureId: body.feature_id,
+        enabled: body.enabled,
+        limit_value: body.limit_value ?? null,
+        is_unlimited: Boolean(body.is_unlimited),
+      });
+    }
+    return HttpResponse.json({
+      company_id: companyId,
+      feature_id: body.feature_id,
+      enabled: body.enabled,
+    });
+  }),
+
+  http.post(
+    `${API}/v1/platform/companies/:companyId/subscriptions/current/change-plan`,
+    async ({ params, request }) => {
+      const subscription = getSubscriptionByCompanyId(String(params.companyId));
+      if (!subscription) return crmError(404, "SUBSCRIPTION_NOT_FOUND", "Assinatura vigente não encontrada.");
+      const body = (await request.json()) as { plan_id?: string };
+      const plan = mockPlans.find((item) => item.id === body.plan_id);
+      if (!plan) return crmError(404, "PLAN_NOT_FOUND", "Plano não encontrado.");
+      if (plan.code === subscription.planCode) {
+        return crmError(422, "VALIDATION_ERROR", "A empresa já está neste plano.");
+      }
+      subscription.planCode = plan.code;
+      subscription.status = "ACTIVE";
+      return HttpResponse.json({
+        id: subscription.id,
+        company_id: subscription.companyId,
+        plan_id: plan.id,
+        status: subscription.status,
+        is_current: true,
+      });
+    },
+  ),
+
+  http.patch(`${API}/v1/platform/companies/:companyId/subscriptions/current`, async ({ params, request }) => {
+    const subscription = getSubscriptionByCompanyId(String(params.companyId));
+    if (!subscription) return crmError(404, "SUBSCRIPTION_NOT_FOUND", "Assinatura vigente não encontrada.");
+    const body = (await request.json()) as { status?: string };
+    if (body.status === "CANCELLED" || body.status === "EXPIRED") {
+      return crmError(422, "VALIDATION_ERROR", "O status da assinatura vigente deve ser TRIAL, ACTIVE ou PAST_DUE.");
+    }
+    if (body.status === "TRIAL" || body.status === "ACTIVE" || body.status === "PAST_DUE") {
+      subscription.status = body.status;
+    }
+    const plan = mockPlans.find((item) => item.code === subscription.planCode);
+    return HttpResponse.json({
+      id: subscription.id,
+      company_id: subscription.companyId,
+      plan_id: plan?.id,
+      status: subscription.status,
+      is_current: true,
+    });
+  }),
 
   http.get(`${API}/v1/companies`, () =>
     HttpResponse.json(mockCompanies.map((company) => toCompanyResponse(company))),

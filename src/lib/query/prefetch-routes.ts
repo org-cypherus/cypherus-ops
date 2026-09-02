@@ -25,6 +25,7 @@ export function prefetchWarmQueries(
   session: SessionUser,
   options?: { pathname?: string },
 ) {
+  if (session.isPlatformAdmin) return Promise.allSettled([]);
   const tasks: Promise<unknown>[] = [];
   const onLeadsHome = options?.pathname === "/leads";
 

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { createRequire } from "node:module";
 import { API_REQUEST_TIMEOUT_MS } from "@/lib/api/config";
 import { correlationFromBody, correlationFromHeaders, firstNonEmpty } from "@/lib/api/errors";
+import { jwtExp } from "@/lib/server/jwt-payload";
 
 export const CRM_ACCESS_COOKIE = "cypher_crm_access";
 export const CRM_REFRESH_COOKIE = "cypher_crm_refresh";
@@ -83,15 +84,6 @@ export async function readCrmTokens() {
     access: store.get(CRM_ACCESS_COOKIE)?.value ?? null,
     refresh: store.get(CRM_REFRESH_COOKIE)?.value ?? null,
   };
-}
-
-function jwtExp(token: string): number | null {
-  try {
-    const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"));
-    return typeof payload.exp === "number" ? payload.exp : null;
-  } catch {
-    return null;
-  }
 }
 
 function isFresh(token: string, skewSeconds = 30) {

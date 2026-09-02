@@ -19,10 +19,13 @@ export type SessionUser = {
   isPlatformAdmin?: boolean;
 };
 
+export type SessionKind = "tenant" | "platform";
+
 const ACCESS_KEY = "cypher_ops_access_token";
 const COMPANY_KEY = "cypher_ops_company_id";
 const SESSION_USER_KEY = "cypher_ops_session_user";
 const SESSION_USER_AT_KEY = "cypher_ops_session_user_at";
+const SESSION_KIND_KEY = "cypher_ops_session_kind";
 
 export function getAccessToken() {
   if (typeof window === "undefined") return null;
@@ -37,7 +40,19 @@ export function clearAccessToken() {
   if (typeof window === "undefined") return;
   sessionStorage.removeItem(ACCESS_KEY);
   sessionStorage.removeItem(COMPANY_KEY);
+  sessionStorage.removeItem(SESSION_KIND_KEY);
   clearCachedSessionUser();
+}
+
+export function getSessionKind(): SessionKind | undefined {
+  if (typeof window === "undefined") return undefined;
+  const raw = sessionStorage.getItem(SESSION_KIND_KEY);
+  return raw === "platform" || raw === "tenant" ? raw : undefined;
+}
+
+export function setSessionKind(kind: SessionKind) {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(SESSION_KIND_KEY, kind);
 }
 
 function isSessionUser(value: unknown): value is SessionUser {
@@ -65,7 +80,11 @@ export function getCachedSessionUser(): SessionUser | undefined {
     const raw = sessionStorage.getItem(SESSION_USER_KEY);
     if (!raw) return undefined;
     const parsed: unknown = JSON.parse(raw);
-    return isSessionUser(parsed) ? parsed : undefined;
+    if (!isSessionUser(parsed)) return undefined;
+    if (parsed.isPlatformAdmin && getSessionKind() !== "platform") {
+      return { ...parsed, isPlatformAdmin: false };
+    }
+    return parsed;
   } catch {
     return undefined;
   }

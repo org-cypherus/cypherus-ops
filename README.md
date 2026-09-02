@@ -20,12 +20,12 @@ cp .env.example .env.local
 
 Variáveis server-side: `GATEWAY_URL`, `GATEWAY_CLIENT_ID`, `GATEWAY_CLIENT_SECRET`, `GATEWAY_TARGET_SERVICE=saas-crm`.
 
-A visão de **plataforma** (empresas clientes, planos e pagamentos) abre para e-mails do staff Cypher:
+A visão de **plataforma** só abre com sessão de staff (`POST /v1/platform/auth/login`, JWT `typ=platform`). E-mail `@cypherops.com.br` em um usuário de tenant **não** libera o console.
 
-- `NEXT_PUBLIC_PLATFORM_ADMIN_DOMAINS` — padrão `cypherops.com.br`
-- `NEXT_PUBLIC_PLATFORM_ADMIN_EMAILS` — lista opcional, separada por vírgula
+No mock local:
 
-No mock local, use `ops@cypherops.com.br` / `123456`.
+- Tenant: qualquer usuário de `src/mocks/data.ts` / senha `123456` (ex.: `ops@cypherops.com.br` continua tenant)
+- Plataforma: `staff@cypherops.com.br` / `123456`
 
 `NEXT_PUBLIC_USE_MOCKS=true` liga o MSW (demo local). O padrão da integração é `false`.
 

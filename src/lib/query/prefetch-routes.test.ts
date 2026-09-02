@@ -47,6 +47,13 @@ describe("prefetchWarmQueries", () => {
     );
   });
 
+  it("skips tenant prefetch for a platform principal", async () => {
+    const prefetchQuery = vi.fn().mockResolvedValue(undefined);
+    const queryClient = { prefetchQuery } as never;
+    await prefetchWarmQueries(queryClient, { ...session, isPlatformAdmin: true } as never);
+    expect(prefetchQuery).not.toHaveBeenCalled();
+  });
+
   it("prefetches kanban off the leads home", async () => {
     const prefetchQuery = vi.fn().mockResolvedValue(undefined);
     const queryClient = { prefetchQuery } as never;

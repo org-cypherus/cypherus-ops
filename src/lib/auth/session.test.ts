@@ -1,9 +1,12 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
+  clearAccessToken,
   clearCachedSessionUser,
   getCachedSessionUpdatedAt,
   getCachedSessionUser,
+  getSessionKind,
   setCachedSessionUser,
+  setSessionKind,
   type SessionUser,
 } from "./session";
 
@@ -12,7 +15,7 @@ const sampleUser = {
   name: "Ana",
   email: "ana@example.com",
   role: "Administrador",
-  permissions: ["leads:visualizar"],
+  permissions: ["crm:visualizar"],
   companyId: "c1",
   company: { id: "c1", name: "Acme", status: "ACTIVE" },
   subscription: { planCode: "PROFESSIONAL", status: "ACTIVE" },
@@ -21,7 +24,7 @@ const sampleUser = {
 
 describe("session cache", () => {
   beforeEach(() => {
-    clearCachedSessionUser();
+    clearAccessToken();
   });
 
   it("round-trips a valid session snapshot", () => {
@@ -40,5 +43,13 @@ describe("session cache", () => {
     clearCachedSessionUser();
     expect(getCachedSessionUser()).toBeUndefined();
     expect(getCachedSessionUpdatedAt()).toBeUndefined();
+  });
+
+  it("does not trust a cached isPlatformAdmin flag without a platform session", () => {
+    setCachedSessionUser({ ...sampleUser, isPlatformAdmin: true });
+    expect(getCachedSessionUser()?.isPlatformAdmin).toBe(false);
+    setSessionKind("platform");
+    setCachedSessionUser({ ...sampleUser, isPlatformAdmin: true });
+    expect(getCachedSessionUser()?.isPlatformAdmin).toBe(true);
   });
 });

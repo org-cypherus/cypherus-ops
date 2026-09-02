@@ -32,9 +32,7 @@ import {
 } from "@/modules/platform/labels";
 import {
   changeCompanyPlan,
-  fetchCompanyFeatures,
-  fetchCompanySubscription,
-  fetchPlatformCompany,
+  fetchPlatformCompanyDetail,
   fetchPlatformFeatures,
   fetchPlatformPlans,
   planPriceNumber,
@@ -65,7 +63,7 @@ export default function PlatformCompanyDetailPage() {
 
   const companyQuery = useQuery({
     queryKey: queryKeys.platform.company(companyId),
-    queryFn: () => fetchPlatformCompany(companyId),
+    queryFn: () => fetchPlatformCompanyDetail(companyId),
     enabled: Boolean(companyId),
   });
   const plansQuery = useQuery({
@@ -75,16 +73,6 @@ export default function PlatformCompanyDetailPage() {
   const catalogQuery = useQuery({
     queryKey: queryKeys.platform.features,
     queryFn: fetchPlatformFeatures,
-  });
-  const featuresQuery = useQuery({
-    queryKey: queryKeys.platform.companyFeatures(companyId),
-    queryFn: () => fetchCompanyFeatures(companyId),
-    enabled: Boolean(companyId),
-  });
-  const subscriptionQuery = useQuery({
-    queryKey: queryKeys.platform.companySubscription(companyId),
-    queryFn: () => fetchCompanySubscription(companyId),
-    enabled: Boolean(companyId),
   });
 
   const invalidate = () => {
@@ -163,11 +151,11 @@ export default function PlatformCompanyDetailPage() {
     return <ErrorState error={companyQuery.error} onRetry={() => companyQuery.refetch()} />;
   }
 
-  const company = companyQuery.data;
+  const company = companyQuery.data.company;
   const plans = plansQuery.data ?? [];
   const catalog = catalogQuery.data ?? [];
-  const features = featuresQuery.data ?? [];
-  const subscription = subscriptionQuery.data;
+  const features = companyQuery.data.features;
+  const subscription = companyQuery.data.subscription;
   const currentPlan = plans.find((plan) => plan.id === subscription?.plan_id);
 
   return (
@@ -263,7 +251,7 @@ export default function PlatformCompanyDetailPage() {
             O override vale só para este cliente. Desligar um módulo aqui não altera o catálogo do
             plano.
           </Typography>
-          {featuresQuery.isLoading ? (
+          {catalogQuery.isLoading ? (
             <CircularProgress size={24} />
           ) : (
             <Stack divider={<Divider />} spacing={1.5}>
