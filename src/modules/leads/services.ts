@@ -252,9 +252,21 @@ export async function moveLead(leadId: string, status: PipelineStage) {
 }
 
 export async function updateLead(id: string, payload: Partial<Lead>) {
-  const { data } = await api.patch<CrmLead>(companyPath(`/leads/${id}`), leadToUpdateRequest(payload));
+  const { ownerId, ...rest } = payload;
+  // O CRM ignora `owner_user_id` no PATCH genérico; atribuição é `PATCH .../assign`.
+  if (ownerId) {
+    await assignLeadOwner(id, ownerId);
+  }
+  const body = leadToUpdateRequest(rest);
+  if (Object.keys(body).length === 0) {
+    return fetchLead(id);
+  }
+  const { data } = await api.patch<CrmLead>(companyPath(`/leads/${id}`), body);
   if (payload.status && payload.status !== toUiLead(data).status) {
     await moveLead(id, payload.status);
+    return fetchLead(id);
+  }
+  if (ownerId) {
     return fetchLead(id);
   }
   const owners = await fetchOwnerMap();
