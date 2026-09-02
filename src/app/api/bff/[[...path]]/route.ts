@@ -19,22 +19,10 @@ import {
   readCrmTokens,
   setAuthCookies,
 } from "@/lib/server/gateway";
+import { needsUpstreamAuth, requiresCrmSession } from "@/lib/server/bff-public-routes";
 import { isNullBodyStatus } from "@/lib/server/null-body-status";
 
 export const dynamic = "force-dynamic";
-
-const PUBLIC_CRM_PREFIXES = [
-  "v1/auth/login",
-  "v1/auth/refresh",
-  "v1/auth/logout",
-  "v1/auth/invitations/accept",
-  "v1/auth/password-reset",
-  "v1/auth/email-verification",
-  "v1/health/",
-  "v1/plans",
-  "v1/features",
-  "v1/permissions",
-];
 
 const TOKEN_RESPONSE_PATHS = new Set([
   "v1/auth/login",
@@ -54,15 +42,6 @@ const TRACE_PASS_HEADERS = [
 
 function joinPath(parts: string[] | undefined) {
   return (parts ?? []).join("/");
-}
-
-function isPublicCrmPath(path: string, method: string) {
-  if (path === "v1/companies" && method === "POST") return true;
-  return PUBLIC_CRM_PREFIXES.some((prefix) => path === prefix || path.startsWith(prefix));
-}
-
-function needsUpstreamAuth(path: string, method: string) {
-  return !isPublicCrmPath(path, method);
 }
 
 function sleep(ms: number) {
@@ -128,6 +107,11 @@ function copyUpstreamHeaders(upstream: Headers, fallbackRequestId: string) {
 }
 
 async function proxy(request: NextRequest, path: string, requestId: string) {
+  const crm = await readCrmTokens();
+  if (requiresCrmSession(path, request.method) && !crm.access) {
+    return bffError(401, "AUTHENTICATION_FAILED", "Sessão ausente.", { requestId });
+  }
+
   const config = gatewayConfig();
   if (!config.url) {
     return bffError(503, "GATEWAY_NOT_CONFIGURED", "GATEWAY_URL não configurado.", { requestId });
@@ -150,7 +134,6 @@ async function proxy(request: NextRequest, path: string, requestId: string) {
     throw error;
   }
 
-  const crm = await readCrmTokens();
   const search = request.nextUrl.search;
   const upstreamUrl = `${config.url}/api/${path}${search}`;
   const headers = new Headers();
