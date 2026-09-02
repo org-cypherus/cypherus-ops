@@ -40,6 +40,8 @@ describe("mapApiFeatures", () => {
 describe("mapRoleCode", () => {
   it("maps owner and API codes", () => {
     expect(mapRoleCode("SALES")).toBe(Role.Comercial);
+    expect(mapRoleCode("VIEWER")).toBe(Role.Colaborador);
+    expect(mapRoleCode("COLABORADOR")).toBe(Role.Colaborador);
     expect(mapRoleCode("FINANCE")).toBe(Role.Financeiro);
     expect(mapRoleCode("LEGAL")).toBe(Role.Jurídico);
     expect(mapRoleCode("JURIDICO")).toBe(Role.Jurídico);
@@ -55,6 +57,7 @@ describe("roleCodeFromUi", () => {
     expect(roleCodeFromUi(Role.Administrador)).toBe("ADMIN");
     expect(roleCodeFromUi(Role.Gestor)).toBe("MANAGER");
     expect(roleCodeFromUi(Role.Comercial)).toBe("SALES");
+    expect(roleCodeFromUi(Role.Colaborador)).toBe("VIEWER");
     expect(roleCodeFromUi(Role.Financeiro)).toBe("FINANCE");
     expect(roleCodeFromUi(Role.Jurídico)).toBe("LEGAL");
   });

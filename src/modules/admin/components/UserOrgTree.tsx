@@ -35,8 +35,8 @@ import {
   assignCollaboratorToManager,
   buildOrgTree,
   linkManagerToOrg,
-  matchTeamName,
   membersForOrgTree,
+  parseNewTeamName,
   removeTeamMember,
   teamNameOptions,
   teamNamesInUse,
@@ -104,6 +104,25 @@ export function UserOrgTree({
     () => teamNamesInUse(teams, tree.owner?.id),
     [teams, tree.owner?.id],
   );
+
+  function commitCustomTeam() {
+    const parsed = parseNewTeamName(customTeamName, teamOptions);
+    if (!parsed.ok) {
+      if (parsed.reason === "duplicate") {
+        enqueueSnackbar(`O time "${parsed.existing}" já existe. Escolha na lista.`, {
+          variant: "warning",
+        });
+      }
+      return;
+    }
+    setExtraTeamNames((current) =>
+      current.some((name) => name.toLowerCase() === parsed.name.toLowerCase())
+        ? current
+        : [...current, parsed.name],
+    );
+    setSelectedTeamName(parsed.name);
+    setCustomTeamName("");
+  }
 
   const invalidateOrg = async () => {
     await Promise.all([
@@ -468,16 +487,7 @@ export function UserOrgTree({
                       onKeyDown={(e) => {
                         if (e.key !== "Enter") return;
                         e.preventDefault();
-                        const next = customTeamName.trim();
-                        if (!next) return;
-                        const canonical = matchTeamName(next, teamOptions) ?? next;
-                        setExtraTeamNames((current) =>
-                          current.some((name) => name.toLowerCase() === canonical.toLowerCase())
-                            ? current
-                            : [...current, canonical],
-                        );
-                        setSelectedTeamName(canonical);
-                        setCustomTeamName("");
+                        commitCustomTeam();
                       }}
                     />
                     <Button
@@ -485,18 +495,7 @@ export function UserOrgTree({
                       variant="outlined"
                       sx={{ mt: { sm: 0.5 }, whiteSpace: "nowrap", minHeight: 40 }}
                       disabled={!customTeamName.trim()}
-                      onClick={() => {
-                        const next = customTeamName.trim();
-                        if (!next) return;
-                        const canonical = matchTeamName(next, teamOptions) ?? next;
-                        setExtraTeamNames((current) =>
-                          current.some((name) => name.toLowerCase() === canonical.toLowerCase())
-                            ? current
-                            : [...current, canonical],
-                        );
-                        setSelectedTeamName(canonical);
-                        setCustomTeamName("");
-                      }}
+                      onClick={() => commitCustomTeam()}
                     >
                       Adicionar
                     </Button>

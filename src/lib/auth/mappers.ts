@@ -65,6 +65,8 @@ const ROLE_CODE_MAP: Record<string, RoleName> = {
   GESTOR: Role.Gestor,
   SALES: Role.Comercial,
   COMERCIAL: Role.Comercial,
+  VIEWER: Role.Colaborador,
+  COLABORADOR: Role.Colaborador,
   FINANCE: Role.Financeiro,
   FINANCEIRO: Role.Financeiro,
   LEGAL: Role.Jurídico,
@@ -159,6 +161,8 @@ export function roleCodeFromUi(role: RoleName): string {
       return "ADMIN";
     case Role.Gestor:
       return "MANAGER";
+    case Role.Colaborador:
+      return "VIEWER";
     case Role.Financeiro:
       return "FINANCE";
     case Role.Jurídico:

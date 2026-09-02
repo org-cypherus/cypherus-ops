@@ -294,6 +294,7 @@ export const mockRolePermissions: Record<RoleName, Permission[]> = {
   [Role.Administrador]: [...ROLE_PERMISSIONS[Role.Administrador]],
   [Role.Gestor]: [...ROLE_PERMISSIONS[Role.Gestor]],
   [Role.Comercial]: [...ROLE_PERMISSIONS[Role.Comercial]],
+  [Role.Colaborador]: [...ROLE_PERMISSIONS[Role.Colaborador]],
   [Role.Financeiro]: [...ROLE_PERMISSIONS[Role.Financeiro]],
   [Role.Jurídico]: [...ROLE_PERMISSIONS[Role.Jurídico]],
 };

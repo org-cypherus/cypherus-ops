@@ -11,6 +11,7 @@ describe("homePathForRole", () => {
   it("defaults remaining roles to leads", () => {
     expect(homePathForRole(Role.Administrador)).toBe("/leads");
     expect(homePathForRole(Role.Comercial)).toBe("/leads");
+    expect(homePathForRole(Role.Colaborador)).toBe("/leads");
     expect(homePathForRole(Role.Gestor)).toBe("/leads");
     expect(homePathForRole(Role.Jurídico)).toBe("/leads");
   });

@@ -26,6 +26,7 @@ export enum Role {
   Administrador = "Administrador",
   Gestor = "Gestor",
   Comercial = "Comercial",
+  Colaborador = "Colaborador",
   Financeiro = "Financeiro",
   Jurídico = "Jurídico",
 }
@@ -84,6 +85,11 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     "agenda:editar",
     "contratos:visualizar",
     "contratos:criar",
+    "dashboard:visualizar",
+  ],
+  [Role.Colaborador]: [
+    "crm:visualizar",
+    "contratos:visualizar",
     "dashboard:visualizar",
   ],
   [Role.Financeiro]: [

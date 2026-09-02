@@ -6,6 +6,7 @@ import {
   hydrateTeamManagers,
   inferMembersFromUsers,
   matchTeamName,
+  parseNewTeamName,
   parseTeamMembersPayload,
   TEAM_EMPTY_MEMBERS_MESSAGE,
   TEAM_NOT_REGISTERED_MEMBERS_MESSAGE,
@@ -66,6 +67,21 @@ describe("teamNameOptions", () => {
       "Gestor",
     );
     expect(matchTeamName("financeiro", teamNameOptions())).toBeUndefined();
+  });
+});
+
+describe("parseNewTeamName", () => {
+  it("accepts a new name", () => {
+    expect(parseNewTeamName("  Expansão ", ["Comercial"])).toEqual({ ok: true, name: "Expansão" });
+  });
+
+  it("rejects empty and duplicate names without changing the input", () => {
+    expect(parseNewTeamName("   ", ["Comercial"])).toEqual({ ok: false, reason: "empty" });
+    expect(parseNewTeamName("comercial", ["Comercial"])).toEqual({
+      ok: false,
+      reason: "duplicate",
+      existing: "Comercial",
+    });
   });
 });
 
