@@ -471,7 +471,7 @@ export function buildOrgTree(
     return members
       .filter((member) => member.user_id !== managerUserId && !member.is_leader)
       .map((member) => byId.get(member.user_id))
-      .filter((user): user is AppUser => Boolean(user) && user.status !== "Inativo")
+      .filter((user): user is AppUser => user != null && user.status !== "Inativo")
       .map((user) => ({ kind: "collaborator" as const, user, teamId }));
   };
 
