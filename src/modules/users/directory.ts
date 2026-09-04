@@ -33,11 +33,19 @@ function isInactiveStatus(status?: string) {
   return String(status ?? "ACTIVE").toUpperCase() === "INACTIVE";
 }
 
+export function isInactiveUserStatus(status?: string) {
+  return isInactiveStatus(status);
+}
+
+export function activeOnlyDirectory(users: UserDirectoryEntry[]) {
+  return users.filter((user) => !isInactiveStatus(user.status));
+}
+
 export async function fetchUserDirectory(options?: {
   includeInactive?: boolean;
 }): Promise<UserDirectoryEntry[]> {
   const { data } = await api.get<UserDirectoryEntry[]>(companyPath("/users"), {
-    params: options?.includeInactive ? { include_inactive: true } : undefined,
+    params: options?.includeInactive ? { include_inactive: "true" } : undefined,
   });
   const list = (data ?? []).map((user) => ({
     id: user.id,
@@ -52,10 +60,8 @@ export async function fetchUserDirectory(options?: {
     role: user.role,
     role_code: user.role_code,
   }));
-  const directory = options?.includeInactive
-    ? list.filter((user) => !isInactiveStatus(user.status))
-    : list;
-  getQueryClient().setQueryData(queryKeys.userDirectory, directory);
+  // Selects/kanban só precisam de ativos; a tabela admin usa o retorno completo.
+  getQueryClient().setQueryData(queryKeys.userDirectory, activeOnlyDirectory(list));
   return list;
 }
 

@@ -8,9 +8,12 @@ import {
 } from "@/lib/auth/mappers";
 import type { Permission, RoleName } from "@/lib/auth/permissions";
 import { companyPath } from "@/lib/auth/session";
+import { getQueryClient } from "@/lib/query/client";
+import { queryKeys } from "@/lib/query/keys";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
 import { fetchUserDirectory } from "@/modules/users/directory";
 import { editablePermissions } from "./permission-modules";
+import { keepVanishedUsersAsInactive } from "./user-list";
 import { getAllUserProfileExtras, getUserProfileExtras, saveUserProfileExtras } from "./user-profile-extras";
 
 export type AppUser = {
@@ -234,7 +237,13 @@ function directoryEntryToCrmUser(
 export async function fetchUsers() {
   const data = await fetchUserDirectory({ includeInactive: true });
   const extras = getAllUserProfileExtras();
-  return mapWithConcurrency(data, 2, (user) => toAppUser(directoryEntryToCrmUser(user, extras)));
+  const mapped = await mapWithConcurrency(data, 2, (user) =>
+    toAppUser(directoryEntryToCrmUser(user, extras)),
+  );
+  return keepVanishedUsersAsInactive(
+    mapped,
+    getQueryClient().getQueryData<AppUser[]>(queryKeys.users),
+  );
 }
 
 export async function createUser(values: {
