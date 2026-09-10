@@ -31,6 +31,8 @@ export const API_TO_UI_PERMISSION: Record<string, Permission> = {
   "distribution_rules.manage": "admin:editar",
   "leads.distribute": "admin:editar",
   "leads.assign": "crm:editar",
+  "custom_fields.view": "campos:visualizar",
+  "custom_fields.manage": "campos:editar",
 };
 
 export const UI_TO_API_PERMISSION: Partial<Record<Permission, string>> = {
@@ -50,6 +52,8 @@ export const UI_TO_API_PERMISSION: Partial<Record<Permission, string>> = {
   "usuarios:excluir": "users.deactivate",
   "admin:visualizar": "roles.view",
   "admin:editar": "permissions.override",
+  "campos:visualizar": "custom_fields.view",
+  "campos:editar": "custom_fields.manage",
 };
 
 const FEATURE_ALIAS: Record<string, FeatureKey> = {

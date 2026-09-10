@@ -1,3 +1,6 @@
+import type { CustomFieldDefinition } from "@/modules/custom-fields/types";
+import { extraProcessColumns, pickDefinedProcessValues } from "@/modules/custom-fields/schema-builder";
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,7 +21,7 @@ export type ParsedImportLead = {
   cpf?: string;
   origin?: string;
   ownerRef?: string;
-  process: { totalValue: number };
+  process: { totalValue: number } & Record<string, unknown>;
 };
 
 export type ImportDirectoryUser = {
@@ -27,7 +30,7 @@ export type ImportDirectoryUser = {
   email?: string;
 };
 
-export function parseLeadsCsv(text: string): ParsedImportLead[] {
+export function parseLeadsCsv(text: string, defs: CustomFieldDefinition[] = []): ParsedImportLead[] {
   const raw = text.replace(/^\uFEFF/, "");
   const lines = raw
     .split(/\r?\n/)
@@ -52,7 +55,10 @@ export function parseLeadsCsv(text: string): ParsedImportLead[] {
       cpf: row.cpf || "",
       origin: row.origem || row.origin || row.source || "Importação",
       ownerRef: (ownerHeader ? row[ownerHeader] : "") || undefined,
-      process: { totalValue: totalValueFromRow(row) },
+      process: {
+        totalValue: totalValueFromRow(row),
+        ...extraProcessFromCsvRow(row, defs),
+      },
     };
   });
 }
@@ -95,8 +101,9 @@ export function buildImportCsv(
     phone?: string;
     origin?: string;
     ownerId?: string;
-    process?: { totalValue?: number };
+    process?: Record<string, unknown> & { totalValue?: number };
   }>,
+  defs: CustomFieldDefinition[] = [],
 ): string {
   const lines = ["name,cpf,owner_user_id,email,phone,source,process"];
   rows.forEach((row, index) => {
@@ -104,9 +111,11 @@ export function buildImportCsv(
     if (!owner) {
       throw new Error(`Linha ${index + 2}: informe um responsável válido.`);
     }
+    const extras = pickDefinedProcessValues(row.process, defs);
     const process = JSON.stringify({
       potential_value: row.process?.totalValue ?? 0,
       value: row.process?.totalValue ?? 0,
+      ...extras,
     });
     const fields = [
       row.name,
@@ -124,6 +133,16 @@ export function buildImportCsv(
 
 function csvCell(value: string) {
   return `"${String(value).replaceAll('"', '""')}"`;
+}
+
+function extraProcessFromCsvRow(row: Record<string, string>, defs: CustomFieldDefinition[]) {
+  const extras: Record<string, unknown> = {};
+  for (const col of extraProcessColumns(defs)) {
+    const raw = row[col.key];
+    if (raw == null || raw === "") continue;
+    extras[col.key] = raw;
+  }
+  return extras;
 }
 
 function totalValueFromRow(row: Record<string, string>): number {

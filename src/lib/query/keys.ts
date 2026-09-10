@@ -52,4 +52,8 @@ export const queryKeys = {
   distributionRules: ["distribution", "rules"] as const,
   notifications: ["notifications"] as const,
   search: (q: string) => ["search", q] as const,
+  customFields: {
+    all: ["custom-fields"] as const,
+    list: (includeInactive = false) => ["custom-fields", "list", includeInactive] as const,
+  },
 };

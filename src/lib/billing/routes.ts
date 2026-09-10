@@ -73,6 +73,12 @@ export const APP_FEATURE_ROUTES: AppRouteConfig[] = [
     permission: "admin:visualizar",
   },
   {
+    href: "/admin/fields",
+    label: "Campos",
+    feature: "custom_fields",
+    permission: "campos:editar",
+  },
+  {
     href: "/dashboard/admin",
     label: "Dashboard admin",
     feature: "dashboard_advanced",
@@ -123,7 +129,8 @@ function matchesPath(pathname: string, prefix: string) {
       !pathname.startsWith("/admin/users") &&
       !pathname.startsWith("/admin/permissions") &&
       !pathname.startsWith("/admin/roles") &&
-      !pathname.startsWith("/admin/enterprise")
+      !pathname.startsWith("/admin/enterprise") &&
+      !pathname.startsWith("/admin/fields")
     );
   }
   return pathname.startsWith(`${prefix}/`) || pathname.startsWith(`${prefix}?`);

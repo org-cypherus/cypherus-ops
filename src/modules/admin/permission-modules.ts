@@ -14,6 +14,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   { key: "dashboard", label: "Dashboard", actions: ["visualizar"] },
   { key: "usuarios", label: "Usuários", actions: ["visualizar", "criar", "editar", "excluir"] },
   { key: "admin", label: "Administração", actions: ["visualizar", "editar"] },
+  { key: "campos", label: "Campos extras", actions: ["visualizar", "editar"] },
 ];
 
 export const PERMISSION_ACTIONS = ["visualizar", "criar", "editar", "excluir"] as const;

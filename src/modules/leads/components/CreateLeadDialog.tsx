@@ -18,17 +18,21 @@ import {
   Typography,
 } from "@mui/material";
 import { useSnackbar } from "notistack";
-import { useEffect, useState } from "react";
-import { Controller, useForm, type FieldErrors } from "react-hook-form";
+import { useEffect, useMemo, useState } from "react";
+import { Controller, useForm, type FieldErrors, type Resolver } from "react-hook-form";
 import { getApiError } from "@/lib/api/client";
 import { fieldFromError, type ParsedApiError } from "@/lib/api/errors";
 import { CurrencyField } from "@/components/inputs/CurrencyField";
 import { formatCurrency } from "@/lib/utils/format";
 import { useSession } from "@/modules/auth/hooks";
 import { Role } from "@/lib/auth/permissions";
+import { CustomFieldRenderer } from "@/modules/custom-fields/components/CustomFieldRenderer";
+import { formatCustomFieldValue } from "@/modules/custom-fields/display";
+import { useCustomFields } from "@/modules/custom-fields/hooks";
+import { defaultProcessValues } from "@/modules/custom-fields/schema-builder";
 import { useUserDirectory } from "@/modules/users/hooks";
 import { useCreateLead } from "../hooks";
-import { leadFormSchema, type LeadFormValues } from "../schemas";
+import { buildLeadFormSchema, type LeadFormValues } from "../schemas";
 import { PIPELINE_STAGES } from "../types";
 
 type Props = {
@@ -58,7 +62,7 @@ const API_FIELD_TO_FORM: Record<string, keyof LeadFormValues> = {
   totalValue: "totalValue",
 };
 
-const FIELD_STEP: Record<keyof LeadFormValues, number> = {
+const FIELD_STEP: Record<keyof Omit<LeadFormValues, "process">, number> = {
   name: 0,
   email: 0,
   phone: 0,
@@ -77,15 +81,20 @@ const FIELD_STEP: Record<keyof LeadFormValues, number> = {
 
 function formFieldFromApi(apiField: string | undefined): keyof LeadFormValues | undefined {
   if (!apiField) return undefined;
+  if (apiField.startsWith("process.")) return "process";
   return API_FIELD_TO_FORM[apiField];
 }
 
 function stepForField(field: keyof LeadFormValues): number {
+  if (field === "process") return 2;
   return FIELD_STEP[field] ?? 0;
 }
 
 function firstInvalidStep(formErrors: FieldErrors<LeadFormValues>): number {
-  const field = (Object.keys(FIELD_STEP) as Array<keyof LeadFormValues>).find((key) => formErrors[key]);
+  if (formErrors.process) return 2;
+  const field = (Object.keys(FIELD_STEP) as Array<keyof Omit<LeadFormValues, "process">>).find(
+    (key) => formErrors[key],
+  );
   return field ? stepForField(field) : 0;
 }
 
@@ -98,6 +107,12 @@ export function CreateLeadDialog({ open, onClose }: Props) {
   const isComercial = session?.role === Role.Comercial;
   const users = useUserDirectory(open && !isComercial);
   const submitting = createLead.isPending;
+  const fieldsQuery = useCustomFields(false, open);
+  const fieldDefs = useMemo(
+    () => fieldsQuery.data ?? [],
+    [fieldsQuery.data],
+  );
+  const schema = useMemo(() => buildLeadFormSchema(fieldDefs), [fieldDefs]);
 
   const {
     register,
@@ -110,7 +125,7 @@ export function CreateLeadDialog({ open, onClose }: Props) {
     control,
     formState: { errors },
   } = useForm<LeadFormValues>({
-    resolver: zodResolver(leadFormSchema),
+    resolver: zodResolver(schema) as Resolver<LeadFormValues>,
     defaultValues: {
       name: "",
       email: "",
@@ -122,6 +137,7 @@ export function CreateLeadDialog({ open, onClose }: Props) {
       totalValue: 0,
       origin: "Manual",
       channel: "Sistema",
+      process: {},
     },
   });
 
@@ -131,8 +147,13 @@ export function CreateLeadDialog({ open, onClose }: Props) {
     if (!open) {
       setActiveStep(0);
       setSubmitError(null);
+      return;
     }
-  }, [open]);
+    reset((current) => ({
+      ...current,
+      process: { ...defaultProcessValues(fieldDefs), ...(current.process ?? {}) },
+    }));
+  }, [open, fieldDefs, reset]);
 
   function closeDialog() {
     if (submitting) return;
@@ -152,7 +173,8 @@ export function CreateLeadDialog({ open, onClose }: Props) {
       if (!ok) return;
     }
     if (activeStep === 2) {
-      const ok = await trigger(["totalValue"]);
+      const processKeys = fieldDefs.map((def) => `process.${def.key}` as const);
+      const ok = await trigger(["totalValue", ...processKeys] as never);
       if (!ok) return;
     }
     setActiveStep((s) => Math.min(s + 1, steps.length - 1));
@@ -191,7 +213,10 @@ export function CreateLeadDialog({ open, onClose }: Props) {
               .filter(Boolean)
           : [],
         observations: formValues.observations,
-        process: { totalValue: formValues.totalValue },
+        process: {
+          totalValue: formValues.totalValue,
+          ...formValues.process,
+        },
       },
       {
         onSuccess: () => {
@@ -350,6 +375,30 @@ export function CreateLeadDialog({ open, onClose }: Props) {
                   />
                 )}
               />
+              {fieldDefs.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  Nenhum campo extra. O lead usa só os dados padrão.
+                </Typography>
+              ) : (
+                fieldDefs.map((def) => (
+                  <Controller
+                    key={def.id}
+                    name={`process.${def.key}` as const}
+                    control={control}
+                    render={({ field }) => (
+                      <CustomFieldRenderer
+                        definition={def}
+                        value={field.value}
+                        onChange={field.onChange}
+                        error={
+                          (errors.process as Record<string, { message?: string }> | undefined)?.[def.key]
+                            ?.message
+                        }
+                      />
+                    )}
+                  />
+                ))
+              )}
               <TextField
                 label="Observações"
                 multiline
@@ -403,6 +452,12 @@ export function CreateLeadDialog({ open, onClose }: Props) {
                   <strong>Valor:</strong>{" "}
                   {formatCurrency(Number(getValues("totalValue") || 0))}
                 </Typography>
+                {fieldDefs.map((def) => (
+                  <Typography variant="body2" key={def.id}>
+                    <strong>{def.label}:</strong>{" "}
+                    {formatCustomFieldValue(def, getValues("process")?.[def.key])}
+                  </Typography>
+                ))}
                 <Typography variant="body2">
                   <strong>Tags:</strong> {getValues("tags") || "—"}
                 </Typography>

@@ -79,4 +79,11 @@ describe("plan matrix smoke", () => {
     expect(hasFeature(features, "customizations")).toBe(true);
     expect(hasFeature(features, "lead_distribution_advanced")).toBe(true);
   });
+
+  it("enables custom_fields LIMIT on every plan", () => {
+    expect(getFeatureLimit(resolveFeatures("ESSENTIAL"), "custom_fields")).toBe(10);
+    expect(getFeatureLimit(resolveFeatures("PROFESSIONAL"), "custom_fields")).toBe(30);
+    expect(getFeatureLimit(resolveFeatures("ENTERPRISE"), "custom_fields")).toBeNull();
+    expect(minimumPlanForFeature("custom_fields")).toBe("ESSENTIAL");
+  });
 });

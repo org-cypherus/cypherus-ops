@@ -50,6 +50,11 @@ const links = [
     title: "Enterprise",
     description: "API, webhooks e personalizações do plano",
   },
+  {
+    href: "/admin/fields",
+    title: "Campos",
+    description: "Campos extras do lead (schema do tenant)",
+  },
 ];
 
 export default function AdminPage() {
@@ -103,7 +108,7 @@ export default function AdminPage() {
       <div>
         <Typography variant="h4">Administração</Typography>
         <Typography variant="body2" color="text.secondary">
-          Usuários, perfis, permissões e distribuição de leads
+          Usuários, perfis, permissões, campos extras e distribuição de leads
         </Typography>
       </div>
 

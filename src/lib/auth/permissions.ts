@@ -19,7 +19,9 @@ export type Permission =
   | "usuarios:editar"
   | "usuarios:excluir"
   | "admin:visualizar"
-  | "admin:editar";
+  | "admin:editar"
+  | "campos:visualizar"
+  | "campos:editar";
 
 /** Cargos do sistema — use sempre Role.* em comparações e atribuições */
 export enum Role {
@@ -57,6 +59,8 @@ export const ALL_PERMISSIONS: Permission[] = [
   "usuarios:excluir",
   "admin:visualizar",
   "admin:editar",
+  "campos:visualizar",
+  "campos:editar",
 ];
 
 export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
@@ -75,6 +79,7 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     "relatorios:exportar",
     "usuarios:visualizar",
     "admin:visualizar",
+    "campos:visualizar",
   ],
   [Role.Comercial]: [
     "crm:visualizar",
@@ -86,11 +91,13 @@ export const ROLE_PERMISSIONS: Record<RoleName, Permission[]> = {
     "contratos:visualizar",
     "contratos:criar",
     "dashboard:visualizar",
+    "campos:visualizar",
   ],
   [Role.Colaborador]: [
     "crm:visualizar",
     "contratos:visualizar",
     "dashboard:visualizar",
+    "campos:visualizar",
   ],
   [Role.Financeiro]: [
     "financeiro:visualizar",

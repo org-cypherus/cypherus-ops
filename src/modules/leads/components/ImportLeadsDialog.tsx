@@ -25,6 +25,9 @@ import { useSession } from "@/modules/auth/hooks";
 import { useUserDirectory } from "@/modules/users/hooks";
 import { applyImportOwners, parseLeadsCsv, type ParsedImportLead } from "../import-csv";
 import { useImportLeads } from "../hooks";
+import { extraLeadTableColumns } from "../column-visibility";
+import { useCustomFields } from "@/modules/custom-fields/hooks";
+import { formatCustomFieldValue } from "@/modules/custom-fields/display";
 
 type Props = {
   open: boolean;
@@ -39,6 +42,9 @@ export function ImportLeadsDialog({ open, onClose }: Props) {
   const { data: session } = useSession();
   const isComercial = session?.role === Role.Comercial;
   const users = useUserDirectory(open && !isComercial);
+  const fieldsQuery = useCustomFields(false, open);
+  const fieldDefs = fieldsQuery.data ?? [];
+  const extraColumns = extraLeadTableColumns(fieldDefs);
 
   useEffect(() => {
     if (!open) {
@@ -123,7 +129,7 @@ export function ImportLeadsDialog({ open, onClose }: Props) {
                 e.target.value = "";
                 if (!file) return;
                 const text = await file.text();
-                setRows(parseLeadsCsv(text));
+                setRows(parseLeadsCsv(text, fieldDefs));
               }}
             />
           </Button>
@@ -144,6 +150,9 @@ export function ImportLeadsDialog({ open, onClose }: Props) {
                   <TableCell>CPF</TableCell>
                   <TableCell>Responsável</TableCell>
                   <TableCell>Valor</TableCell>
+                  {extraColumns.map((col) => (
+                    <TableCell key={col.key}>{col.label}</TableCell>
+                  ))}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -154,6 +163,14 @@ export function ImportLeadsDialog({ open, onClose }: Props) {
                     <TableCell>{row.cpf || "—"}</TableCell>
                     <TableCell>{ownerLabel(row.ownerId)}</TableCell>
                     <TableCell>{row.process.totalValue}</TableCell>
+                    {extraColumns.map((col) => {
+                      const def = fieldDefs.find((item) => item.key === col.key);
+                      return (
+                        <TableCell key={col.key}>
+                          {def ? formatCustomFieldValue(def, row.process[col.key]) : String(row.process[col.key] ?? "—")}
+                        </TableCell>
+                      );
+                    })}
                   </TableRow>
                 ))}
               </TableBody>

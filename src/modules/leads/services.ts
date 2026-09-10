@@ -5,6 +5,7 @@ import { queryKeys } from "@/lib/query/keys";
 import { downloadApiFile, fetchApiBlob } from "@/lib/utils/download";
 import { mapWithConcurrency } from "@/lib/utils/concurrency";
 import { fetchOwnerMap } from "@/modules/users/directory";
+import { fetchCustomFields } from "@/modules/custom-fields/services";
 import { buildImportCsv } from "./import-csv";
 import type { Attachment, KanbanBoard, Lead, LegalStage, PipelineStage } from "./types";
 import {
@@ -203,7 +204,8 @@ export async function createLead(payload: Partial<Lead> & { name: string; email:
 }
 
 export async function importLeads(rows: Array<Partial<Lead> & { name: string; email: string }>) {
-  const csv = buildImportCsv(rows);
+  const defs = await fetchCustomFields().catch(() => []);
+  const csv = buildImportCsv(rows, defs);
   const file = new File([csv], "leads.csv", { type: "text/csv" });
   const form = new FormData();
   form.append("file", file);

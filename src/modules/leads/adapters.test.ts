@@ -62,6 +62,8 @@ describe("daysSince / toUiLead", () => {
       updated_at: "2026-08-18T12:00:00.000Z",
     }, "João");
     expect(ui.process.totalValue).toBe(15000.5);
+    expect(ui.process.bank).toBe("XP");
+    expect(ui.process.nicho).toBeUndefined();
     expect(ui.updatedAt).toBe("2026-08-18T12:00:00.000Z");
     expect(ui.daysInStage).toBe(daysSince(ui.updatedAt, new Date()));
   });
@@ -118,6 +120,18 @@ describe("timeline events", () => {
 describe("leadToUpdateRequest", () => {
   it("does not send owner_user_id (CRM assignment is PATCH .../assign)", () => {
     expect(leadToUpdateRequest({ ownerId: "u2", name: "Ana" })).toEqual({ name: "Ana" });
+  });
+
+  it("keeps dynamic process keys from the CRM payload", () => {
+    const ui = toUiLead({ ...baseLead, process: { potential_value: 10, nicho: "consultoria" } }, "João");
+    expect(ui.process.totalValue).toBe(10);
+    expect(ui.process.nicho).toBe("consultoria");
+    expect(leadToUpdateRequest({ process: ui.process }).process).toMatchObject({
+      potential_value: 10,
+      value: 10,
+      nicho: "consultoria",
+    });
+    expect((leadToUpdateRequest({ process: ui.process }).process as Record<string, unknown>).totalValue).toBeUndefined();
   });
 });
 

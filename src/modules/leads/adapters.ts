@@ -119,21 +119,11 @@ export function processPotentialValue(process: Record<string, unknown> | undefin
   return 0;
 }
 
-function processValue(process: Record<string, unknown> | undefined) {
+function processValue(process: Record<string, unknown> | undefined): Lead["process"] {
+  const raw = { ...(process ?? {}) };
   return {
-    bank: String(process?.bank ?? process?.banco ?? "") || undefined,
-    installments: process?.installments != null ? asNumber(process.installments) : undefined,
-    installmentValue:
-      process?.installmentValue != null || process?.installment_value != null
-        ? asNumber(process?.installmentValue ?? process?.installment_value)
-        : undefined,
-    financedValue:
-      process?.financedValue != null || process?.financed_value != null
-        ? asNumber(process?.financedValue ?? process?.financed_value)
-        : undefined,
+    ...raw,
     totalValue: processPotentialValue(process),
-    contractType: String(process?.contractType ?? process?.contract_type ?? "") || undefined,
-    notes: String(process?.notes ?? process?.observacoes ?? "") || undefined,
   };
 }
 
@@ -161,15 +151,25 @@ export function nextLeadCursor(data: unknown): string | null {
   return cursor ?? null;
 }
 
+const UI_PROCESS_KEYS = new Set(["totalValue"]);
+
 function toProcessPayload(process?: Lead["process"], observations?: string) {
-  const total = process?.totalValue;
-  return {
-    ...(process ?? {}),
-    // CRM agrega board por potential_value | value — espelha o total da UI.
-    potential_value: total ?? 0,
-    value: total ?? 0,
-    observations,
-  };
+  const raw = { ...(process ?? {}) } as Record<string, unknown>;
+  const total = typeof raw.totalValue === "number" ? raw.totalValue : processPotentialValue(raw);
+  const payload: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (UI_PROCESS_KEYS.has(key) || value === undefined) continue;
+    payload[key] = value;
+  }
+  payload.potential_value = total ?? 0;
+  payload.value = total ?? 0;
+  const customKeys = Object.keys(payload).filter(
+    (key) => key !== "potential_value" && key !== "value" && key !== "contacts" && key !== "observations",
+  );
+  if (observations && (customKeys.length === 0 || payload.observations !== undefined)) {
+    payload.observations = observations;
+  }
+  return payload;
 }
 
 export function toUiLead(

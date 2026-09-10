@@ -38,6 +38,35 @@ describe("parseLeadsCsv", () => {
     const rows = parseLeadsCsv(`name,cpf,owner_user_id\nAna,52998224725,${owner}\n`);
     expect(rows[0].ownerRef).toBe(owner);
   });
+
+  it("does not invent financial process columns without defs", () => {
+    expect(
+      parseLeadsCsv("banco,parcelas,valor_financiado,nome,email\nXP,48,1000,Ana,ana@x.com\n")[0].process,
+    ).toEqual({
+      totalValue: 0,
+    });
+  });
+
+  it("keeps extra process columns only for defined keys", () => {
+    const defs = [
+      {
+        id: "cf-1",
+        companyId: "c1",
+        entity: "LEAD" as const,
+        key: "nicho",
+        label: "Nicho",
+        type: "text" as const,
+        required: false,
+        sortOrder: 0,
+        options: [],
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    const rows = parseLeadsCsv("nome,email,nicho,banco\nAna,ana@x.com,consultoria,XP\n", defs);
+    expect(rows[0].process.nicho).toBe("consultoria");
+    expect(rows[0].process.banco).toBeUndefined();
+  });
 });
 
 describe("resolveImportOwnerId", () => {
