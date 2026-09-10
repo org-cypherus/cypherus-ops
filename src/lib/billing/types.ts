@@ -21,6 +21,7 @@ export type FeatureKey =
   | "api"
   | "webhooks"
   | "customizations"
+  | "custom_fields"
   | "max_users";
 
 export type FeatureState = {

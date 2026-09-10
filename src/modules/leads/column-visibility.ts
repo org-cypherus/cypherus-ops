@@ -1,3 +1,5 @@
+import type { CustomFieldDefinition } from "@/modules/custom-fields/types";
+import { extraProcessColumns, pickDefinedProcessValues } from "@/modules/custom-fields/schema-builder";
 import type { KanbanBoard, KanbanColumn, PipelineStage } from "./types";
 
 /** Remove do board as colunas que o usuário ocultou na preferência de visualização. */
@@ -19,4 +21,16 @@ export function visibleStagesFromBoard(
 ): PipelineStage[] {
   const hidden = new Set(hiddenStages);
   return columns.map((c) => c.status).filter((status) => !hidden.has(status));
+}
+
+/** Colunas extras da tabela/CSV: só chaves definidas no schema do tenant. */
+export function extraLeadTableColumns(defs: CustomFieldDefinition[]) {
+  return extraProcessColumns(defs);
+}
+
+export function extraProcessFromLead(
+  process: Record<string, unknown> | undefined,
+  defs: CustomFieldDefinition[],
+) {
+  return pickDefinedProcessValues(process, defs);
 }

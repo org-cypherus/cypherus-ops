@@ -23,6 +23,7 @@ export const PLAN_FEATURE_CATALOG: Record<PlanCode, ResolvedFeatures> = {
     api: { enabled: false },
     webhooks: { enabled: false },
     customizations: { enabled: false },
+    custom_fields: { enabled: true, limit: 10 },
     max_users: { enabled: true, limit: 5 },
   },
   PROFESSIONAL: {
@@ -42,6 +43,7 @@ export const PLAN_FEATURE_CATALOG: Record<PlanCode, ResolvedFeatures> = {
     api: { enabled: false },
     webhooks: { enabled: false },
     customizations: { enabled: false },
+    custom_fields: { enabled: true, limit: 30 },
     max_users: { enabled: true, limit: 15 },
   },
   ENTERPRISE: {
@@ -61,6 +63,7 @@ export const PLAN_FEATURE_CATALOG: Record<PlanCode, ResolvedFeatures> = {
     api: { enabled: true },
     webhooks: { enabled: true },
     customizations: { enabled: true },
+    custom_fields: { enabled: true, limit: null },
     max_users: unlimitedUsers,
   },
 };

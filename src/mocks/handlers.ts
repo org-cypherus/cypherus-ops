@@ -19,6 +19,7 @@ import {
   mockContracts,
   mockFeatureCatalog,
   mockFeatureOverrides,
+  mockCustomFields,
   mockLeads,
   mockPayments,
   mockPlans,
@@ -30,6 +31,7 @@ import {
   updateLeadStatus,
   type Contract as MockContract,
   type ContractTemplate as MockTemplate,
+  type MockCustomField,
 } from "./data";
 import type { Lead } from "@/modules/leads/types";
 
@@ -302,6 +304,97 @@ export const handlers = [
   http.get(`${API}/v1/companies/:companyId/features`, ({ params }) =>
     HttpResponse.json(resolveMockCompanyFeatures(String(params.companyId))),
   ),
+
+  http.get(`${API}/v1/companies/:companyId/custom-fields`, ({ params, request }) => {
+    const companyId = String(params.companyId);
+    const url = new URL(request.url);
+    const includeInactive = url.searchParams.get("include_inactive") === "true";
+    const items = mockCustomFields.filter(
+      (item) => item.company_id === companyId && (includeInactive || !item.deleted_at),
+    );
+    return HttpResponse.json(items);
+  }),
+
+  http.post(`${API}/v1/companies/:companyId/custom-fields`, async ({ params, request }) => {
+    const companyId = String(params.companyId);
+    const features = resolveMockCompanyFeatures(companyId);
+    const feature = features.find((item) => item.feature === "custom_fields");
+    if (!feature?.enabled) {
+      return crmError(402, "FEATURE_NOT_AVAILABLE", "Campos personalizados não estão no plano.");
+    }
+    const active = mockCustomFields.filter((item) => item.company_id === companyId && !item.deleted_at);
+    if (feature.limit != null && active.length >= feature.limit) {
+      return crmError(429, "PLAN_LIMIT_REACHED", "Limite de campos do plano atingido.", {
+        feature_key: "custom_fields",
+        limit: feature.limit,
+        current: active.length,
+      });
+    }
+    const body = (await request.json()) as {
+      key?: string;
+      label?: string;
+      type?: MockCustomField["type"];
+      required?: boolean;
+      sort_order?: number;
+      options?: string[];
+    };
+    if (!body.key || !body.label || !body.type) {
+      return crmError(422, "VALIDATION_ERROR", "key, label e type são obrigatórios.");
+    }
+    if (active.some((item) => item.key === body.key)) {
+      return crmError(409, "CONFLICT", "Já existe um campo ativo com esta chave.");
+    }
+    const now = new Date().toISOString();
+    const created: MockCustomField = {
+      id: `cf-${Date.now()}`,
+      company_id: companyId,
+      entity: "LEAD",
+      key: body.key,
+      label: body.label,
+      type: body.type,
+      required: Boolean(body.required),
+      sort_order: body.sort_order ?? active.length,
+      options: body.options ?? [],
+      created_at: now,
+      updated_at: now,
+      deleted_at: null,
+    };
+    mockCustomFields.push(created);
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  http.patch(`${API}/v1/companies/:companyId/custom-fields/:fieldId`, async ({ params, request }) => {
+    const field = mockCustomFields.find(
+      (item) => item.id === String(params.fieldId) && item.company_id === String(params.companyId) && !item.deleted_at,
+    );
+    if (!field) return crmError(404, "CUSTOM_FIELD_NOT_FOUND", "Campo não encontrado.");
+    const body = (await request.json()) as {
+      label?: string;
+      required?: boolean;
+      sort_order?: number;
+      options?: string[];
+      type?: string;
+    };
+    if (body.type && body.type !== field.type) {
+      return crmError(422, "VALIDATION_ERROR", "O tipo do campo não pode ser alterado.");
+    }
+    if (body.label !== undefined) field.label = body.label;
+    if (body.required !== undefined) field.required = body.required;
+    if (body.sort_order !== undefined) field.sort_order = body.sort_order;
+    if (body.options !== undefined) field.options = body.options;
+    field.updated_at = new Date().toISOString();
+    return HttpResponse.json(field);
+  }),
+
+  http.delete(`${API}/v1/companies/:companyId/custom-fields/:fieldId`, ({ params }) => {
+    const field = mockCustomFields.find(
+      (item) => item.id === String(params.fieldId) && item.company_id === String(params.companyId) && !item.deleted_at,
+    );
+    if (!field) return crmError(404, "CUSTOM_FIELD_NOT_FOUND", "Campo não encontrado.");
+    field.deleted_at = new Date().toISOString();
+    field.updated_at = field.deleted_at;
+    return new HttpResponse(null, { status: 204 });
+  }),
 
   http.put(`${API}/v1/companies/:companyId/overrides`, async ({ params, request }) => {
     const companyId = String(params.companyId);
@@ -606,7 +699,15 @@ export const handlers = [
   ),
 
   http.post(`${API}/v1/companies/:companyId/leads`, async ({ request }) => {
-    const body = (await request.json()) as { name: string; email: string; cpf: string; owner_user_id: string };
+    const body = (await request.json()) as {
+      name: string;
+      email: string;
+      cpf: string;
+      owner_user_id: string;
+      process?: Record<string, unknown>;
+    };
+    const process = (body.process ?? {}) as Record<string, unknown>;
+    const total = Number(process.potential_value ?? process.value ?? process.totalValue ?? 0);
     const lead = createLead({
       name: body.name,
       email: body.email,
@@ -622,7 +723,7 @@ export const handlers = [
       status: "Novo Lead",
       priority: "media",
       tags: [],
-      process: { totalValue: 0 },
+      process: { ...process, totalValue: Number.isFinite(total) ? total : 0 },
       daysInStage: 0,
       timeline: [],
       attachments: [],
@@ -667,7 +768,7 @@ export const handlers = [
           status: "Novo Lead",
           priority: "media",
           tags: [],
-          process: { totalValue: row.process.totalValue },
+          process: row.process,
           daysInStage: 0,
           timeline: [],
           attachments: [],
@@ -684,6 +785,7 @@ export const handlers = [
       name: body.name as string | undefined,
       email: body.email as string | undefined,
       phone: body.phone as string | undefined,
+      process: body.process as Lead["process"] | undefined,
       observations: (body.process as { observations?: string } | undefined)?.observations,
     });
     if (!lead) return crmError(404, "LEAD_NOT_FOUND", "Lead não encontrado.");

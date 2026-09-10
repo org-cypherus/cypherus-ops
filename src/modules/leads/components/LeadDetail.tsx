@@ -33,11 +33,12 @@ import { PermissionGate } from "@/components/auth/PermissionGate";
 import { ConfirmDialog } from "@/components/feedback/ConfirmDialog";
 import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { CurrencyField } from "@/components/inputs/CurrencyField";
-import { IntegerField } from "@/components/inputs/IntegerField";
-import { getApiError } from "@/lib/api/client";
 import { Role } from "@/lib/auth/permissions";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils/format";
-import { roundCents } from "@/lib/utils/installment-reduction";
+import { CustomFieldRenderer } from "@/modules/custom-fields/components/CustomFieldRenderer";
+import { formatCustomFieldValue } from "@/modules/custom-fields/display";
+import { useCustomFields } from "@/modules/custom-fields/hooks";
+import { defaultProcessValues } from "@/modules/custom-fields/schema-builder";
 import { ScheduleFromLeadDialog } from "@/modules/calendar/components/ScheduleFromLeadDialog";
 import { UpcomingLeadEvents } from "@/modules/calendar/components/UpcomingLeadEvents";
 import { useCanAccess, useSession } from "@/modules/auth/hooks";
@@ -52,7 +53,6 @@ import {
 import type { Lead, TimelineContactType } from "../types";
 import { PIPELINE_STAGES, TIMELINE_CONTACT_TYPES } from "../types";
 import { timelineEventLabel } from "../timeline-labels";
-import { InstallmentReductionCard } from "./InstallmentReductionCard";
 import { LeadAttachments } from "./LeadAttachments";
 
 const CONTACT_META: Record<
@@ -145,7 +145,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const canChangeOwner = !isComercial;
 
   const [editing, setEditing] = useState<SectionKey>(null);
-  const [draft, setDraft] = useState<Record<string, string | number>>({});
+  const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [contactType, setContactType] =
@@ -155,6 +155,8 @@ export function LeadDetail({ lead }: { lead: Lead }) {
   const canSchedule = useCanAccess("agenda", "agenda:criar");
   const canViewContracts = useCanAccess("contracts", "contratos:visualizar");
   const canCreateContract = useCanAccess("contracts", "contratos:criar");
+  const fieldsQuery = useCustomFields();
+  const fieldDefs = fieldsQuery.data ?? [];
   // Agenda/contratos só com feature e depois do lead principal pintar.
   const secondaryReady = useAfterFirstPaint(lead.id);
   const contracts = useLeadContracts(lead.id, canViewContracts && secondaryReady);
@@ -162,7 +164,7 @@ export function LeadDetail({ lead }: { lead: Lead }) {
 
   function startEdit(
     section: SectionKey,
-    values: Record<string, string | number>,
+    values: Record<string, unknown>,
   ) {
     setEditing(section);
     setDraft(values);
@@ -687,15 +689,14 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                   {editing !== "process" ? (
                     <IconButton
                       size="small"
+                      aria-label="Editar processo"
                       onClick={() =>
                         startEdit("process", {
-                          bank: lead.process.bank || "",
-                          installments: lead.process.installments || 0,
-                          installmentValue: lead.process.installmentValue || 0,
-                          financedValue: lead.process.financedValue || 0,
                           totalValue: lead.process.totalValue,
-                          contractType: lead.process.contractType || "",
-                          notes: lead.process.notes || "",
+                          ...defaultProcessValues(fieldDefs),
+                          ...Object.fromEntries(
+                            fieldDefs.map((def) => [def.key, lead.process[def.key]]),
+                          ),
                         })
                       }
                     >
@@ -705,99 +706,45 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 </Stack>
                 {editing === "process" ? (
                   <Stack spacing={1.5}>
-                    <TextField
-                      label="Banco"
-                      size="small"
-                      value={draft.bank || ""}
-                      onChange={(e) =>
-                        setDraft((d) => ({ ...d, bank: e.target.value }))
-                      }
-                    />
-                    <IntegerField
-                      label="Parcelas"
-                      size="small"
-                      value={Number(draft.installments || 0)}
-                      onChange={(installments) =>
-                        setDraft((d) => ({
-                          ...d,
-                          installments,
-                          totalValue: roundCents(
-                            Number(installments || 0) * Number(d.installmentValue || 0),
-                          ),
-                        }))
-                      }
-                    />
                     <CurrencyField
-                      label="Valor parcela"
-                      size="small"
-                      value={Number(draft.installmentValue || 0)}
-                      onChange={(installmentValue) =>
-                        setDraft((d) => ({
-                          ...d,
-                          installmentValue,
-                          totalValue: roundCents(
-                            Number(d.installments || 0) * Number(installmentValue || 0),
-                          ),
-                        }))
-                      }
-                    />
-                    <CurrencyField
-                      label="Valor financiado"
-                      size="small"
-                      value={Number(draft.financedValue || 0)}
-                      onChange={(financedValue) =>
-                        setDraft((d) => ({ ...d, financedValue }))
-                      }
-                    />
-                    <CurrencyField
-                      label="Valor total"
+                      label="Valor potencial"
                       size="small"
                       value={Number(draft.totalValue || 0)}
-                      helperText="Preenchido com parcela × quantidade. Você pode ajustar."
                       onChange={(totalValue) =>
                         setDraft((d) => ({ ...d, totalValue }))
                       }
                     />
-                    <TextField
-                      label="Tipo contrato"
-                      size="small"
-                      value={draft.contractType || ""}
-                      onChange={(e) =>
-                        setDraft((d) => ({
-                          ...d,
-                          contractType: e.target.value,
-                        }))
-                      }
-                    />
-                    <TextField
-                      label="Observações"
-                      multiline
-                      minRows={2}
-                      size="small"
-                      value={draft.notes || ""}
-                      onChange={(e) =>
-                        setDraft((d) => ({ ...d, notes: e.target.value }))
-                      }
-                    />
+                    {fieldDefs.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        Nenhum campo extra. O lead usa só os dados padrão.
+                      </Typography>
+                    ) : (
+                      fieldDefs.map((def) => (
+                        <CustomFieldRenderer
+                          key={def.id}
+                          definition={def}
+                          size="small"
+                          value={draft[def.key]}
+                          onChange={(value) =>
+                            setDraft((d) => ({ ...d, [def.key]: value }))
+                          }
+                        />
+                      ))
+                    )}
                     <Stack direction="row" spacing={1}>
                       <Button onClick={() => setEditing(null)}>Cancelar</Button>
                       <Button
                         variant="contained"
-                        onClick={() =>
-                          saveSection({
-                            process: {
-                              bank: String(draft.bank || ""),
-                              installments: Number(draft.installments || 0),
-                              installmentValue: Number(
-                                draft.installmentValue || 0,
-                              ),
-                              financedValue: Number(draft.financedValue || 0),
-                              totalValue: Number(draft.totalValue || 0),
-                              contractType: String(draft.contractType || ""),
-                              notes: String(draft.notes || ""),
-                            },
-                          })
-                        }
+                        onClick={() => {
+                          const nextProcess: Record<string, unknown> = {
+                            ...lead.process,
+                            totalValue: Number(draft.totalValue || 0),
+                          };
+                          for (const def of fieldDefs) {
+                            nextProcess[def.key] = draft[def.key];
+                          }
+                          saveSection({ process: nextProcess as Lead["process"] });
+                        }}
                       >
                         Salvar
                       </Button>
@@ -806,76 +753,31 @@ export function LeadDetail({ lead }: { lead: Lead }) {
                 ) : (
                   <Grid container spacing={2}>
                     <Grid size={{ xs: 12, sm: 4 }}>
-                      <Field label="Banco" value={lead.process.bank} />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}>
                       <Field
-                        label="Parcelas"
-                        value={lead.process.installments}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}>
-                      <Field
-                        label="Valor parcela"
-                        value={formatCurrency(
-                          lead.process.installmentValue || 0,
-                        )}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}>
-                      <Field
-                        label="Valor financiado"
-                        value={formatCurrency(lead.process.financedValue || 0)}
-                      />
-                    </Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}>
-                      <Field
-                        label="Valor total"
+                        label="Valor potencial"
                         value={formatCurrency(lead.process.totalValue)}
                       />
                     </Grid>
-                    <Grid size={{ xs: 12, sm: 4 }}>
-                      <Field
-                        label="Tipo contrato"
-                        value={lead.process.contractType}
-                      />
-                    </Grid>
-                    <Grid size={12}>
-                      <Field
-                        label="Observações do processo"
-                        value={lead.process.notes}
-                      />
-                    </Grid>
+                    {fieldDefs.length === 0 ? (
+                      <Grid size={12}>
+                        <Typography variant="body2" color="text.secondary">
+                          Nenhum campo extra. O lead usa só os dados padrão.
+                        </Typography>
+                      </Grid>
+                    ) : (
+                      fieldDefs.map((def) => (
+                        <Grid key={def.id} size={{ xs: 12, sm: 4 }}>
+                          <Field
+                            label={def.label}
+                            value={formatCustomFieldValue(def, lead.process[def.key])}
+                          />
+                        </Grid>
+                      ))
+                    )}
                   </Grid>
                 )}
               </CardContent>
             </Card>
-
-            <InstallmentReductionCard
-              lead={lead}
-              applying={updateLead.isPending}
-              onApply={(installmentValue) => {
-                updateLead.mutate(
-                  {
-                    process: {
-                      ...lead.process,
-                      installmentValue,
-                    },
-                  },
-                  {
-                    onSuccess: () => {
-                      enqueueSnackbar("Parcela atualizada", { variant: "success" });
-                    },
-                    onError: (err) => {
-                      enqueueSnackbar(
-                        getApiError(err).message || "Não foi possível atualizar a parcela",
-                        { variant: "error" },
-                      );
-                    },
-                  },
-                );
-              }}
-            />
 
             <Card variant="outlined">
               <CardContent>

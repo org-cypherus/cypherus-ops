@@ -32,7 +32,7 @@ import { formatCurrency, formatDate } from "@/lib/utils/format";
 import Link from "next/link";
 import { useSession } from "@/modules/auth/hooks";
 import { Role } from "@/lib/auth/permissions";
-import { applyColumnVisibility } from "@/modules/leads/column-visibility";
+import { applyColumnVisibility, extraLeadTableColumns } from "@/modules/leads/column-visibility";
 import {
   CustomizeColumnsButton,
   CustomizeColumnsDialog,
@@ -45,14 +45,43 @@ import { useDistributeLeads, useKanban, useLeads } from "@/modules/leads/hooks";
 import { filterKanbanBoard } from "@/modules/leads/services";
 import type { Lead, PipelineStage } from "@/modules/leads/types";
 import { useUserDirectory } from "@/modules/users/hooks";
+import { useCustomFields } from "@/modules/custom-fields/hooks";
+import { formatCustomFieldValue } from "@/modules/custom-fields/display";
 import { usePipelinePrefsStore } from "@/store/pipeline-prefs";
 
 const NO_HIDDEN_STAGES: PipelineStage[] = [];
 
-function leadsToCsv(leads: Lead[]) {
-  const header = "nome,email,telefone,cpf,origem,status,responsavel,valor,prioridade,tags";
+function leadsToCsv(
+  leads: Lead[],
+  extraColumns: Array<{ key: string; label: string }>,
+) {
+  const header = [
+    "nome",
+    "email",
+    "telefone",
+    "cpf",
+    "origem",
+    "status",
+    "responsavel",
+    "valor",
+    "prioridade",
+    "tags",
+    ...extraColumns.map((col) => col.key),
+  ].join(",");
   const rows = leads.map((l) =>
-    [l.name, l.email, l.phone, l.cpf, l.origin, l.status, l.ownerName, l.process.totalValue, l.priority, l.tags.join("|")]
+    [
+      l.name,
+      l.email,
+      l.phone,
+      l.cpf,
+      l.origin,
+      l.status,
+      l.ownerName,
+      l.process.totalValue,
+      l.priority,
+      l.tags.join("|"),
+      ...extraColumns.map((col) => l.process[col.key] ?? ""),
+    ]
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
       .join(","),
   );
@@ -67,6 +96,8 @@ export function LeadsPageClient() {
   const isComercial = session?.role === Role.Comercial;
   const canViewCrm = Boolean(session?.permissions.includes("crm:visualizar"));
   const view = searchParams.get("view") === "table" ? "table" : "kanban";
+  const fieldsQuery = useCustomFields(false, canViewCrm);
+  const extraColumns = extraLeadTableColumns(fieldsQuery.data ?? []);
 
   useEffect(() => {
     if (sessionReady && session && !canViewCrm) {
@@ -138,7 +169,7 @@ export function LeadsPageClient() {
       enqueueSnackbar("Nenhum lead para exportar", { variant: "warning" });
       return;
     }
-    downloadText(`leads-${new Date().toISOString().slice(0, 10)}.csv`, leadsToCsv(items));
+    downloadText(`leads-${new Date().toISOString().slice(0, 10)}.csv`, leadsToCsv(items, extraColumns));
     enqueueSnackbar(`${items.length} leads exportados`, { variant: "success" });
   }
 
@@ -397,6 +428,9 @@ export function LeadsPageClient() {
                   <TableCell>Responsável</TableCell>
                   <TableCell>Origem</TableCell>
                   <TableCell align="right">Valor</TableCell>
+                  {extraColumns.map((col) => (
+                    <TableCell key={col.key}>{col.label}</TableCell>
+                  ))}
                   <TableCell>Criação</TableCell>
                 </TableRow>
               </TableHead>
@@ -431,6 +465,14 @@ export function LeadsPageClient() {
                     <TableCell>{lead.ownerName}</TableCell>
                     <TableCell>{lead.origin}</TableCell>
                     <TableCell align="right">{formatCurrency(lead.process.totalValue)}</TableCell>
+                    {extraColumns.map((col) => {
+                      const def = (fieldsQuery.data ?? []).find((item) => item.key === col.key);
+                      return (
+                        <TableCell key={col.key}>
+                          {def ? formatCustomFieldValue(def, lead.process[col.key]) : String(lead.process[col.key] ?? "—")}
+                        </TableCell>
+                      );
+                    })}
                     <TableCell>{formatDate(lead.createdAt)}</TableCell>
                   </TableRow>
                 ))}

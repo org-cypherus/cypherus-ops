@@ -26,8 +26,8 @@ export const ENTERPRISE_CAPABILITIES: EnterpriseCapability[] = [
   {
     feature: "customizations",
     title: "Personalizações",
-    summary: "Campos, fluxos e branding sob medida para a operação da empresa.",
+    summary: "Branding e fluxos sob medida para a operação da empresa.",
     comingSoonDetail:
-      "Em breve: campos customizados, automações e branding white-label no app.",
+      "Em breve: automações e branding white-label no app. Campos extras do lead ficam em Administração → Campos.",
   },
 ];

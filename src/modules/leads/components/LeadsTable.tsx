@@ -17,7 +17,13 @@ import { StatusBadge } from "@/components/feedback/StatusBadge";
 import { formatCurrency, formatDate } from "@/lib/utils/format";
 import type { Lead } from "../types";
 
-export function LeadsTable({ leads }: { leads: Lead[] }) {
+export function LeadsTable({
+  leads,
+  extraColumns = [],
+}: {
+  leads: Lead[];
+  extraColumns?: Array<{ key: string; label: string; type?: string }>;
+}) {
   const [selected, setSelected] = useState<string[]>([]);
   const allSelected = useMemo(
     () => leads.length > 0 && selected.length === leads.length,
@@ -41,6 +47,9 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
             <TableCell>Status</TableCell>
             <TableCell>Responsável</TableCell>
             <TableCell align="right">Valor</TableCell>
+            {extraColumns.map((col) => (
+              <TableCell key={col.key}>{col.label}</TableCell>
+            ))}
             <TableCell>Criação</TableCell>
           </TableRow>
         </TableHead>
@@ -74,6 +83,9 @@ export function LeadsTable({ leads }: { leads: Lead[] }) {
               </TableCell>
               <TableCell>{lead.ownerName}</TableCell>
               <TableCell align="right">{formatCurrency(lead.process.totalValue)}</TableCell>
+              {extraColumns.map((col) => (
+                <TableCell key={col.key}>{String(lead.process[col.key] ?? "—")}</TableCell>
+              ))}
               <TableCell>{formatDate(lead.createdAt)}</TableCell>
             </TableRow>
           ))}

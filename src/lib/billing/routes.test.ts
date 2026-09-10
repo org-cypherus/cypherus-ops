@@ -13,6 +13,8 @@ describe("matchAppRoute", () => {
     expect(matchAppRoute("/admin/permissions")?.feature).toBe("advanced_permissions");
     expect(matchAppRoute("/admin/roles")?.feature).toBe("advanced_permissions");
     expect(matchAppRoute("/admin/enterprise")?.href).toBe("/admin/enterprise");
+    expect(matchAppRoute("/admin/fields")?.href).toBe("/admin/fields");
+    expect(matchAppRoute("/admin/fields")?.feature).toBe("custom_fields");
     expect(matchAppRoute("/admin")?.feature).toBeUndefined();
     expect(matchAppRoute("/admin/users")?.feature).toBeUndefined();
   });
@@ -60,6 +62,23 @@ describe("canSeeAppRoute", () => {
     const users = APP_NAV_ROUTES.find((item) => item.href === "/admin/users")!;
     expect(canSeeAppRoute({ permissions: comercial, features: pro }, users)).toBe(false);
     expect(canSeeAppRoute({ permissions: gestor, features: pro }, users)).toBe(true);
+  });
+
+  it("hides Campos from comercial and shows it to admin with custom_fields", () => {
+    const route = {
+      href: "/admin/fields",
+      label: "Campos",
+      feature: "custom_fields" as const,
+      permission: "campos:editar" as const,
+    };
+    const essential = resolveFeatures("ESSENTIAL");
+    expect(canSeeAppRoute({ permissions: comercial, features: essential }, route)).toBe(false);
+    expect(
+      canSeeAppRoute(
+        { permissions: ROLE_PERMISSIONS[Role.Administrador], features: essential },
+        route,
+      ),
+    ).toBe(true);
   });
 
   it("hides everything without a session", () => {

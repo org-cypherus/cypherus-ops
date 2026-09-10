@@ -23,6 +23,16 @@ describe("mapApiPermissions", () => {
     ).toEqual(["financeiro:visualizar", "financeiro:editar"]);
   });
 
+  it("maps custom_fields.view and custom_fields.manage only", () => {
+    expect(
+      mapApiPermissions([
+        { permission: "custom_fields.view", granted: true },
+        { permission: "custom_fields.manage", granted: true },
+        { permission: "custom_fields.delete", granted: true },
+      ]),
+    ).toEqual(["campos:visualizar", "campos:editar"]);
+  });
+
   it("maps users CRUD keys independently", () => {
     expect(
       mapApiPermissions([
@@ -44,6 +54,16 @@ describe("mapApiFeatures", () => {
     expect(features.crm?.enabled).toBe(true);
     expect(features.lead_distribution_advanced?.enabled).toBe(true);
     expect(features.lead_distribution_advanced?.limit).toBeNull();
+  });
+
+  it("aliases customization to customizations and maps custom_fields LIMIT", () => {
+    const features = mapApiFeatures([
+      { feature: "customization", enabled: true },
+      { feature: "custom_fields", enabled: true, limit: 10 },
+    ]);
+    expect(features.customizations?.enabled).toBe(true);
+    expect(features.custom_fields?.enabled).toBe(true);
+    expect(features.custom_fields?.limit).toBe(10);
   });
 });
 

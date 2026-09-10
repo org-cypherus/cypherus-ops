@@ -374,6 +374,7 @@ export const mockFeatureCatalog: MockCatalogFeature[] = [
   { id: "feature-advanced-distribution", key: "advanced_distribution", name: "Distribuição avançada", type: "BOOLEAN", unit: null, is_active: true },
   { id: "feature-custom-dashboard", key: "custom_dashboard", name: "Dashboard personalizado", type: "BOOLEAN", unit: null, is_active: true },
   { id: "feature-customization", key: "customization", name: "Personalizações", type: "BOOLEAN", unit: null, is_active: true },
+  { id: "feature-custom-fields", key: "custom_fields", name: "Campos personalizados", type: "LIMIT", unit: "fields", is_active: true },
   { id: "feature-max-users", key: "max_users", name: "Limite de usuários", type: "LIMIT", unit: "users", is_active: true },
   { id: "feature-attachments", key: "attachments", name: "Anexos", type: "BOOLEAN", unit: null, is_active: true },
 ];
@@ -387,6 +388,24 @@ export type MockFeatureOverride = {
 };
 
 export const mockFeatureOverrides: MockFeatureOverride[] = [];
+
+export type MockCustomField = {
+  id: string;
+  company_id: string;
+  entity: "LEAD";
+  key: string;
+  label: string;
+  type: "text" | "number" | "money" | "date" | "bool" | "select";
+  required: boolean;
+  sort_order: number;
+  options: string[];
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+
+/** Sem seed financeiro — tenant começa só com dados padrão do lead. */
+export const mockCustomFields: MockCustomField[] = [];
 
 const API_TO_UI_FEATURE: Record<string, string> = {
   advanced_distribution: "lead_distribution_advanced",
@@ -639,13 +658,7 @@ export let mockLeads: Lead[] = leadSeed.map((seed, index) => ({
       : "Backlog"
     : null,
   process: {
-    bank: "Banco Exemplo",
-    installments: 48,
-    installmentValue: Math.round((seed.totalValue / 48) * 100) / 100,
-    financedValue: seed.totalValue * 0.85,
     totalValue: seed.totalValue,
-    contractType: "Pessoa Física",
-    notes: "Cliente interessado em redução de juros.",
   },
   daysInStage: seed.daysInStage ?? 1,
   timeline: [
@@ -1439,13 +1452,8 @@ export function createLead(
     priority: (input.priority as LeadPriority) || "media",
     tags: input.tags || [],
     process: {
-      bank: input.process?.bank,
-      installments: input.process?.installments,
-      installmentValue: input.process?.installmentValue,
-      financedValue: input.process?.financedValue,
+      ...(input.process ?? {}),
       totalValue,
-      contractType: input.process?.contractType,
-      notes: input.process?.notes,
     },
     daysInStage: 0,
     timeline: [

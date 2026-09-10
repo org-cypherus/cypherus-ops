@@ -43,6 +43,11 @@ export type Attachment = {
   createdAt: string;
 };
 
+/** `process` do lead: Record dinâmico das defs + `totalValue` derivado das chaves reservadas. */
+export type LeadProcess = Record<string, unknown> & {
+  totalValue: number;
+};
+
 export type Lead = {
   id: string;
   name: string;
@@ -71,15 +76,7 @@ export type Lead = {
   status: PipelineStage;
   priority: LeadPriority;
   tags: string[];
-  process: {
-    bank?: string;
-    installments?: number;
-    installmentValue?: number;
-    financedValue?: number;
-    totalValue: number;
-    contractType?: string;
-    notes?: string;
-  };
+  process: LeadProcess;
   daysInStage: number;
   timeline: TimelineEvent[];
   attachments: Attachment[];
